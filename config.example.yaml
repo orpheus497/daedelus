@@ -135,9 +135,8 @@ performance:
   batch_size: 100
 
 # ============================================
-# Phase 2: LLM Settings (Experimental)
+# Phase 2: LLM Settings
 # ============================================
-# These settings are for Phase 2 features (not yet implemented)
 llm:
   # Enable LLM-based suggestions
   enabled: false
@@ -159,7 +158,7 @@ llm:
   max_tokens: 100
 
 # ============================================
-# Phase 2: PEFT Settings (Experimental)
+# Phase 2: PEFT Settings
 # ============================================
 peft:
   # Enable PEFT/LoRA fine-tuning
