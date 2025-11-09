@@ -737,7 +737,7 @@ def model() -> None:
 @model.command("download")
 @click.option(
     "--model",
-    default="phi-3-mini",
+    default="tinyllama",
     help="Model name to download",
 )
 @click.pass_context
@@ -752,7 +752,7 @@ def model_download(ctx: click.Context, model: str) -> None:
         manager = ModelManager(models_dir)
 
         click.echo(f"📥 Downloading {model}...")
-        click.echo(f"This may take a while (model is ~2.4GB)")
+        click.echo(f"This may take a while (model is ~669MB for TinyLlama)")
 
         path = manager.download_model(model)
 
@@ -770,7 +770,7 @@ def model_download(ctx: click.Context, model: str) -> None:
 @model.command("init")
 @click.option(
     "--base-model",
-    default="phi-3-mini",
+    default="tinyllama",
     help="Base model to use",
 )
 @click.pass_context

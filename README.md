@@ -55,7 +55,7 @@ FastText Embeddings → Annoy Vector Search → Pattern Learning
 
 ### Phase 2: LLM Enhancement ✅ (Current)
 ```
-Phase 1 + llama.cpp (Phi-3-mini) → RAG Pipeline → PEFT/LoRA Fine-Tuning
+Phase 1 + llama.cpp (TinyLlama) → RAG Pipeline → PEFT/LoRA Fine-Tuning
 ├── Natural language command explanations
 ├── Command generation from descriptions
 ├── Q&A about shell commands
@@ -263,19 +263,19 @@ privacy:
 
 Daedalus uses GGUF-format models for LLM features. You can use any GGUF model compatible with llama.cpp.
 
-#### Option 1: Download Phi-3-mini (Recommended)
+#### Option 1: Download TinyLlama (Recommended)
 
-Phi-3-mini is recommended for most users (small, fast, and capable):
+TinyLlama is recommended for most users (small, fast, 100% FOSS with Apache 2.0 license):
 
 ```bash
 # Create models directory
 mkdir -p ~/.local/share/models
 
-# Download Phi-3-mini-4k-instruct Q4 quantized model (~2.4GB)
-wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf
+# Download TinyLlama 1.1B Chat Q4 quantized model (~669MB)
+wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
 
-# Move to Daedalus models directory
-mv Phi-3-mini-4k-instruct-q4.gguf ~/.local/share/models/model.gguf
+# Move to Daedalus models directory (note: no need to rename - auto-detected)
+mv tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf ~/.local/share/models/
 
 # Restart Daedalus to load the model
 daedelus restart
@@ -344,8 +344,8 @@ Choose based on your hardware and needs:
 
 | Model | Size | RAM | Speed | Use Case |
 |-------|------|-----|-------|----------|
-| TinyLlama-1.1B | ~600MB | 2GB | ⚡⚡⚡ | Low-end systems, fast responses |
-| Phi-3-mini | ~2.4GB | 4GB | ⚡⚡ | **Recommended** - balanced |
+| TinyLlama-1.1B | ~669MB | 2GB | ⚡⚡⚡ | **Recommended** - 100% FOSS, fast |
+| Phi-3-mini | ~2.4GB | 4GB | ⚡⚡ | More capable, larger |
 | Qwen2.5-3B | ~3GB | 6GB | ⚡ | Multilingual support |
 | Mistral-7B | ~4GB | 8GB | ⚡ | More capable, slower |
 
@@ -407,7 +407,7 @@ This comprehensive guide covers:
 - **CLI**: Click
 
 **Phase 2 (Current):**
-- **LLM**: llama.cpp + Phi-3-mini (GGUF)
+- **LLM**: llama.cpp + TinyLlama (GGUF, 100% FOSS)
 - **Vector DB**: sqlite-vss
 - **Fine-Tuning**: PEFT/LoRA
 - **Framework**: transformers, accelerate
@@ -476,7 +476,7 @@ bandit -r src/daedelus
 
 ### ✅ Phase 2: LLM Enhancement (COMPLETE)
 - [x] llama.cpp integration
-- [x] Phi-3-mini model support (GGUF)
+- [x] TinyLlama model support (GGUF, 100% FOSS)
 - [x] RAG pipeline for context injection
 - [x] PEFT/LoRA fine-tuning infrastructure
 - [x] Natural language command explanations (`daedelus explain`)

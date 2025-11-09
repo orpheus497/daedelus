@@ -177,9 +177,9 @@ class Config:
         if self.config["daemon"]["pid_path"] is None:
             self.config["daemon"]["pid_path"] = str(runtime_dir / "daemon.pid")
 
-        # Model paths
+        # Model paths - use daedelus embedding model
         if self.config["model"]["model_path"] is None:
-            self.config["model"]["model_path"] = str(self.data_dir / "model.bin")
+            self.config["model"]["model_path"] = str(self.data_dir / "daedelus.bin")
 
         # Vector store paths
         if self.config["vector_store"]["index_path"] is None:
@@ -193,7 +193,20 @@ class Config:
         if self.config["llm"]["model_path"] is None:
             # Use ~/.local/share/models for shared model storage
             models_dir = Path.home() / ".local" / "share" / "models"
-            self.config["llm"]["model_path"] = str(models_dir / "model.gguf")
+            models_dir.mkdir(parents=True, exist_ok=True)
+
+            # Find any .gguf file in the models directory (flexible model loading)
+            gguf_files = list(models_dir.glob("*.gguf"))
+            if gguf_files:
+                # Prefer current.gguf symlink if it exists, otherwise use first .gguf file
+                current_model = models_dir / "current.gguf"
+                if current_model.exists():
+                    self.config["llm"]["model_path"] = str(current_model)
+                else:
+                    self.config["llm"]["model_path"] = str(gguf_files[0])
+            else:
+                # Fallback to default if no .gguf files found
+                self.config["llm"]["model_path"] = str(models_dir / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
         if self.config["peft"]["adapter_path"] is None:
             self.config["peft"]["adapter_path"] = str(self.data_dir / "llm" / "adapter")
 

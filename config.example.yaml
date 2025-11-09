@@ -32,7 +32,7 @@ model:
   vocab_size: 50000
 
   # Model file path (auto-set if null)
-  model_path: null   # Default: ~/.local/share/daedelus/model.bin
+  model_path: null   # Default: ~/.local/share/daedelus/daedelus.bin
 
   # Minimum word frequency to include in vocabulary
   min_count: 2
@@ -141,8 +141,9 @@ llm:
   # Enable LLM-based suggestions
   enabled: false
 
-  # Path to GGUF model file (Phi-3-mini recommended)
-  model_path: null   # Default: ~/.local/share/daedelus/llm/model.gguf
+  # Path to GGUF model file (TinyLlama 1.1B recommended - 100% FOSS)
+  # Automatically scans for any .gguf file in ~/.local/share/models/
+  model_path: null   # Default: auto-detects first .gguf file in models directory
 
   # Context length for LLM
   context_length: 2048
