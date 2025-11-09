@@ -1,0 +1,100 @@
+# Project Daedalus - Git Ignore File
+# Created by: orpheus497
+
+# ===========================
+# Development Documentation
+# ===========================
+# .devdocs/ is included in repository (contains design docs and planning)
+
+# ===========================
+# Python
+# ===========================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ===========================
+# Daedalus Runtime Data
+# ===========================
+# User data directories (should not be in repo)
+*.db
+*.db-journal
+*.ann
+*.bin
+*.log
+*.pid
+*.sock
+
+# Configuration (local only)
+config.yaml
+.daedelus/
+
+# Model files
+*.model
+*.bin
+*.gguf
+*.safetensors
+
+# Vector indexes
+*.ann
+*.faiss
+*.idx
+
+# ===========================
+# Temporary Files
+# ===========================
+*.tmp
+*.temp
+.cache/
+
+# ===========================
+# CI/CD
+# ===========================
+.github/workflows/secrets/

@@ -1,0 +1,191 @@
+# Daedalus Configuration Example
+# Copy this file to ~/.config/daedelus/config.yaml and customize
+
+# ============================================
+# Daemon Settings
+# ============================================
+daemon:
+  # Unix socket path for IPC (auto-set if null)
+  socket_path: null  # Default: ~/.local/share/daedelus/runtime/daemon.sock
+
+  # Log file path (auto-set if null)
+  log_path: null     # Default: ~/.local/share/daedelus/daemon.log
+
+  # PID file path (auto-set if null)
+  pid_path: null     # Default: ~/.local/share/daedelus/runtime/daemon.pid
+
+  # Startup delay in seconds
+  startup_delay: 0.5
+
+  # Max worker threads for parallel processing
+  max_workers: 4
+
+# ============================================
+# Embedding Model Settings (Phase 1)
+# ============================================
+model:
+  # Embedding vector dimensionality
+  # Higher = more expressive but slower (64, 128, 256, 384)
+  embedding_dim: 128
+
+  # Maximum vocabulary size
+  vocab_size: 50000
+
+  # Model file path (auto-set if null)
+  model_path: null   # Default: ~/.local/share/daedelus/model.bin
+
+  # Minimum word frequency to include in vocabulary
+  min_count: 2
+
+  # Maximum length of character n-grams (for subword support)
+  # Higher = better typo handling
+  word_ngrams: 3
+
+  # Training epochs
+  epoch: 5
+
+# ============================================
+# Vector Store Settings (Phase 1)
+# ============================================
+vector_store:
+  # Index type: "annoy" (Phase 1) or "sqlite-vss" (Phase 2)
+  index_type: annoy
+
+  # Index file path (auto-set if null)
+  index_path: null   # Default: ~/.local/share/daedelus/index
+
+  # Number of trees for Annoy index
+  # More trees = better accuracy but slower build (5-20 recommended)
+  n_trees: 10
+
+  # Search parameter (-1 = auto)
+  # Higher = more accurate but slower (-1, 100, 1000, 10000)
+  search_k: -1
+
+# ============================================
+# Database Settings
+# ============================================
+database:
+  # SQLite database path (auto-set if null)
+  path: null         # Default: ~/.local/share/daedelus/history.db
+
+  # Enable automatic backups
+  backup_enabled: true
+
+  # Number of backup files to keep
+  backup_count: 5
+
+# ============================================
+# Privacy & Security Settings
+# ============================================
+privacy:
+  # Directories to exclude from learning
+  # Commands run in these paths won't be logged
+  excluded_paths:
+    - ~/.ssh
+    - ~/.gnupg
+    - ~/.password-store
+    - ~/.config/pass
+
+  # Command patterns to exclude
+  # Regular expressions matching these won't be logged
+  excluded_patterns:
+    - password
+    - token
+    - secret
+    - api[_-]?key
+    - aws[_-]?access
+    - aws[_-]?secret
+
+  # How long to keep command history (in days)
+  # Set to 0 for unlimited
+  history_retention_days: 90
+
+  # Encrypt sensitive command data
+  encrypt_sensitive: true
+
+# ============================================
+# Suggestion Engine Settings
+# ============================================
+suggestions:
+  # Maximum number of suggestions to return
+  max_suggestions: 5
+
+  # Minimum confidence threshold (0.0 - 1.0)
+  # Lower = more suggestions but less relevant
+  min_confidence: 0.3
+
+  # Number of recent commands to consider for context
+  context_window: 10
+
+  # Enable fuzzy matching
+  enable_fuzzy: true
+
+# ============================================
+# Performance Settings
+# ============================================
+performance:
+  # LRU cache size for suggestions
+  cache_size: 1000
+
+  # Enable lazy loading of models
+  lazy_loading: true
+
+  # Batch size for bulk operations
+  batch_size: 100
+
+# ============================================
+# Phase 2: LLM Settings (Experimental)
+# ============================================
+# These settings are for Phase 2 features (not yet implemented)
+llm:
+  # Enable LLM-based suggestions
+  enabled: false
+
+  # Path to GGUF model file (Phi-3-mini recommended)
+  model_path: null   # Default: ~/.local/share/daedelus/llm/model.gguf
+
+  # Context length for LLM
+  context_length: 2048
+
+  # Sampling temperature (0.0 - 2.0)
+  # Lower = more conservative, Higher = more creative
+  temperature: 0.7
+
+  # Nucleus sampling parameter (0.0 - 1.0)
+  top_p: 0.9
+
+  # Maximum tokens to generate
+  max_tokens: 100
+
+# ============================================
+# Phase 2: PEFT Settings (Experimental)
+# ============================================
+peft:
+  # Enable PEFT/LoRA fine-tuning
+  enabled: false
+
+  # Path to save LoRA adapters
+  adapter_path: null  # Default: ~/.local/share/daedelus/llm/adapter
+
+  # LoRA rank
+  r: 8
+
+  # LoRA alpha parameter
+  lora_alpha: 32
+
+  # LoRA dropout
+  lora_dropout: 0.1
+
+# ============================================
+# Advanced Settings
+# ============================================
+advanced:
+  # Enable debug logging
+  debug: false
+
+  # Profile performance (creates .prof files)
+  profiling: false
+
+  # Validate all input data strictly
+  strict_validation: false
