@@ -4,10 +4,8 @@
 # ===========================
 # Development Documentation
 # ===========================
-# .dev-docs/ - AI-generated documentation (excluded from repository)
 .dev-docs/
-
-# .devdocs/ is included in repository (contains design docs and planning)
+.devdocs/
 
 # ===========================
 # Python
@@ -65,31 +63,54 @@ dmypy.json
 .DS_Store
 
 # ===========================
-# Daedalus Runtime Data
+# Daedalus Runtime Data (NEVER UPLOAD)
 # ===========================
-# User data directories (should not be in repo)
+# User data directories - contains personal command history
 *.db
 *.db-journal
-*.ann
-*.bin
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# User configuration files - may contain personal paths
+config.yaml
+config.yml
+*.local.yaml
+*.local.yml
+.daedelus/
+
+# Runtime files
 *.log
 *.pid
 *.sock
 
-# Configuration (local only)
-config.yaml
-.daedelus/
-
-# Model files
+# User's LLM model files - too large and user-specific
 *.model
 *.bin
 *.gguf
 *.safetensors
+*.pt
+*.pth
+*.onnx
+models/
 
-# Vector indexes
+# Vector indexes - built from user's personal data
 *.ann
 *.faiss
 *.idx
+*.index
+
+# Adapter files - fine-tuned on user's personal commands
+adapter_*/
+adapters/
+lora_*/
+peft_*/
+
+# User data directories
+~/.local/share/daedelus/
+~/.config/daedelus/
+~/.cache/daedelus/
 
 # ===========================
 # Temporary Files

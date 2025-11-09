@@ -45,7 +45,7 @@ Requires internet  →      Works 100% offline
 
 Daedalus uses a **hybrid architecture** with two phases:
 
-### Phase 1: Embedding-Based System (Current)
+### Phase 1: Embedding-Based System ✅
 ```
 FastText Embeddings → Annoy Vector Search → Pattern Learning
 ├── Command similarity matching
@@ -53,11 +53,12 @@ FastText Embeddings → Annoy Vector Search → Pattern Learning
 └── Incremental model updates
 ```
 
-### Phase 2: LLM Enhancement (Planned)
+### Phase 2: LLM Enhancement ✅ (Current)
 ```
 Phase 1 + llama.cpp (Phi-3-mini) → RAG Pipeline → PEFT/LoRA Fine-Tuning
-├── Natural language explanations
-├── Advanced context injection
+├── Natural language command explanations
+├── Command generation from descriptions
+├── Q&A about shell commands
 └── Personalized model fine-tuning
 ```
 
@@ -66,11 +67,19 @@ Phase 1 + llama.cpp (Phi-3-mini) → RAG Pipeline → PEFT/LoRA Fine-Tuning
 ### Installation
 
 ```bash
-# Install from source (PyPI package coming soon)
+# Clone the repository
 git clone https://github.com/orpheus497/daedelus.git
 cd daedelus
+
+# Quick install (recommended)
+chmod +x install.sh
+./install.sh
+
+# Or manual install
 pip install -e .
 ```
+
+**Requirements**: Python 3.10+, C++ compiler (g++)
 
 ### Setup
 
@@ -118,6 +127,12 @@ daedelus status         # Show status and statistics
 # Query history
 daedelus search "git"   # Search command history
 daedelus info           # Show system information
+
+# LLM Features (Phase 2)
+daedelus explain "ls -la"              # Explain what a command does
+daedelus generate "find all python files"  # Generate command from description
+daedelus ask "how do I compress a directory"  # Ask questions about shell commands
+daedelus websearch "latest python best practices"  # Search web with AI summary
 ```
 
 ### Shell Usage
@@ -219,11 +234,18 @@ daemon:
   socket_path: ~/.local/share/daedelus/runtime/daemon.sock
   log_path: ~/.local/share/daedelus/daemon.log
 
-# Model settings
+# Phase 1 Model settings (Embeddings)
 model:
   embedding_dim: 128
   vocab_size: 50000
   min_count: 2
+
+# Phase 2 LLM settings
+llm:
+  enabled: true
+  model_path: ~/.local/share/models/model.gguf  # Place your GGUF model here
+  context_length: 2048
+  temperature: 0.7
 
 # Suggestion settings
 suggestions:
@@ -236,6 +258,131 @@ privacy:
   excluded_paths: [~/.ssh, ~/.gnupg]
   history_retention_days: 90
 ```
+
+### LLM Model Setup
+
+Daedalus uses GGUF-format models for LLM features. You can use any GGUF model compatible with llama.cpp.
+
+#### Option 1: Download Phi-3-mini (Recommended)
+
+Phi-3-mini is recommended for most users (small, fast, and capable):
+
+```bash
+# Create models directory
+mkdir -p ~/.local/share/models
+
+# Download Phi-3-mini-4k-instruct Q4 quantized model (~2.4GB)
+wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf
+
+# Move to Daedalus models directory
+mv Phi-3-mini-4k-instruct-q4.gguf ~/.local/share/models/model.gguf
+
+# Restart Daedalus to load the model
+daedelus restart
+```
+
+#### Option 2: Use a Different Model
+
+You can use any GGUF model from Hugging Face or other sources:
+
+**Popular Options:**
+- **Llama-3.2-1B** - Very fast, lightweight (~1GB)
+- **Mistral-7B** - More capable, larger (~4GB)
+- **Qwen2.5** - Strong multilingual support (~3GB)
+- **TinyLlama-1.1B** - Ultra-lightweight (~600MB)
+
+**Download Steps:**
+
+```bash
+# Example: Download TinyLlama (very small and fast)
+wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+
+# Place it in the models directory with the expected name
+mv tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf ~/.local/share/models/model.gguf
+```
+
+#### Changing Model Settings
+
+You can configure which model to use by editing the config file:
+
+```bash
+# Open config file
+nano ~/.config/daedelus/config.yaml
+```
+
+**Change the model path:**
+```yaml
+llm:
+  enabled: true
+  model_path: ~/.local/share/models/model.gguf  # Change this path
+  context_length: 2048   # Increase for longer context (uses more RAM)
+  temperature: 0.7       # 0.0 = deterministic, 1.0 = creative
+```
+
+**Alternative: Use a specific model file without renaming:**
+```yaml
+llm:
+  enabled: true
+  model_path: ~/.local/share/models/my-custom-model.gguf
+  context_length: 4096
+  temperature: 0.5
+```
+
+**Or set via CLI:**
+```bash
+daedelus config set llm.model_path ~/.local/share/models/my-model.gguf
+daedelus config set llm.temperature 0.8
+daedelus config set llm.context_length 4096
+
+# Restart to apply changes
+daedelus restart
+```
+
+#### Model Selection Guide
+
+Choose based on your hardware and needs:
+
+| Model | Size | RAM | Speed | Use Case |
+|-------|------|-----|-------|----------|
+| TinyLlama-1.1B | ~600MB | 2GB | ⚡⚡⚡ | Low-end systems, fast responses |
+| Phi-3-mini | ~2.4GB | 4GB | ⚡⚡ | **Recommended** - balanced |
+| Qwen2.5-3B | ~3GB | 6GB | ⚡ | Multilingual support |
+| Mistral-7B | ~4GB | 8GB | ⚡ | More capable, slower |
+
+#### Troubleshooting
+
+**Model not found error:**
+```bash
+# Check what Daedalus is looking for
+daedelus info
+
+# Verify file exists
+ls -lh ~/.local/share/models/
+
+# Check config
+daedelus config get llm.model_path
+```
+
+**Out of memory error:**
+- Use a smaller quantization (Q4 instead of Q8)
+- Use a smaller model (TinyLlama instead of Mistral)
+- Reduce context_length in config
+
+**Model loads slowly:**
+- This is normal on first load
+- Subsequent loads use RAM cache
+- Consider using a smaller model
+
+---
+
+**📖 For complete model setup documentation, see [docs/MODEL_SETUP.md](docs/MODEL_SETUP.md)**
+
+This comprehensive guide covers:
+- All available models and comparisons
+- Step-by-step download instructions
+- Advanced configuration options
+- Performance tuning
+- Troubleshooting
 
 ## 📊 Performance
 
@@ -259,11 +406,12 @@ privacy:
 - **Terminal**: ptyprocess, prompt-toolkit
 - **CLI**: Click
 
-**Phase 2 (Planned):**
-- **LLM**: llama.cpp + Phi-3-mini
+**Phase 2 (Current):**
+- **LLM**: llama.cpp + Phi-3-mini (GGUF)
 - **Vector DB**: sqlite-vss
 - **Fine-Tuning**: PEFT/LoRA
 - **Framework**: transformers, accelerate
+- **All LLM dependencies included by default**
 
 ### Project Structure
 
@@ -324,17 +472,18 @@ bandit -r src/daedelus
 - [x] Daemon architecture with IPC
 - [x] 3-tier suggestion engine
 - [x] CLI interface
-- [ ] Shell integration (ZSH, Bash, Fish)
-- [ ] Unit test suite (>80% coverage)
-- [ ] Documentation
+- [x] Shell integration (ZSH, Bash, Fish)
 
-### 🚧 Phase 2: LLM Enhancement (Q2 2025)
-- [ ] llama.cpp integration
-- [ ] Phi-3-mini model loading
-- [ ] RAG pipeline for context injection
-- [ ] PEFT/LoRA fine-tuning on shutdown
-- [ ] Natural language explanations
-- [ ] Command generation from descriptions
+### ✅ Phase 2: LLM Enhancement (COMPLETE)
+- [x] llama.cpp integration
+- [x] Phi-3-mini model support (GGUF)
+- [x] RAG pipeline for context injection
+- [x] PEFT/LoRA fine-tuning infrastructure
+- [x] Natural language command explanations (`daedelus explain`)
+- [x] Command generation from descriptions (`daedelus generate`)
+- [x] Q&A for shell commands (`daedelus ask`)
+- [x] LLM dependencies included by default
+- [x] Model path: `~/.local/share/models/`
 
 ### 🔮 Phase 3: Advanced Features (Q3-Q4 2025)
 - [ ] Multi-language support
@@ -368,6 +517,41 @@ pytest tests/
 # Format code
 black src/daedelus
 ruff check --fix src/daedelus
+```
+
+## 🗑️ Uninstalling
+
+To completely remove Daedalus:
+
+```bash
+# Run the uninstall script
+./uninstall.sh
+```
+
+The script will:
+1. Stop the daemon
+2. Guide you through removing shell integration
+3. Uninstall the Python package
+4. Optionally remove configuration files
+5. Optionally remove data (command history, models, etc.)
+6. Optionally remove downloaded LLM models
+
+You can choose what to keep and what to remove during the process.
+
+**Manual Uninstall**:
+```bash
+# Stop daemon
+daedelus stop
+
+# Uninstall package
+pip uninstall daedelus
+
+# Remove data and config (optional)
+rm -rf ~/.config/daedelus
+rm -rf ~/.local/share/daedelus
+rm -f ~/.local/share/models/model.gguf
+
+# Remove shell integration from your RC files
 ```
 
 ## 📜 License

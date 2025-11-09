@@ -39,8 +39,8 @@ class DependencyError(Exception):
             f"The '{feature}' feature requires the '{package}' package.\n\n"
             f"To install it, run:\n"
             f"  {install_cmd}\n\n"
-            f"For full installation with all features:\n"
-            f"  pip install 'daedelus[llm]'  # For LLM features\n"
+            f"Or reinstall daedelus:\n"
+            f"  pip install -e .             # Install with all dependencies\n"
             f"  pip install -e .[dev]        # For development\n"
             f"\n{'='*70}\n"
         )
@@ -48,45 +48,46 @@ class DependencyError(Exception):
 
 
 # Dependency registry with installation information
+# All dependencies are required - no optional dependencies
 DEPENDENCY_INFO: dict[str, dict[str, str]] = {
     "fasttext": {
-        "feature": "FastText embeddings (Phase 1)",
-        "install": "pip install fasttext==0.9.2",
+        "feature": "FastText embeddings",
+        "install": "pip install 'fasttext>=0.9.3'",
         "extra": "",
     },
     "annoy": {
-        "feature": "Annoy vector search (Phase 1)",
-        "install": "pip install annoy==1.17.3",
+        "feature": "Annoy vector search",
+        "install": "pip install 'annoy>=1.17.3'",
         "extra": "",
     },
     "llama_cpp": {
-        "feature": "LLM inference (Phase 2)",
-        "install": "pip install 'daedelus[llm]'",
-        "extra": "llm",
+        "feature": "LLM inference",
+        "install": "pip install 'llama-cpp-python>=0.2.20'",
+        "extra": "",
     },
     "transformers": {
-        "feature": "Transformers/PEFT (Phase 2)",
-        "install": "pip install 'daedelus[llm]'",
-        "extra": "llm",
+        "feature": "Transformers library",
+        "install": "pip install 'transformers>=4.36.0'",
+        "extra": "",
     },
     "peft": {
-        "feature": "PEFT/LoRA fine-tuning (Phase 2)",
-        "install": "pip install 'daedelus[llm]'",
-        "extra": "llm",
+        "feature": "PEFT/LoRA fine-tuning",
+        "install": "pip install 'peft>=0.7.0'",
+        "extra": "",
     },
     "rich": {
         "feature": "Rich terminal UI",
-        "install": "pip install rich>=13.0.0",
+        "install": "pip install 'rich>=13.0.0'",
         "extra": "",
     },
     "textual": {
         "feature": "TUI dashboard",
-        "install": "pip install textual>=0.40.0",
+        "install": "pip install 'textual>=0.40.0'",
         "extra": "",
     },
     "jinja2": {
         "feature": "Command templates",
-        "install": "pip install jinja2>=3.1.0",
+        "install": "pip install 'jinja2>=3.1.0'",
         "extra": "",
     },
 }
@@ -188,20 +189,18 @@ def get_available_features() -> dict[str, bool]:
 
 
 def print_dependency_status() -> None:
-    """Print status of all optional dependencies."""
+    """Print status of all dependencies."""
     print("\nDaedelus Dependency Status")
     print("=" * 70)
 
     features = get_available_features()
 
-    print("\nCore Features (Phase 1):")
+    print("\nCore Features:")
     print(f"  Embeddings (FastText): {'✓' if features['embeddings'] else '✗ MISSING'}")
-
-    print("\nOptional Features (Phase 2):")
     print(f"  LLM Inference:         {'✓' if features['llm'] else '✗ MISSING'}")
     print(f"  PEFT Fine-tuning:      {'✓' if features['peft'] else '✗ MISSING'}")
 
-    print("\nUI Enhancements:")
+    print("\nUI Features:")
     print(f"  Rich Terminal UI:      {'✓' if features['rich_ui'] else '✗ MISSING'}")
     print(f"  TUI Dashboard:         {'✓' if features['dashboard'] else '✗ MISSING'}")
     print(f"  Command Templates:     {'✓' if features['templates'] else '✗ MISSING'}")
@@ -210,9 +209,8 @@ def print_dependency_status() -> None:
 
     missing = get_missing_dependencies(list(DEPENDENCY_INFO.keys()))
     if missing:
-        print("\nTo install missing dependencies:")
-        print("  pip install 'daedelus[llm]'  # All Phase 2 features")
-        print("  pip install -e .             # Core features only")
+        print("\n✗ Missing dependencies detected!")
+        print("  Run: pip install -e .")
     else:
         print("\n✓ All dependencies installed!")
 

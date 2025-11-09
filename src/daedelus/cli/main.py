@@ -330,6 +330,264 @@ def shell_integration(shell: str) -> None:
 
 
 @cli.command()
+@click.argument("command_text", nargs=-1, required=True)
+@click.option(
+    "--detailed",
+    is_flag=True,
+    help="Provide detailed explanation",
+)
+@click.option(
+    "--examples",
+    is_flag=True,
+    help="Include usage examples",
+)
+@click.pass_context
+def explain(ctx: click.Context, command_text: tuple, detailed: bool, examples: bool) -> None:
+    """Explain what a command does using LLM."""
+    command = " ".join(command_text)
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.command_explainer import CommandExplainer
+        from daedelus.llm.llm_manager import LLMManager
+
+        click.echo("Loading LLM (this may take a moment)...")
+
+        # Get model path from config
+        model_path = Path(config.get("llm.model_path"))
+
+        # Initialize LLM
+        llm = LLMManager(
+            model_path=model_path,
+            context_length=config.get("llm.context_length"),
+            temperature=config.get("llm.temperature"),
+        )
+        explainer = CommandExplainer(llm)
+
+        if examples:
+            # Get explanation with examples
+            result = explainer.explain_with_examples(command)
+            click.echo(f"\nCommand: {command}")
+            click.echo(f"\nExplanation:\n{result['explanation']}")
+
+            if result.get("examples"):
+                click.echo("\nExamples:")
+                for example in result["examples"]:
+                    click.echo(f"  • {example}")
+        else:
+            # Get simple explanation
+            explanation = explainer.explain_command(command, include_context=False, detailed=detailed)
+            click.echo(f"\nCommand: {command}")
+            click.echo(f"\nExplanation:\n{explanation}")
+
+    except ImportError as e:
+        click.echo(f"❌ LLM dependencies not found: {e}")
+        click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
+    except FileNotFoundError:
+        click.echo(f"❌ LLM model not found at: {model_path}")
+        click.echo(f"\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:")
+        click.echo(f"  {model_path}")
+        click.echo(f"\nOr create the directory first:")
+        click.echo(f"  mkdir -p {model_path.parent}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Failed to explain command: {e}", exc_info=True)
+
+
+@cli.command()
+@click.argument("description", nargs=-1, required=True)
+@click.option(
+    "--alternatives",
+    "-a",
+    is_flag=True,
+    help="Show multiple alternative commands",
+)
+@click.option(
+    "--explain",
+    "-e",
+    is_flag=True,
+    help="Include explanation of generated command",
+)
+@click.pass_context
+def generate(
+    ctx: click.Context, description: tuple, alternatives: bool, explain: bool
+) -> None:
+    """Generate a command from natural language description."""
+    desc_text = " ".join(description)
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.command_generator import CommandGenerator
+        from daedelus.llm.llm_manager import LLMManager
+
+        click.echo("Loading LLM (this may take a moment)...")
+
+        # Get model path from config
+        model_path = Path(config.get("llm.model_path"))
+
+        # Initialize LLM
+        llm = LLMManager(
+            model_path=model_path,
+            context_length=config.get("llm.context_length"),
+            temperature=config.get("llm.temperature"),
+        )
+        generator = CommandGenerator(llm)
+
+        if explain:
+            # Generate with explanation
+            result = generator.generate_with_explanation(desc_text)
+            click.echo(f"\nTask: {desc_text}")
+            click.echo(f"\nGenerated command:\n  {result['command']}")
+            click.echo(f"\nExplanation:\n{result['explanation']}")
+
+        elif alternatives:
+            # Generate multiple alternatives
+            commands = generator.generate_command(desc_text, return_multiple=True)
+            click.echo(f"\nTask: {desc_text}")
+            click.echo("\nAlternative commands:")
+            for i, cmd in enumerate(commands, 1):
+                click.echo(f"  {i}. {cmd}")
+
+        else:
+            # Generate single command
+            command = generator.generate_command(desc_text)
+            click.echo(f"\nTask: {desc_text}")
+            click.echo(f"\nGenerated command:\n  {command}")
+
+    except ImportError as e:
+        click.echo(f"❌ LLM dependencies not found: {e}")
+        click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
+    except FileNotFoundError:
+        click.echo(f"❌ LLM model not found at: {model_path}")
+        click.echo(f"\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:")
+        click.echo(f"  {model_path}")
+        click.echo(f"\nOr create the directory first:")
+        click.echo(f"  mkdir -p {model_path.parent}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Failed to generate command: {e}", exc_info=True)
+
+
+@cli.command()
+@click.argument("query", nargs=-1, required=True)
+@click.pass_context
+def ask(ctx: click.Context, query: tuple) -> None:
+    """Ask a question about shell commands or system administration."""
+    query_text = " ".join(query)
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.llm_manager import LLMManager
+
+        click.echo("Loading LLM (this may take a moment)...")
+
+        # Get model path from config
+        model_path = Path(config.get("llm.model_path"))
+
+        # Initialize LLM
+        llm = LLMManager(
+            model_path=model_path,
+            context_length=config.get("llm.context_length"),
+            temperature=config.get("llm.temperature"),
+        )
+
+        # Build a prompt for general questions
+        prompt = f"""You are a helpful assistant for shell commands and system administration.
+Answer the following question concisely and accurately.
+
+Question: {query_text}
+
+Answer:"""
+
+        # Generate response
+        response = llm.generate(prompt, max_tokens=300, temperature=0.5)
+
+        click.echo(f"\nQuestion: {query_text}")
+        click.echo(f"\nAnswer:\n{response}")
+
+    except ImportError as e:
+        click.echo(f"❌ LLM dependencies not found: {e}")
+        click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
+    except FileNotFoundError:
+        click.echo(f"❌ LLM model not found at: {model_path}")
+        click.echo(f"\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:")
+        click.echo(f"  {model_path}")
+        click.echo(f"\nOr create the directory first:")
+        click.echo(f"  mkdir -p {model_path.parent}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Failed to answer question: {e}", exc_info=True)
+
+
+@cli.command()
+@click.argument("query", nargs=-1, required=True)
+@click.option(
+    "--detailed",
+    "-d",
+    is_flag=True,
+    help="Provide detailed summary",
+)
+@click.option(
+    "--results",
+    "-n",
+    default=5,
+    help="Number of search results to use",
+)
+@click.pass_context
+def websearch(ctx: click.Context, query: tuple, detailed: bool, results: int) -> None:
+    """Search the web and get AI-summarized results."""
+    query_text = " ".join(query)
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.llm_manager import LLMManager
+        from daedelus.llm.web_search import WebSearcher
+
+        click.echo(f"🔍 Searching the web for: {query_text}")
+
+        # Get model path from config
+        model_path = Path(config.get("llm.model_path"))
+
+        # Initialize LLM
+        llm = LLMManager(
+            model_path=model_path,
+            context_length=config.get("llm.context_length"),
+            temperature=config.get("llm.temperature"),
+        )
+
+        # Perform search and summarize
+        searcher = WebSearcher(llm)
+        result = searcher.search_and_summarize(query_text, max_results=results, detailed=detailed)
+
+        # Display results
+        click.echo(f"\n{'='*70}")
+        click.echo(f"Query: {result['query']}")
+        click.echo(f"{'='*70}\n")
+        click.echo(result["summary"])
+
+        if result["sources"]:
+            click.echo(f"\n{'='*70}")
+            click.echo("Sources:")
+            for i, source in enumerate(result["sources"], 1):
+                click.echo(f"  {i}. {source}")
+
+        click.echo(f"{'='*70}")
+
+    except ImportError as e:
+        click.echo(f"❌ Dependencies not found: {e}")
+        click.echo("Ensure 'requests' is installed: pip install requests")
+    except FileNotFoundError:
+        click.echo(f"❌ LLM model not found at: {model_path}")
+        click.echo(f"\nTo use web search with AI summarization:")
+        click.echo(f"1. Download a GGUF model (see docs for instructions)")
+        click.echo(f"2. Place it at: {model_path}")
+        click.echo(f"\nSee README.md for model download instructions.")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Web search failed: {e}", exc_info=True)
+
+
+@cli.command()
 @click.pass_context
 def info(ctx: click.Context) -> None:
     """Show system information."""
@@ -343,12 +601,360 @@ def info(ctx: click.Context) -> None:
     click.echo(f"Socket: {config.get('daemon.socket_path')}")
     click.echo(f"Log: {config.get('daemon.log_path')}")
     click.echo(f"Database: {config.get('database.path')}")
-    click.echo(f"Model: {config.get('model.model_path')}")
+    click.echo(f"\nPhase 1 (Embeddings):")
+    click.echo(f"  Model: {config.get('model.model_path')}")
+    click.echo(f"\nPhase 2 (LLM):")
+    click.echo(f"  Enabled: {config.get('llm.enabled')}")
+    click.echo(f"  Model: {config.get('llm.model_path')}")
+
+    # Check model existence
+    llm_model_path = Path(config.get('llm.model_path'))
+    if llm_model_path.exists():
+        size_mb = llm_model_path.stat().st_size / (1024 * 1024)
+        click.echo(f"  Status: ✅ Found ({size_mb:.1f} MB)")
+    else:
+        click.echo(f"  Status: ❌ Not found")
+        click.echo(f"  Hint: Download a GGUF model and place it at the path above")
 
     db_path = Path(config.get("database.path"))
     if db_path.exists():
         size_mb = db_path.stat().st_size / (1024 * 1024)
         click.echo(f"\nDatabase size: {size_mb:.2f} MB")
+
+
+@cli.command()
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Force re-training even if recently trained",
+)
+@click.option(
+    "--epochs",
+    default=3,
+    help="Number of training epochs",
+)
+@click.option(
+    "--min-commands",
+    default=100,
+    help="Minimum number of new commands required",
+)
+@click.pass_context
+def train(ctx: click.Context, force: bool, epochs: int, min_commands: int) -> None:
+    """Manually trigger fine-tuning of the LLM."""
+    config: Config = ctx.obj["config"]
+
+    if not config.get("llm.enabled"):
+        click.echo("❌ LLM is not enabled in config")
+        click.echo("Enable it with: daedelus config set llm.enabled true")
+        return
+
+    try:
+        from daedelus.core.database import Database
+        from daedelus.llm.model_manager import ModelManager
+        from daedelus.llm.peft_trainer import PEFTTrainer
+
+        click.echo("🎓 Starting manual training session...")
+
+        # Initialize components
+        db = Database(config.get("database.path"))
+        models_dir = Path(config.get("llm.model_path")).parent
+        model_manager = ModelManager(models_dir)
+
+        # Check if we have commands to train on
+        recent_commands = db.get_recent_commands(n=1000, successful_only=True)
+
+        if len(recent_commands) < min_commands and not force:
+            click.echo(f"⚠️  Only {len(recent_commands)} commands in history")
+            click.echo(f"Minimum required: {min_commands}")
+            click.echo("Use --force to train anyway, or wait for more commands")
+            return
+
+        click.echo(f"Found {len(recent_commands)} commands for training")
+
+        # Initialize trainer
+        adapter_path = models_dir / "adapter_latest"
+        trainer = PEFTTrainer(
+            model_name="microsoft/Phi-3-mini-4k-instruct",
+            adapter_path=adapter_path,
+            r=config.get("peft.r", 8),
+            lora_alpha=config.get("peft.lora_alpha", 32),
+            lora_dropout=config.get("peft.lora_dropout", 0.1),
+        )
+
+        # Prepare training data
+        click.echo("Preparing training data...")
+        training_data = trainer.prepare_training_data(
+            commands=[cmd["command"] for cmd in recent_commands],
+            max_samples=1000,
+        )
+
+        # Train
+        click.echo(f"Training for {epochs} epochs (this may take 5-10 minutes)...")
+        trainer.train_adapter(
+            training_data=training_data,
+            output_dir=adapter_path,
+            num_epochs=epochs,
+            batch_size=4,
+            learning_rate=1e-4,
+        )
+
+        click.echo("✅ Training complete!")
+
+        # Ask if user wants to forge new model version
+        if click.confirm("\nForge new model version from adapter?"):
+            click.echo("🔨 Forging new model version...")
+
+            current_model = model_manager.get_current_model()
+            if current_model:
+                click.echo(f"Current model: {current_model.name} (v{current_model.version})")
+
+            new_model_path = model_manager.forge_next_version(
+                adapter_path=adapter_path,
+                training_commands=len(training_data),
+                notes=f"Manual training session with {len(training_data)} commands",
+            )
+
+            click.echo(f"✅ New model forged: {new_model_path}")
+            click.echo("Restart daemon to use new model: daedelus restart")
+        else:
+            click.echo("Adapter saved but not merged into model")
+            click.echo(f"Adapter path: {adapter_path}")
+
+    except ImportError as e:
+        click.echo(f"❌ PEFT dependencies not found: {e}")
+        click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Training failed: {e}", exc_info=True)
+
+
+@cli.group()
+def model() -> None:
+    """Manage LLM models."""
+    pass
+
+
+@model.command("download")
+@click.option(
+    "--model",
+    default="phi-3-mini",
+    help="Model name to download",
+)
+@click.pass_context
+def model_download(ctx: click.Context, model: str) -> None:
+    """Download base model from HuggingFace."""
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.model_manager import ModelManager
+
+        models_dir = Path(config.get("llm.model_path")).parent
+        manager = ModelManager(models_dir)
+
+        click.echo(f"📥 Downloading {model}...")
+        click.echo(f"This may take a while (model is ~2.4GB)")
+
+        path = manager.download_model(model)
+
+        click.echo(f"✅ Downloaded: {path}")
+        click.echo(f"\nTo initialize Daedelus model, run:")
+        click.echo(f"  daedelus model init")
+
+    except ImportError as e:
+        click.echo(f"❌ Dependencies not found: {e}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Download failed: {e}", exc_info=True)
+
+
+@model.command("init")
+@click.option(
+    "--base-model",
+    default="phi-3-mini",
+    help="Base model to use",
+)
+@click.pass_context
+def model_init(ctx: click.Context, base_model: str) -> None:
+    """Initialize Daedelus model from base."""
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.model_manager import ModelManager
+
+        models_dir = Path(config.get("llm.model_path")).parent
+        manager = ModelManager(models_dir)
+
+        click.echo(f"🔧 Initializing Daedelus from {base_model}...")
+
+        path = manager.initialize_daedelus(base_model)
+
+        click.echo(f"✅ Initialized: {path}")
+        click.echo(f"\nDaedelus is ready to learn from your commands!")
+        click.echo(f"Start the daemon: daedelus start")
+
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Initialization failed: {e}", exc_info=True)
+
+
+@model.command("status")
+@click.pass_context
+def model_status(ctx: click.Context) -> None:
+    """Show current model status."""
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.model_manager import ModelManager
+
+        models_dir = Path(config.get("llm.model_path")).parent
+        manager = ModelManager(models_dir)
+
+        current = manager.get_current_model()
+
+        if current:
+            click.echo("Current Model")
+            click.echo("=" * 40)
+            click.echo(f"Name: {current.name}")
+            click.echo(f"Version: v{current.version}")
+            click.echo(f"Size: {current.size_bytes / (1024**3):.2f} GB")
+            click.echo(f"Created: {current.created.strftime('%Y-%m-%d %H:%M:%S')}")
+            click.echo(f"Training commands: {current.training_commands}")
+            click.echo(f"Parent: {current.parent or 'None (base model)'}")
+
+            # Show lineage
+            lineage = manager.get_lineage(current.name)
+            if len(lineage) > 1:
+                click.echo(f"\nLineage: {' → '.join(lineage)}")
+        else:
+            click.echo("No active model")
+            click.echo("Initialize with: daedelus model init")
+
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Status check failed: {e}", exc_info=True)
+
+
+@model.command("versions")
+@click.pass_context
+def model_versions(ctx: click.Context) -> None:
+    """List all model versions."""
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.model_manager import ModelManager
+
+        models_dir = Path(config.get("llm.model_path")).parent
+        manager = ModelManager(models_dir)
+
+        models = manager.list_models()
+
+        if not models:
+            click.echo("No models found")
+            return
+
+        click.echo("Available Models")
+        click.echo("=" * 60)
+
+        for m in models:
+            size_gb = m.size_bytes / (1024**3)
+            marker = "→" if m == manager.get_current_model() else " "
+            click.echo(f"{marker} {m.name:20s} v{m.version:2d}  {size_gb:5.2f}GB  {m.training_commands:5d} cmds")
+
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Version list failed: {e}", exc_info=True)
+
+
+@model.command("rollback")
+@click.argument("version", type=int)
+@click.pass_context
+def model_rollback(ctx: click.Context, version: int) -> None:
+    """Rollback to a previous model version."""
+    config: Config = ctx.obj["config"]
+
+    try:
+        from daedelus.llm.model_manager import ModelManager
+
+        models_dir = Path(config.get("llm.model_path")).parent
+        manager = ModelManager(models_dir)
+
+        current = manager.get_current_model()
+        if current:
+            click.echo(f"Current: {current.name} (v{current.version})")
+
+        click.echo(f"Rolling back to v{version}...")
+
+        path = manager.rollback(version)
+
+        click.echo(f"✅ Rolled back to: {path}")
+        click.echo("\nRestart daemon to use rolled-back model:")
+        click.echo("  daedelus restart")
+
+    except ValueError as e:
+        click.echo(f"❌ {e}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+        logger.error(f"Rollback failed: {e}", exc_info=True)
+
+
+@cli.group()
+def config_cmd() -> None:
+    """Manage configuration."""
+    pass
+
+
+cli.add_command(config_cmd, name="config")
+
+
+@config_cmd.command("get")
+@click.argument("key")
+@click.pass_context
+def config_get(ctx: click.Context, key: str) -> None:
+    """Get configuration value."""
+    config: Config = ctx.obj["config"]
+
+    try:
+        value = config.get(key)
+        click.echo(f"{key} = {value}")
+    except KeyError:
+        click.echo(f"❌ Key not found: {key}")
+
+
+@config_cmd.command("set")
+@click.argument("key")
+@click.argument("value")
+@click.pass_context
+def config_set(ctx: click.Context, key: str, value: str) -> None:
+    """Set configuration value."""
+    config: Config = ctx.obj["config"]
+
+    # Parse value type
+    parsed_value = value
+    if value.lower() in ("true", "false"):
+        parsed_value = value.lower() == "true"
+    elif value.isdigit():
+        parsed_value = int(value)
+    elif value.replace(".", "", 1).isdigit():
+        parsed_value = float(value)
+
+    config.set(key, parsed_value)
+    config.save()
+
+    click.echo(f"✅ Set {key} = {parsed_value}")
+    click.echo(f"Config saved to: {config.config_path}")
+
+
+@config_cmd.command("show")
+@click.pass_context
+def config_show(ctx: click.Context) -> None:
+    """Show all configuration."""
+    config: Config = ctx.obj["config"]
+
+    import json
+
+    click.echo("Current Configuration")
+    click.echo("=" * 60)
+    click.echo(json.dumps(config.config_data, indent=2, sort_keys=True))
 
 
 # Helper functions

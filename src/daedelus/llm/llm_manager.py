@@ -58,7 +58,8 @@ class LLMManager:
         """
         if Llama is None:
             raise ImportError(
-                "llama-cpp-python is not installed. " "Install with: pip install 'daedelus[llm]'"
+                "llama-cpp-python is not installed. "
+                "Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus"
             )
 
         self.model_path = Path(model_path).expanduser()

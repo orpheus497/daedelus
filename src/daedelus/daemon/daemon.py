@@ -150,8 +150,22 @@ class DaedelusDaemon:
             self.embedder.load()
             logger.info("Loaded existing embedding model")
         except FileNotFoundError:
-            logger.info("No existing model found, will train on first commands")
-            # Will be trained after we have some data
+            logger.info("No existing model found")
+            # Try to train from existing commands if we have enough
+            recent_commands = self.db.get_recent_commands(n=1000, successful_only=True)
+            if len(recent_commands) >= 10:
+                logger.info(
+                    f"Found {len(recent_commands)} commands in database, training model..."
+                )
+                command_strings = [cmd["command"] for cmd in recent_commands]
+                try:
+                    self.embedder.train_from_corpus(command_strings)
+                    self.embedder.save()
+                    logger.info("Successfully trained and saved initial model")
+                except Exception as e:
+                    logger.warning(f"Failed to train initial model: {e}")
+            else:
+                logger.info("Not enough commands yet, will train after collecting data")
 
         # Vector store
         index_path = Path(self.config.get("vector_store.index_path"))

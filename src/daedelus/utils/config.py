@@ -88,9 +88,9 @@ class Config:
             "lazy_loading": True,
             "batch_size": 100,
         },
-        # Phase 2 LLM settings (disabled by default)
+        # Phase 2 LLM settings (enabled by default)
         "llm": {
-            "enabled": False,
+            "enabled": True,
             "model_path": None,
             "context_length": 2048,
             "temperature": 0.7,
@@ -189,9 +189,11 @@ class Config:
         if self.config["database"]["path"] is None:
             self.config["database"]["path"] = str(self.data_dir / "history.db")
 
-        # Phase 2 LLM paths
+        # Phase 2 LLM paths - use shared models directory
         if self.config["llm"]["model_path"] is None:
-            self.config["llm"]["model_path"] = str(self.data_dir / "llm" / "model.gguf")
+            # Use ~/.local/share/models for shared model storage
+            models_dir = Path.home() / ".local" / "share" / "models"
+            self.config["llm"]["model_path"] = str(models_dir / "model.gguf")
         if self.config["peft"]["adapter_path"] is None:
             self.config["peft"]["adapter_path"] = str(self.data_dir / "llm" / "adapter")
 

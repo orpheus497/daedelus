@@ -204,6 +204,40 @@ class CommandDatabase:
 
         logger.debug(f"Ended session {session_id}")
 
+    def ensure_session_exists(
+        self,
+        session_id: str,
+        shell: str | None = None,
+        cwd: str | None = None,
+    ) -> None:
+        """
+        Ensure a session exists in the database, creating it if necessary.
+
+        This is useful when external clients (shell integrations) send commands
+        with their own session IDs.
+
+        Args:
+            session_id: Session ID to check/create
+            shell: Shell type (bash, zsh, fish)
+            cwd: Current working directory
+        """
+        cursor = self.conn.execute(
+            "SELECT id FROM sessions WHERE id = ?",
+            (session_id,),
+        )
+
+        if cursor.fetchone() is None:
+            # Session doesn't exist, create it
+            self.conn.execute(
+                """
+                INSERT INTO sessions (id, start_time, shell, cwd)
+                VALUES (?, ?, ?, ?)
+                """,
+                (session_id, datetime.now().timestamp(), shell, cwd),
+            )
+            self.conn.commit()
+            logger.debug(f"Auto-created session {session_id}")
+
     def insert_command(
         self,
         command: str,
@@ -233,6 +267,9 @@ class CommandDatabase:
         Returns:
             Command ID
         """
+        # Ensure session exists before inserting command (auto-create if needed)
+        self.ensure_session_exists(session_id, shell=shell, cwd=cwd)
+
         command_id = str(uuid.uuid4())
 
         self.conn.execute(

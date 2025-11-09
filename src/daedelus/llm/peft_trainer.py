@@ -72,7 +72,8 @@ class PEFTTrainer:
         """
         if LoraConfig is None:
             raise ImportError(
-                "PEFT dependencies not installed. " "Install with: pip install 'daedelus[llm]'"
+                "PEFT dependencies not installed. "
+                "Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus"
             )
 
         self.model_name = model_name

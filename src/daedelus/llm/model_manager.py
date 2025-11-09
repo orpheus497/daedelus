@@ -317,7 +317,8 @@ class ModelManager:
         """
         if not HF_AVAILABLE:
             raise RuntimeError(
-                "huggingface_hub not installed. " "Install with: pip install 'daedelus[llm]'"
+                "huggingface_hub not installed. "
+                "Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus"
             )
 
         if model_name not in self.MODEL_REGISTRY:
@@ -509,7 +510,7 @@ class ModelManager:
         except ImportError:
             logger.error(
                 "transformers and peft are required for model forging. "
-                "Install with: pip install 'daedelus[llm]'"
+                "Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus"
             )
             raise
 

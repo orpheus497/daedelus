@@ -125,13 +125,9 @@ class CommandEmbedder:
                 verbose=2,
             )
 
-            # Quantize model to reduce size
-            logger.info("Quantizing model...")
-            self.model.quantize(
-                input=str(train_file),
-                retrain=True,
-                cutoff=self.vocab_size,
-            )
+            # Note: Quantization is only supported for supervised models
+            # For unsupervised models, we skip quantization
+            logger.info("Model training complete, saving...")
 
             # Save model
             self.save()
