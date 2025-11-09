@@ -113,6 +113,108 @@ source $(daedelus shell-integration bash)
 source (daedelus shell-integration fish)
 ```
 
+### Quick-Summon Aliases (Optional)
+
+For even faster access, source the alias file:
+
+**ZSH** (`~/.zshrc`):
+```bash
+# Add this line after the shell integration
+source ~/.local/share/daedelus/aliases.zsh
+```
+
+**Bash** (`~/.bashrc`):
+```bash
+# Add this line after the shell integration
+source ~/.local/share/daedelus/aliases.sh
+```
+
+Now you can use shortcuts:
+- `d i` - Start interactive mode
+- `ds "query"` - Search history
+- `dex "command"` - Explain command
+- `dgen "description"` - Generate command
+- `da` - Analytics
+- Plus 20+ more aliases! (Run `dtips` to see all)
+
+## ✨ Enhanced Features (NEW!)
+
+### 🎨 Interactive REPL Mode
+
+Launch a powerful terminal interface with syntax highlighting, fuzzy search, and AI assistance:
+
+```bash
+daedelus repl    # or: daedelus i  (or: d i with aliases)
+```
+
+Features:
+- **Syntax Highlighting** - Commands displayed with beautiful colors
+- **Auto-Completion** - Tab completion from your command history
+- **Fuzzy Search** - Find commands with partial matches (`/search docker`)
+- **AI Commands** - Explain, generate, and refine commands interactively
+- **History Navigation** - Use ↑/↓ arrows through your history
+- **Live Suggestions** - Get AI suggestions as you type
+
+REPL Commands:
+```
+/search <query>       - Fuzzy search command history
+/explain <command>    - Explain what a command does
+/generate <desc>      - Generate command from description
+/recent               - Show recent commands
+/stats                - Usage statistics
+/help                 - Show help
+/quit                 - Exit (or Ctrl+D)
+```
+
+### 🔍 Fuzzy Command Search
+
+Find commands even with typos or partial matches:
+
+```bash
+daedelus search "git push"      # Find all git push variants
+daedelus search docker -n 20    # Show 20 Docker command results
+daedelus search "file operations"  # Semantic search
+```
+
+Uses advanced fuzzy matching algorithms (thefuzz + Levenshtein distance) for intelligent results.
+
+### 🎨 Syntax Highlighting
+
+Highlight any command or code with 300+ language support:
+
+```bash
+daedelus highlight "git log --oneline --graph"
+daedelus highlight "SELECT * FROM users WHERE id = 1" --syntax sql
+daedelus highlight "def fibonacci(n):" --syntax python
+```
+
+Powered by Pygments with beautiful color schemes.
+
+### 📊 Usage Analytics
+
+Get insights into your command usage patterns:
+
+```bash
+daedelus analytics              # Quick stats
+daedelus analytics --detailed   # Detailed breakdown
+```
+
+Shows:
+- Total and unique command counts
+- Success rates
+- Most frequently used commands
+- Usage patterns over time
+
+### 💡 Tips System
+
+New to Daedelus? Get helpful tips anytime:
+
+```bash
+daedelus tips
+```
+
+Shows keyboard shortcuts, usage examples, and power-user features.
+
 ## 📖 Usage
 
 ### Basic Commands

@@ -71,6 +71,10 @@ dependencies = [
     "rich>=13.0.0",                 # MIT - Terminal formatting and UI
     "textual>=0.40.0",              # MIT - TUI framework for dashboard
     "jinja2>=3.1.0",                # BSD 3-Clause - Template engine
+    "pygments>=2.16.0",             # BSD - Syntax highlighting (300+ languages)
+    "thefuzz>=0.20.0",              # MIT - Fuzzy string matching
+    "python-Levenshtein>=0.21.0",  # GPL v2+ - Faster fuzzy matching backend
+    "ptpython>=3.0.0",              # BSD - Enhanced Python REPL
 
     # HTTP & Progress
     "requests>=2.31.0",             # Apache 2.0 - HTTP client for downloads
