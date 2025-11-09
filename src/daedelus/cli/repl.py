@@ -141,9 +141,10 @@ class DaedelusREPL:
     def print_welcome(self) -> None:
         """Print welcome message."""
         welcome = """
-# Daedelus Interactive REPL
+# Daedelus Interactive Shell
 
-Welcome to the Daedelus interactive shell!
+Welcome to Daedelus - your intelligent terminal assistant!
+(Quick alias: `deus`)
 
 **Commands:**
 - Type any shell command to see suggestions
@@ -155,15 +156,15 @@ Welcome to the Daedelus interactive shell!
 - `/generate <description>` - Generate command from description
 - `/stats` - Show usage statistics
 - `/recent` - Show recent commands
-- `/quit` or Ctrl+D - Exit REPL
+- `/quit` or Ctrl+D - Exit
 
-**Features:**
+**Active Features:**
 ✨ Syntax highlighting
 🔍 Fuzzy search
 🤖 AI-powered suggestions
 📊 Command analytics
         """
-        self.console.print(Panel(Markdown(welcome), title="Welcome", border_style="cyan"))
+        self.console.print(Panel(Markdown(welcome), title="Daedelus", border_style="cyan"))
 
     def handle_command(self, text: str) -> bool:
         """

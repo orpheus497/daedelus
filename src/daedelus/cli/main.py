@@ -41,9 +41,12 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def cli(ctx: click.Context, config: Path | None, verbose: int) -> None:
     """
-    Daedalus - Self-Learning Terminal Assistant
+    Daedelus - Self-Learning Terminal Assistant
 
     A privacy-first, offline AI assistant that learns from your command usage.
+    All quality-of-life features are automatically active when running.
+
+    Quick alias: deus
 
     Created by: orpheus497
     """
@@ -963,7 +966,7 @@ def repl(ctx: click.Context) -> None:
     """
     Start interactive REPL mode.
 
-    An enhanced shell with:
+    An enhanced shell with all features always active:
     - Syntax highlighting
     - Fuzzy command search
     - AI-powered suggestions
@@ -972,17 +975,9 @@ def repl(ctx: click.Context) -> None:
     """
     config: Config = ctx.obj["config"]
 
-    if not is_daemon_running(config):
-        click.echo("⚠️  Daemon not running. Starting...")
-        try:
-            from daedelus.daemon.daemon import DaedelusDaemon
-
-            daemon = DaedelusDaemon(config)
-            daemon.start()
-            time.sleep(1)  # Give daemon time to start
-        except Exception as e:
-            click.echo(f"❌ Failed to start daemon: {e}")
-            return
+    # Auto-start daemon if needed
+    if not ensure_daemon_running(config):
+        return
 
     try:
         from daedelus.cli.repl import start_repl
@@ -992,7 +987,7 @@ def repl(ctx: click.Context) -> None:
 
     except ImportError as e:
         click.echo(f"❌ Missing dependencies for REPL mode: {e}")
-        click.echo("Install with: pip install --upgrade daedelus")
+        click.echo("Install with: pip install daedelus")
     except Exception as e:
         click.echo(f"❌ Error: {e}")
         logger.error(f"REPL error: {e}", exc_info=True)
@@ -1232,6 +1227,57 @@ def is_daemon_running(config: Config) -> bool:
     except (ProcessLookupError, ValueError):
         # Stale PID file
         pid_path.unlink(missing_ok=True)
+        return False
+
+
+def ensure_daemon_running(config: Config, silent: bool = False) -> bool:
+    """
+    Ensure daemon is running, auto-start if needed.
+
+    Args:
+        config: Configuration object
+        silent: If True, don't print messages
+
+    Returns:
+        True if daemon is running (or was started), False otherwise
+    """
+    if is_daemon_running(config):
+        return True
+
+    if not silent:
+        click.echo("🚀 Auto-starting Daedelus daemon...")
+
+    # Start daemon in background
+    cmd = [sys.executable, "-m", "daedelus.daemon.daemon"]
+
+    # Redirect output to log file
+    log_path = Path(config.get("daemon.log_path"))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(log_path, "a") as log_file:
+            subprocess.Popen(
+                cmd,
+                stdout=log_file,
+                stderr=log_file,
+                start_new_session=True,
+            )
+
+        # Wait a moment and check if it started
+        time.sleep(1)
+
+        if is_daemon_running(config):
+            if not silent:
+                click.echo("✅ Daemon started successfully")
+            return True
+        else:
+            if not silent:
+                click.echo(f"❌ Failed to start daemon. Check logs: {log_path}")
+            return False
+
+    except Exception as e:
+        if not silent:
+            click.echo(f"❌ Error starting daemon: {e}")
         return False
 
 

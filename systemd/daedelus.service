@@ -1,0 +1,30 @@
+[Unit]
+Description=Daedelus - Self-Learning Terminal Assistant Daemon
+Documentation=https://github.com/orpheus497/daedelus
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/env daedelus start
+ExecStop=/usr/bin/env daedelus stop
+ExecReload=/usr/bin/env daedelus restart
+Restart=on-failure
+RestartSec=5s
+User=%i
+WorkingDirectory=%h
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+LimitNOFILE=4096
+Nice=10
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/daedelus %h/.cache/daedelus
+
+[Install]
+WantedBy=default.target

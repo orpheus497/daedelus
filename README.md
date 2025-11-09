@@ -84,7 +84,7 @@ pip install -e .
 ### Setup
 
 ```bash
-# Initialize Daedalus
+# Initialize Daedelus
 daedelus setup
 
 # Start the daemon
@@ -93,6 +93,37 @@ daedelus start
 # Check status
 daedelus status
 ```
+
+### ⚡ Shorter Command Alias
+
+For convenience, Daedelus provides a shorter `deus` command that works exactly the same:
+
+```bash
+deus start      # Same as: daedelus start
+deus repl       # Same as: daedelus repl
+deus status     # Same as: daedelus status
+```
+
+All commands support both `daedelus` and `deus` - use whichever you prefer!
+
+### 🚀 Auto-Start on Boot (Optional)
+
+Daedelus can automatically start when your system boots, so it's always ready:
+
+```bash
+# Install systemd service (Linux only)
+./scripts/install-systemd-service.sh
+
+# The daemon will now start automatically on boot
+# To uninstall later:
+./scripts/uninstall-systemd-service.sh
+```
+
+With boot auto-start enabled:
+- Daedelus daemon starts automatically when you log in
+- All quality-of-life features are immediately available
+- No need to manually run `daedelus start`
+- Works seamlessly with shell integration
 
 ### Shell Integration
 
@@ -137,23 +168,25 @@ Now you can use shortcuts:
 - `da` - Analytics
 - Plus 20+ more aliases! (Run `dtips` to see all)
 
-## ✨ Enhanced Features (NEW!)
+## ✨ Enhanced Features
 
 ### 🎨 Interactive REPL Mode
 
-Launch a powerful terminal interface with syntax highlighting, fuzzy search, and AI assistance:
+Launch a powerful terminal interface with **all features always active**:
 
 ```bash
-daedelus repl    # or: daedelus i  (or: d i with aliases)
+daedelus repl    # or: deus repl  |  daedelus i  |  di (with shell integration)
 ```
 
-Features:
-- **Syntax Highlighting** - Commands displayed with beautiful colors
-- **Auto-Completion** - Tab completion from your command history
-- **Fuzzy Search** - Find commands with partial matches (`/search docker`)
-- **AI Commands** - Explain, generate, and refine commands interactively
-- **History Navigation** - Use ↑/↓ arrows through your history
-- **Live Suggestions** - Get AI suggestions as you type
+When you start the REPL, **everything is automatically integrated**:
+- **Syntax Highlighting** - All commands beautifully colored (always on)
+- **Auto-Completion** - Tab completion from your command history (always on)
+- **Fuzzy Search** - Find commands with partial matches (always on)
+- **AI Suggestions** - Intelligent suggestions as you type (always on)
+- **History Navigation** - Use ↑/↓ arrows through your history (always on)
+- **Command Analytics** - Usage patterns and insights (always on)
+
+**No configuration needed** - all quality-of-life features are active by default
 
 REPL Commands:
 ```
