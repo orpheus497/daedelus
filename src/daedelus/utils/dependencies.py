@@ -9,9 +9,9 @@ Created by: orpheus497
 
 import importlib
 import logging
-import sys
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class DependencyError(Exception):
 
 
 # Dependency registry with installation information
-DEPENDENCY_INFO: Dict[str, Dict[str, str]] = {
+DEPENDENCY_INFO: dict[str, dict[str, str]] = {
     "fasttext": {
         "feature": "FastText embeddings (Phase 1)",
         "install": "pip install fasttext==0.9.2",
@@ -109,16 +109,16 @@ def check_dependency(package: str, raise_on_missing: bool = False) -> bool:
     try:
         importlib.import_module(package)
         return True
-    except ImportError:
+    except ImportError as err:
         if raise_on_missing and package in DEPENDENCY_INFO:
             info = DEPENDENCY_INFO[package]
-            raise DependencyError(package, info["feature"], info["install"])
+            raise DependencyError(package, info["feature"], info["install"]) from err
         return False
 
 
 def require_dependency(
     package: str,
-    feature_name: Optional[str] = None,
+    feature_name: str | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to require a dependency for a function.
@@ -156,7 +156,7 @@ def require_dependency(
     return decorator
 
 
-def get_missing_dependencies(packages: List[str]) -> List[str]:
+def get_missing_dependencies(packages: list[str]) -> list[str]:
     """
     Get list of missing packages from a list.
 
@@ -169,7 +169,7 @@ def get_missing_dependencies(packages: List[str]) -> List[str]:
     return [pkg for pkg in packages if not check_dependency(pkg)]
 
 
-def get_available_features() -> Dict[str, bool]:
+def get_available_features() -> dict[str, bool]:
     """
     Get dictionary of available features based on installed dependencies.
 
@@ -210,9 +210,9 @@ def print_dependency_status() -> None:
 
     missing = get_missing_dependencies(list(DEPENDENCY_INFO.keys()))
     if missing:
-        print(f"\nTo install missing dependencies:")
-        print(f"  pip install 'daedelus[llm]'  # All Phase 2 features")
-        print(f"  pip install -e .             # Core features only")
+        print("\nTo install missing dependencies:")
+        print("  pip install 'daedelus[llm]'  # All Phase 2 features")
+        print("  pip install -e .             # Core features only")
     else:
         print("\n✓ All dependencies installed!")
 
@@ -247,15 +247,15 @@ class OptionalDependency:
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any | None,
     ) -> None:
         """Exit context."""
         pass
 
 
-def safe_import(package: str, fallback: Optional[Any] = None) -> Any:
+def safe_import(package: str, fallback: Any | None = None) -> Any:
     """
     Safely import a package with optional fallback.
 
@@ -328,7 +328,7 @@ def require_feature(feature: str) -> Callable[[Callable[..., Any]], Callable[...
                 raise DependencyError(
                     feature,
                     f"feature '{feature}'",
-                    f"See 'daedelus info' for installation instructions",
+                    "See 'daedelus info' for installation instructions",
                 )
             return func(*args, **kwargs)
 

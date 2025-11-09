@@ -9,7 +9,6 @@ Created by: orpheus497
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +58,7 @@ class LLMManager:
         """
         if Llama is None:
             raise ImportError(
-                "llama-cpp-python is not installed. "
-                "Install with: pip install 'daedelus[llm]'"
+                "llama-cpp-python is not installed. " "Install with: pip install 'daedelus[llm]'"
             )
 
         self.model_path = Path(model_path).expanduser()
@@ -88,9 +86,9 @@ class LLMManager:
         self,
         prompt: str,
         max_tokens: int = 100,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        stop: Optional[List[str]] = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        stop: list[str] | None = None,
     ) -> str:
         """
         Generate text from prompt.
@@ -134,9 +132,9 @@ class LLMManager:
 
     def chat_complete(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int = 100,
-        temperature: Optional[float] = None,
+        temperature: float | None = None,
     ) -> str:
         """
         Chat completion with message history.
@@ -170,7 +168,7 @@ class LLMManager:
             stop=["<|end|>", "<|user|>"],
         )
 
-    def _format_chat_prompt(self, messages: List[Dict[str, str]]) -> str:
+    def _format_chat_prompt(self, messages: list[dict[str, str]]) -> str:
         """
         Format messages into Phi-3 chat format.
 
@@ -247,10 +245,7 @@ class LLMManager:
 
     def __repr__(self) -> str:
         """String representation."""
-        return (
-            f"LLMManager(model_path={self.model_path}, "
-            f"context_length={self.context_length})"
-        )
+        return f"LLMManager(model_path={self.model_path}, " f"context_length={self.context_length})"
 
 
 # Example usage

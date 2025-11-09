@@ -16,7 +16,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -158,8 +158,8 @@ class CommandDatabase:
 
     def create_session(
         self,
-        shell: Optional[str] = None,
-        cwd: Optional[str] = None,
+        shell: str | None = None,
+        cwd: str | None = None,
     ) -> str:
         """
         Create a new session.
@@ -210,11 +210,11 @@ class CommandDatabase:
         cwd: str,
         exit_code: int,
         session_id: str,
-        duration: Optional[float] = None,
-        output_length: Optional[int] = None,
-        shell: Optional[str] = None,
-        user: Optional[str] = None,
-        hostname: Optional[str] = None,
+        duration: float | None = None,
+        output_length: int | None = None,
+        shell: str | None = None,
+        user: str | None = None,
+        hostname: str | None = None,
     ) -> str:
         """
         Insert a command execution record.
@@ -272,7 +272,9 @@ class CommandDatabase:
         logger.debug(f"Inserted command: {command[:50]}... (exit: {exit_code})")
         return command_id
 
-    def get_recent_commands(self, n: int = 100, successful_only: bool = False) -> List[Dict[str, Any]]:
+    def get_recent_commands(
+        self, n: int = 100, successful_only: bool = False
+    ) -> list[dict[str, Any]]:
         """
         Get recent commands.
 
@@ -288,7 +290,9 @@ class CommandDatabase:
             {}
             ORDER BY timestamp DESC
             LIMIT ?
-        """.format("WHERE exit_code = 0" if successful_only else "")
+        """.format(
+            "WHERE exit_code = 0" if successful_only else ""
+        )
 
         cursor = self.conn.execute(query, (n,))
         return [dict(row) for row in cursor.fetchall()]
@@ -297,8 +301,8 @@ class CommandDatabase:
         self,
         query: str,
         limit: int = 20,
-        cwd_filter: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        cwd_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Search commands using FTS5 full-text search.
 
@@ -332,7 +336,7 @@ class CommandDatabase:
 
         return [dict(row) for row in cursor.fetchall()]
 
-    def get_session_commands(self, session_id: str) -> List[Dict[str, Any]]:
+    def get_session_commands(self, session_id: str) -> list[dict[str, Any]]:
         """
         Get all commands from a specific session.
 
@@ -356,7 +360,7 @@ class CommandDatabase:
         self,
         command_id: str,
         window: int = 5,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any], List[Dict[str, Any]]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
         """
         Get command with surrounding context.
 
@@ -412,7 +416,7 @@ class CommandDatabase:
         context: str,
         command: str,
         success: bool,
-        duration: Optional[float] = None,
+        duration: float | None = None,
     ) -> None:
         """
         Update pattern statistics for learning.
@@ -487,7 +491,7 @@ class CommandDatabase:
         logger.info(f"Cleaned up {deleted} old commands")
         return deleted
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get database statistics.
 
@@ -500,14 +504,10 @@ class CommandDatabase:
         cursor = self.conn.execute("SELECT COUNT(*) FROM sessions")
         total_sessions = cursor.fetchone()[0]
 
-        cursor = self.conn.execute(
-            "SELECT COUNT(*) FROM command_history WHERE exit_code = 0"
-        )
+        cursor = self.conn.execute("SELECT COUNT(*) FROM command_history WHERE exit_code = 0")
         successful_commands = cursor.fetchone()[0]
 
-        success_rate = (
-            (successful_commands / total_commands * 100) if total_commands > 0 else 0
-        )
+        success_rate = (successful_commands / total_commands * 100) if total_commands > 0 else 0
 
         return {
             "total_commands": total_commands,

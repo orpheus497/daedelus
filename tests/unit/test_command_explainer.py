@@ -4,15 +4,18 @@ Unit tests for CommandExplainer.
 Tests natural language command explanations.
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 
 @pytest.fixture
 def mock_llm():
     """Mock LLM manager."""
     llm = Mock()
-    llm.generate.return_value = "This command lists all files in long format including hidden files."
+    llm.generate.return_value = (
+        "This command lists all files in long format including hidden files."
+    )
     return llm
 
 
@@ -89,14 +92,11 @@ class TestBasicExplanation:
         from daedelus.llm.command_explainer import CommandExplainer
 
         mock_llm.generate.return_value = (
-            "This finds all Python files, searches for 'TODO', "
-            "and counts the occurrences."
+            "This finds all Python files, searches for 'TODO', " "and counts the occurrences."
         )
 
         explainer = CommandExplainer(mock_llm, mock_rag)
-        explanation = explainer.explain_command(
-            "find . -name '*.py' | xargs grep 'TODO' | wc -l"
-        )
+        explanation = explainer.explain_command("find . -name '*.py' | xargs grep 'TODO' | wc -l")
 
         assert isinstance(explanation, str)
         assert "find" in explanation.lower() or "TODO" in explanation
@@ -176,10 +176,7 @@ class TestExplanationWithExamples:
 
         # Mock LLM to return examples
         mock_llm.generate.return_value = (
-            "Lists files.\n"
-            "Examples:\n"
-            "- ls -la /home\n"
-            "- ls -lh *.txt"
+            "Lists files.\n" "Examples:\n" "- ls -la /home\n" "- ls -lh *.txt"
         )
 
         explainer = CommandExplainer(mock_llm, mock_rag)
@@ -228,9 +225,7 @@ class TestErrorExplanation:
         """Test explaining command error."""
         from daedelus.llm.command_explainer import CommandExplainer
 
-        mock_llm.generate.return_value = (
-            "Permission denied error. Try running with sudo."
-        )
+        mock_llm.generate.return_value = "Permission denied error. Try running with sudo."
 
         explainer = CommandExplainer(mock_llm, mock_rag)
         explanation = explainer.explain_error(

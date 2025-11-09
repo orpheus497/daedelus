@@ -8,7 +8,6 @@ Created by: orpheus497
 
 import logging
 import re
-from typing import List, Optional
 
 from daedelus.llm.llm_manager import LLMManager
 from daedelus.llm.rag_pipeline import RAGPipeline
@@ -31,7 +30,7 @@ class CommandGenerator:
     def __init__(
         self,
         llm: LLMManager,
-        rag: Optional[RAGPipeline] = None,
+        rag: RAGPipeline | None = None,
         max_command_tokens: int = 100,
     ) -> None:
         """
@@ -51,10 +50,10 @@ class CommandGenerator:
     def generate_command(
         self,
         description: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
+        cwd: str | None = None,
+        history: list[str] | None = None,
         return_multiple: bool = False,
-    ) -> str | List[str]:
+    ) -> str | list[str]:
         """
         Generate command from natural language description.
 
@@ -116,7 +115,7 @@ class CommandGenerator:
     def generate_with_explanation(
         self,
         description: str,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
     ) -> dict:
         """
         Generate command with explanation.
@@ -165,7 +164,7 @@ Explanation (one sentence):"""
         self,
         current_command: str,
         refinement: str,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
     ) -> str:
         """
         Refine an existing command based on feedback.
@@ -213,9 +212,9 @@ Modified command (only the command, no explanation):"""
     def complete_partial(
         self,
         partial_command: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
-    ) -> List[str]:
+        cwd: str | None = None,
+        history: list[str] | None = None,
+    ) -> list[str]:
         """
         Complete a partially typed command.
 
@@ -251,8 +250,7 @@ Provide 3 possible completions, one per line (commands only, no explanations):""
 
             # Filter to ensure they start with the partial
             valid_completions = [
-                cmd for cmd in completions
-                if cmd.startswith(partial_command.strip())
+                cmd for cmd in completions if cmd.startswith(partial_command.strip())
             ]
 
             return valid_completions[:3]
@@ -285,7 +283,7 @@ Task: {description}
 
 Command (only the command, no explanation):"""
 
-    def _parse_commands(self, response: str) -> List[str]:
+    def _parse_commands(self, response: str) -> list[str]:
         """
         Parse commands from LLM response.
 
@@ -324,18 +322,18 @@ Command (only the command, no explanation):"""
             Cleaned command
         """
         # Remove markdown code blocks
-        text = re.sub(r'```(?:bash|sh|shell)?\n?', '', text)
+        text = re.sub(r"```(?:bash|sh|shell)?\n?", "", text)
 
         # Remove numbering
-        text = re.sub(r'^\d+[\.\)]\s*', '', text.strip())
+        text = re.sub(r"^\d+[\.\)]\s*", "", text.strip())
 
         # Remove bullet points
-        text = re.sub(r'^[-*]\s*', '', text.strip())
+        text = re.sub(r"^[-*]\s*", "", text.strip())
 
         # Extract command (before any # comment that's clearly explanatory)
         # But preserve inline comments that are part of the command
-        if ' #' in text and len(text.split(' #')[0]) > 3:
-            text = text.split(' #')[0]
+        if " #" in text and len(text.split(" #")[0]) > 3:
+            text = text.split(" #")[0]
 
         # Clean up whitespace
         text = text.strip()
@@ -387,5 +385,5 @@ if __name__ == "__main__":
     }
     print(f"Description: {multi_example['description']}")
     print("Alternatives:")
-    for alt in multi_example['alternatives']:
+    for alt in multi_example["alternatives"]:
         print(f"  - {alt}")

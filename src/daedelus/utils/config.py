@@ -7,9 +7,10 @@ Uses platform-specific directories for config and data storage.
 Created by: orpheus497
 """
 
+import copy
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 from platformdirs import user_config_dir, user_data_dir
@@ -33,11 +34,11 @@ class Config:
     """
 
     # Default configuration values
-    DEFAULT_CONFIG: Dict[str, Any] = {
+    DEFAULT_CONFIG: dict[str, Any] = {
         "daemon": {
             "socket_path": None,  # Will be set dynamically
-            "log_path": None,     # Will be set dynamically
-            "pid_path": None,     # Will be set dynamically
+            "log_path": None,  # Will be set dynamically
+            "pid_path": None,  # Will be set dynamically
             "startup_delay": 0.5,
             "max_workers": 4,
         },
@@ -51,7 +52,7 @@ class Config:
         },
         "vector_store": {
             "index_type": "annoy",  # Phase 1: annoy, Phase 2: sqlite-vss
-            "index_path": None,     # Will be set dynamically
+            "index_path": None,  # Will be set dynamically
             "n_trees": 10,
             "search_k": -1,  # -1 means use n_trees * n
         },
@@ -107,8 +108,8 @@ class Config:
 
     def __init__(
         self,
-        config_path: Optional[Path] = None,
-        data_dir: Optional[Path] = None,
+        config_path: Path | None = None,
+        data_dir: Path | None = None,
     ) -> None:
         """
         Initialize configuration manager.
@@ -118,8 +119,10 @@ class Config:
             data_dir: Path to data directory. If None, uses platform default.
         """
         # Set up directories
-        self.config_dir = Path(config_path).parent if config_path else Path(
-            user_config_dir("daedelus", "orpheus497")
+        self.config_dir = (
+            Path(config_path).parent
+            if config_path
+            else Path(user_config_dir("daedelus", "orpheus497"))
         )
         self.data_dir = data_dir or Path(user_data_dir("daedelus", "orpheus497"))
         self.config_path = config_path or self.config_dir / "config.yaml"
@@ -136,18 +139,18 @@ class Config:
 
         logger.info(f"Configuration loaded from {self.config_path}")
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         """
         Load configuration from file, falling back to defaults.
 
         Returns:
             Merged configuration dictionary
         """
-        config = self.DEFAULT_CONFIG.copy()
+        config = copy.deepcopy(self.DEFAULT_CONFIG)
 
         if self.config_path.exists():
             try:
-                with open(self.config_path, "r") as f:
+                with open(self.config_path) as f:
                     user_config = yaml.safe_load(f) or {}
 
                 # Deep merge user config into defaults
@@ -192,7 +195,7 @@ class Config:
         if self.config["peft"]["adapter_path"] is None:
             self.config["peft"]["adapter_path"] = str(self.data_dir / "llm" / "adapter")
 
-    def _deep_merge(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge(self, base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         """
         Deep merge two dictionaries.
 

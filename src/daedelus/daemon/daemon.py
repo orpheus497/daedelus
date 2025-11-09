@@ -15,12 +15,11 @@ import logging
 import os
 import re
 import signal
-import socket
 import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from daedelus.core.database import CommandDatabase
 from daedelus.core.embeddings import CommandEmbedder
@@ -51,7 +50,7 @@ class DaedelusDaemon:
     4. Graceful shutdown with learning update
     """
 
-    def __init__(self, config: Optional[Config] = None) -> None:
+    def __init__(self, config: Config | None = None) -> None:
         """
         Initialize daemon with configuration.
 
@@ -63,15 +62,15 @@ class DaedelusDaemon:
         self.session_id = str(uuid.uuid4())
 
         # Components (initialized in start())
-        self.db: Optional[CommandDatabase] = None
-        self.embedder: Optional[CommandEmbedder] = None
-        self.vector_store: Optional[VectorStore] = None
-        self.suggestion_engine: Optional[SuggestionEngine] = None
-        self.ipc_server: Optional[IPCServer] = None
+        self.db: CommandDatabase | None = None
+        self.embedder: CommandEmbedder | None = None
+        self.vector_store: VectorStore | None = None
+        self.suggestion_engine: SuggestionEngine | None = None
+        self.ipc_server: IPCServer | None = None
 
         # Privacy filtering
-        self._excluded_paths: List[Path] = []
-        self._excluded_patterns: List[re.Pattern] = []
+        self._excluded_paths: list[Path] = []
+        self._excluded_patterns: list[re.Pattern] = []
         self._load_privacy_filters()
 
         # Statistics
@@ -211,8 +210,10 @@ class DaedelusDaemon:
                 logger.warning(f"Invalid privacy pattern '{pattern}': {e}")
 
         if self._excluded_paths or self._excluded_patterns:
-            logger.info(f"Privacy filters loaded: {len(self._excluded_paths)} paths, "
-                       f"{len(self._excluded_patterns)} patterns")
+            logger.info(
+                f"Privacy filters loaded: {len(self._excluded_paths)} paths, "
+                f"{len(self._excluded_patterns)} patterns"
+            )
 
     def _should_filter_command(self, command: str, cwd: str) -> bool:
         """
@@ -280,7 +281,7 @@ class DaedelusDaemon:
 
                     self.stats["requests_handled"] += 1
 
-                except socket.timeout:
+                except TimeoutError:
                     # Normal timeout, check if we should continue
                     continue
 
@@ -294,7 +295,7 @@ class DaedelusDaemon:
     # IPC Message Handlers
     # ========================================
 
-    def handle_suggest(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_suggest(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Handle suggestion request.
 
@@ -321,7 +322,7 @@ class DaedelusDaemon:
 
         return {"suggestions": suggestions}
 
-    def handle_log_command(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_log_command(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Handle command logging request.
 
@@ -340,7 +341,7 @@ class DaedelusDaemon:
         # Privacy filtering: Check if command should be logged
         if self._should_filter_command(command, cwd):
             self.stats["commands_filtered"] += 1
-            logger.debug(f"Command filtered by privacy settings")
+            logger.debug("Command filtered by privacy settings")
             return {"status": "filtered", "reason": "privacy"}
 
         # Insert into database
@@ -364,7 +365,7 @@ class DaedelusDaemon:
             # Add to vector store if model is ready
             if self.embedder.model and self.vector_store.is_built():
                 try:
-                    embedding = self.embedder.encode_command(command)
+                    self.embedder.encode_command(command)
                     # Note: Can't add to built index, will rebuild on shutdown
                 except Exception as e:
                     logger.debug(f"Skipping embedding: {e}")
@@ -373,7 +374,7 @@ class DaedelusDaemon:
 
         return {"status": "logged"}
 
-    def handle_complete(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_complete(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Handle completion request.
 
@@ -386,7 +387,7 @@ class DaedelusDaemon:
         # Completions are similar to suggestions
         return self.handle_suggest(data)
 
-    def handle_search(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_search(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Handle history search request.
 
@@ -403,11 +404,11 @@ class DaedelusDaemon:
 
         return {"results": results}
 
-    def handle_ping(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_ping(self, data: dict[str, Any]) -> dict[str, Any]:
         """Handle ping request (health check)."""
         return {"status": "alive", "uptime": time.time() - self.stats["start_time"]}
 
-    def handle_status(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_status(self, data: dict[str, Any]) -> dict[str, Any]:
         """Handle status request."""
         uptime = time.time() - self.stats["start_time"] if self.stats["start_time"] else 0
 
@@ -425,7 +426,7 @@ class DaedelusDaemon:
             "vector_store": vector_stats,
         }
 
-    def handle_shutdown(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_shutdown(self, data: dict[str, Any]) -> dict[str, Any]:
         """Handle shutdown request."""
         logger.info("Shutdown requested via IPC")
         self.shutdown()
@@ -470,7 +471,7 @@ class DaedelusDaemon:
 
         # Print statistics
         uptime = time.time() - self.stats["start_time"] if self.stats["start_time"] else 0
-        logger.info(f"Daemon statistics:")
+        logger.info("Daemon statistics:")
         logger.info(f"  Uptime: {uptime:.1f}s")
         logger.info(f"  Requests: {self.stats['requests_handled']}")
         logger.info(f"  Commands logged: {self.stats['commands_logged']}")

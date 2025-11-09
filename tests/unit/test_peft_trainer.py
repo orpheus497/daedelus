@@ -4,10 +4,11 @@ Unit tests for PEFTTrainer.
 Tests LoRA fine-tuning for personalization.
 """
 
-import pytest
 import json
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
+
+import pytest
 
 
 class MockPeftModel:
@@ -65,11 +66,13 @@ class MockAutoTokenizer:
 @pytest.fixture
 def mock_peft_deps():
     """Mock PEFT dependencies."""
-    with patch("daedelus.llm.peft_trainer.LoraConfig", MockLoraConfig), \
-         patch("daedelus.llm.peft_trainer.get_peft_model", lambda m, c: MockPeftModel(m, c)), \
-         patch("daedelus.llm.peft_trainer.PeftModel", MockPeftModel), \
-         patch("daedelus.llm.peft_trainer.AutoModelForCausalLM", MockAutoModel), \
-         patch("daedelus.llm.peft_trainer.AutoTokenizer", MockAutoTokenizer):
+    with (
+        patch("daedelus.llm.peft_trainer.LoraConfig", MockLoraConfig),
+        patch("daedelus.llm.peft_trainer.get_peft_model", lambda m, c: MockPeftModel(m, c)),
+        patch("daedelus.llm.peft_trainer.PeftModel", MockPeftModel),
+        patch("daedelus.llm.peft_trainer.AutoModelForCausalLM", MockAutoModel),
+        patch("daedelus.llm.peft_trainer.AutoTokenizer", MockAutoTokenizer),
+    ):
         yield
 
 
@@ -79,6 +82,7 @@ class TestPEFTTrainerImport:
     def test_import_without_dependencies(self):
         """Test that module can be imported even without PEFT."""
         from daedelus.llm import peft_trainer
+
         assert peft_trainer is not None
 
     def test_missing_dependency_error(self):

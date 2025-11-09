@@ -15,11 +15,10 @@ Created by: orpheus497
 import json
 import os
 import socket
-import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
@@ -85,10 +84,12 @@ class TestIPCMessage:
 
     def test_message_from_json(self):
         """Test deserializing message from JSON."""
-        json_str = json.dumps({
-            "type": "suggest",
-            "data": {"partial": "git", "cwd": "/tmp"},
-        })
+        json_str = json.dumps(
+            {
+                "type": "suggest",
+                "data": {"partial": "git", "cwd": "/tmp"},
+            }
+        )
 
         msg = IPCMessage.from_json(json_str)
 
@@ -189,6 +190,7 @@ class TestIPCServer:
         try:
             # Check permissions are owner-only
             import stat
+
             mode = os.stat(socket_path).st_mode
             # Should be readable and writable by owner only
             assert mode & stat.S_IRUSR
@@ -341,7 +343,7 @@ class TestIntegration:
             try:
                 conn, addr = server.socket.accept()
                 server.handle_connection(conn, addr)
-            except:
+            except Exception:
                 pass
 
         server_thread = threading.Thread(target=server_loop, daemon=True)
@@ -366,11 +368,13 @@ class TestIntegration:
 
         # Create mock handler
         handler = Mock()
-        handler.handle_suggest = Mock(return_value={
-            "suggestions": [
-                {"command": "git status", "confidence": 0.9},
-            ]
-        })
+        handler.handle_suggest = Mock(
+            return_value={
+                "suggestions": [
+                    {"command": "git status", "confidence": 0.9},
+                ]
+            }
+        )
 
         # Start server
         server = IPCServer(socket_path, handler)
@@ -380,7 +384,7 @@ class TestIntegration:
             try:
                 conn, addr = server.socket.accept()
                 server.handle_connection(conn, addr)
-            except:
+            except Exception:
                 pass
 
         server_thread = threading.Thread(target=server_loop, daemon=True)
@@ -416,7 +420,7 @@ class TestIntegration:
             try:
                 conn, addr = server.socket.accept()
                 server.handle_connection(conn, addr)
-            except:
+            except Exception:
                 pass
 
         server_thread = threading.Thread(target=server_loop, daemon=True)
@@ -443,10 +447,12 @@ class TestIntegration:
 
         # Create mock handler
         handler = Mock()
-        handler.handle_status = Mock(return_value={
-            "uptime": 100,
-            "commands_logged": 50,
-        })
+        handler.handle_status = Mock(
+            return_value={
+                "uptime": 100,
+                "commands_logged": 50,
+            }
+        )
 
         # Start server
         server = IPCServer(socket_path, handler)
@@ -456,7 +462,7 @@ class TestIntegration:
             try:
                 conn, addr = server.socket.accept()
                 server.handle_connection(conn, addr)
-            except:
+            except Exception:
                 pass
 
         server_thread = threading.Thread(target=server_loop, daemon=True)

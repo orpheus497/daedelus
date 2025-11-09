@@ -15,7 +15,7 @@ Created by: orpheus497
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -68,10 +68,12 @@ class VectorStore:
         self.metric = metric
 
         # Create Annoy index
+        if AnnoyIndex is None:
+            raise ImportError("annoy is not installed. Install it with: pip install annoy==1.17.3")
         self.index = AnnoyIndex(self.dim, self.metric)
 
         # Metadata storage (parallel to index)
-        self.metadata: List[Dict[str, Any]] = []
+        self.metadata: list[dict[str, Any]] = []
 
         # Track if index is built
         self._built = False
@@ -82,7 +84,7 @@ class VectorStore:
         self,
         embedding: npt.NDArray[np.float32],
         command: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """
         Add a vector to the index.
@@ -159,7 +161,7 @@ class VectorStore:
         top_k: int = 10,
         include_distances: bool = True,
         search_k: int = -1,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Search for nearest neighbors.
 
@@ -198,7 +200,7 @@ class VectorStore:
 
         # Build result list
         results = []
-        for idx, dist in zip(indices, distances):
+        for idx, dist in zip(indices, distances, strict=False):
             if idx < len(self.metadata):
                 result = self.metadata[idx].copy()
 
@@ -219,7 +221,7 @@ class VectorStore:
 
         return results
 
-    def get_by_index(self, idx: int) -> Optional[Dict[str, Any]]:
+    def get_by_index(self, idx: int) -> dict[str, Any] | None:
         """
         Get metadata by index.
 
@@ -276,19 +278,16 @@ class VectorStore:
         self._built = True
 
         # Load metadata
-        with open(meta_path, "r") as f:
+        with open(meta_path) as f:
             self.metadata = json.load(f)
 
-        logger.info(
-            f"Index loaded from {self.index_path} "
-            f"({len(self.metadata)} vectors)"
-        )
+        logger.info(f"Index loaded from {self.index_path} " f"({len(self.metadata)} vectors)")
 
     def rebuild(
         self,
-        embeddings: List[npt.NDArray[np.float32]],
-        commands: List[str],
-        metadata_list: Optional[List[Dict[str, Any]]] = None,
+        embeddings: list[npt.NDArray[np.float32]],
+        commands: list[str],
+        metadata_list: list[dict[str, Any]] | None = None,
     ) -> None:
         """
         Rebuild index from scratch with new data.
@@ -309,7 +308,7 @@ class VectorStore:
         self._built = False
 
         # Add all vectors
-        for i, (emb, cmd) in enumerate(zip(embeddings, commands)):
+        for i, (emb, cmd) in enumerate(zip(embeddings, commands, strict=False)):
             meta = metadata_list[i] if metadata_list else {}
             self.add(emb, cmd, meta)
 
@@ -318,7 +317,7 @@ class VectorStore:
 
         logger.info(f"Index rebuilt with {len(self.metadata)} vectors")
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get index statistics.
 
@@ -342,10 +341,7 @@ class VectorStore:
     def __repr__(self) -> str:
         """String representation."""
         status = "built" if self._built else "not built"
-        return (
-            f"VectorStore(dim={self.dim}, vectors={len(self.metadata)}, "
-            f"status={status})"
-        )
+        return f"VectorStore(dim={self.dim}, vectors={len(self.metadata)}, " f"status={status})"
 
 
 # Example usage

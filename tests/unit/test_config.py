@@ -13,10 +13,6 @@ Tests all major functionality:
 Created by: orpheus497
 """
 
-import tempfile
-from pathlib import Path
-
-import pytest
 import yaml
 
 from daedelus.utils.config import Config
@@ -30,7 +26,7 @@ class TestConfigInit:
         config_path = temp_dir / "config.yaml"
         data_dir = temp_dir / "data"
 
-        config = Config(config_path=config_path, data_dir=data_dir)
+        Config(config_path=config_path, data_dir=data_dir)
 
         assert config_path.parent.exists()
         assert data_dir.exists()
@@ -340,7 +336,7 @@ class TestSave:
         config.save()
 
         # Load saved config
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             saved = yaml.safe_load(f)
 
         assert saved["model"]["embedding_dim"] == 512

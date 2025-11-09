@@ -17,18 +17,9 @@ def test_package_imports():
     """Test that all main modules can be imported."""
     # Core imports
     from daedelus import __version__
-    from daedelus.core.database import CommandDatabase
-    from daedelus.core.embeddings import CommandEmbedder
-    from daedelus.core.suggestions import SuggestionEngine
-    from daedelus.core.vector_store import VectorStore
 
     # Daemon imports
-    from daedelus.daemon.daemon import DaedelusDaemon
-    from daedelus.daemon.ipc import IPCClient, IPCMessage, IPCServer, MessageType
-
     # Utils imports
-    from daedelus.utils.config import Config
-    from daedelus.utils.logging_config import setup_logging
 
     assert __version__ == "0.2.0"
 

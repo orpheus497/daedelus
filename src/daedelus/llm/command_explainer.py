@@ -7,7 +7,6 @@ Created by: orpheus497
 """
 
 import logging
-from typing import Optional
 
 from daedelus.llm.llm_manager import LLMManager
 from daedelus.llm.rag_pipeline import RAGPipeline
@@ -30,7 +29,7 @@ class CommandExplainer:
     def __init__(
         self,
         llm: LLMManager,
-        rag: Optional[RAGPipeline] = None,
+        rag: RAGPipeline | None = None,
         max_explanation_tokens: int = 150,
     ) -> None:
         """
@@ -51,7 +50,7 @@ class CommandExplainer:
         self,
         command: str,
         include_context: bool = True,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
         detailed: bool = False,
     ) -> str:
         """
@@ -106,7 +105,7 @@ class CommandExplainer:
     def explain_with_examples(
         self,
         command: str,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
     ) -> dict:
         """
         Generate explanation with usage examples.
@@ -265,5 +264,5 @@ if __name__ == "__main__":
         print(f"\nCommand: {cmd}")
         print(f"Explanation: {result['explanation']}")
         print("Examples:")
-        for ex in result['examples']:
+        for ex in result["examples"]:
             print(f"  {ex}")

@@ -4,8 +4,9 @@ Unit tests for EnhancedSuggestionEngine.
 Tests integration of Phase 1 (embeddings) and Phase 2 (LLM).
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 
 @pytest.fixture
@@ -64,8 +65,10 @@ class TestEnhancedSuggestionEngineInit:
         """Test initialization with LLM enabled."""
         from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
 
-        with patch("daedelus.llm.enhanced_suggestions.CommandGenerator"), \
-             patch("daedelus.llm.enhanced_suggestions.CommandExplainer"):
+        with (
+            patch("daedelus.llm.enhanced_suggestions.CommandGenerator"),
+            patch("daedelus.llm.enhanced_suggestions.CommandExplainer"),
+        ):
             engine = EnhancedSuggestionEngine(mock_base_engine, mock_llm, mock_rag)
 
             assert engine.base_engine == mock_base_engine
@@ -105,8 +108,10 @@ class TestBasicSuggestions:
         """Test suggestions with LLM disabled via parameter."""
         from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
 
-        with patch("daedelus.llm.enhanced_suggestions.CommandGenerator"), \
-             patch("daedelus.llm.enhanced_suggestions.CommandExplainer"):
+        with (
+            patch("daedelus.llm.enhanced_suggestions.CommandGenerator"),
+            patch("daedelus.llm.enhanced_suggestions.CommandExplainer"),
+        ):
             engine = EnhancedSuggestionEngine(mock_base_engine, mock_llm, mock_rag)
             suggestions = engine.get_suggestions("ls", use_llm=False)
 
@@ -140,8 +145,10 @@ class TestNaturalLanguageDetection:
         """Test detection of natural language queries."""
         from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
 
-        with patch("daedelus.llm.enhanced_suggestions.CommandGenerator"), \
-             patch("daedelus.llm.enhanced_suggestions.CommandExplainer"):
+        with (
+            patch("daedelus.llm.enhanced_suggestions.CommandGenerator"),
+            patch("daedelus.llm.enhanced_suggestions.CommandExplainer"),
+        ):
             engine = EnhancedSuggestionEngine(mock_base_engine, mock_llm, mock_rag)
 
             natural_language_queries = [
@@ -159,8 +166,10 @@ class TestNaturalLanguageDetection:
         """Test detection of command-like inputs."""
         from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
 
-        with patch("daedelus.llm.enhanced_suggestions.CommandGenerator"), \
-             patch("daedelus.llm.enhanced_suggestions.CommandExplainer"):
+        with (
+            patch("daedelus.llm.enhanced_suggestions.CommandGenerator"),
+            patch("daedelus.llm.enhanced_suggestions.CommandExplainer"),
+        ):
             engine = EnhancedSuggestionEngine(mock_base_engine, mock_llm, mock_rag)
 
             command_like_inputs = [
@@ -178,8 +187,10 @@ class TestNaturalLanguageDetection:
         """Test edge cases in natural language detection."""
         from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
 
-        with patch("daedelus.llm.enhanced_suggestions.CommandGenerator"), \
-             patch("daedelus.llm.enhanced_suggestions.CommandExplainer"):
+        with (
+            patch("daedelus.llm.enhanced_suggestions.CommandGenerator"),
+            patch("daedelus.llm.enhanced_suggestions.CommandExplainer"),
+        ):
             engine = EnhancedSuggestionEngine(mock_base_engine, mock_llm, mock_rag)
 
             # Short queries (less than 3 words)
@@ -197,7 +208,6 @@ class TestLLMEnhancedSuggestions:
     def test_suggestions_with_natural_language(self, mock_base_engine, mock_llm, mock_rag):
         """Test suggestions for natural language query."""
         from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
-        from daedelus.llm.command_generator import CommandGenerator
 
         with patch("daedelus.llm.enhanced_suggestions.CommandGenerator") as MockGen:
             mock_gen_instance = Mock()
@@ -409,8 +419,7 @@ class TestSuggestionLimits:
 
         # Return many suggestions from Phase 1
         mock_base_engine.get_suggestions.return_value = [
-            {"command": f"cmd{i}", "confidence": 0.9 - i*0.1, "source": "test"}
-            for i in range(10)
+            {"command": f"cmd{i}", "confidence": 0.9 - i * 0.1, "source": "test"} for i in range(10)
         ]
 
         with patch("daedelus.llm.enhanced_suggestions.CommandGenerator") as MockGen:
@@ -433,8 +442,10 @@ class TestRepr:
         """Test __repr__ with LLM enabled."""
         from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
 
-        with patch("daedelus.llm.enhanced_suggestions.CommandGenerator"), \
-             patch("daedelus.llm.enhanced_suggestions.CommandExplainer"):
+        with (
+            patch("daedelus.llm.enhanced_suggestions.CommandGenerator"),
+            patch("daedelus.llm.enhanced_suggestions.CommandExplainer"),
+        ):
             engine = EnhancedSuggestionEngine(mock_base_engine, mock_llm, mock_rag)
             repr_str = repr(engine)
 
@@ -450,10 +461,6 @@ class TestRepr:
 
         assert "EnhancedSuggestionEngine" in repr_str
         assert "disabled" in repr_str
-
-
-# Import patch for the tests that need it
-from unittest.mock import patch
 
 
 if __name__ == "__main__":

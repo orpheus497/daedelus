@@ -8,11 +8,11 @@ Created by: orpheus497
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from daedelus.core.suggestions import SuggestionEngine
-from daedelus.llm.command_generator import CommandGenerator
 from daedelus.llm.command_explainer import CommandExplainer
+from daedelus.llm.command_generator import CommandGenerator
 from daedelus.llm.llm_manager import LLMManager
 from daedelus.llm.rag_pipeline import RAGPipeline
 
@@ -41,8 +41,8 @@ class EnhancedSuggestionEngine:
     def __init__(
         self,
         base_engine: SuggestionEngine,
-        llm: Optional[LLMManager] = None,
-        rag: Optional[RAGPipeline] = None,
+        llm: LLMManager | None = None,
+        rag: RAGPipeline | None = None,
     ) -> None:
         """
         Initialize enhanced suggestion engine.
@@ -71,11 +71,11 @@ class EnhancedSuggestionEngine:
     def get_suggestions(
         self,
         partial: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
+        cwd: str | None = None,
+        history: list[str] | None = None,
         context_window: int = 10,
         use_llm: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get command suggestions with optional LLM enhancement.
 
@@ -90,9 +90,7 @@ class EnhancedSuggestionEngine:
             List of suggestion dicts with 'command', 'confidence', 'source'
         """
         # Get Phase 1 suggestions (fast, always available)
-        base_suggestions = self.base_engine.get_suggestions(
-            partial, cwd, history, context_window
-        )
+        base_suggestions = self.base_engine.get_suggestions(partial, cwd, history, context_window)
 
         # If LLM is disabled or not requested, return Phase 1 only
         if not use_llm or not self.llm_enabled:
@@ -118,7 +116,7 @@ class EnhancedSuggestionEngine:
                             combined.append(sug)
                             seen.add(sug["command"])
 
-                    return combined[:self.base_engine.max_suggestions]
+                    return combined[: self.base_engine.max_suggestions]
 
             # Otherwise, enhance existing suggestions with explanations
             return self._add_explanations(base_suggestions[:3])
@@ -130,9 +128,9 @@ class EnhancedSuggestionEngine:
     def generate_command(
         self,
         description: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        cwd: str | None = None,
+        history: list[str] | None = None,
+    ) -> dict[str, Any] | None:
         """
         Generate command from natural language description.
 
@@ -149,9 +147,7 @@ class EnhancedSuggestionEngine:
             return None
 
         try:
-            result = self.command_generator.generate_with_explanation(
-                description, cwd
-            )
+            result = self.command_generator.generate_with_explanation(description, cwd)
 
             if result.get("command"):
                 return {
@@ -169,7 +165,7 @@ class EnhancedSuggestionEngine:
     def explain_command(
         self,
         command: str,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
     ) -> str:
         """
         Get explanation for a command.
@@ -210,8 +206,22 @@ class EnhancedSuggestionEngine:
 
         # Check for command-like patterns
         common_commands = {
-            "ls", "cd", "git", "docker", "npm", "python", "cat", "grep",
-            "find", "rm", "cp", "mv", "curl", "wget", "ssh", "sudo"
+            "ls",
+            "cd",
+            "git",
+            "docker",
+            "npm",
+            "python",
+            "cat",
+            "grep",
+            "find",
+            "rm",
+            "cp",
+            "mv",
+            "curl",
+            "wget",
+            "ssh",
+            "sudo",
         }
 
         first_word = text.split()[0] if text.split() else ""
@@ -221,9 +231,26 @@ class EnhancedSuggestionEngine:
 
         # Check for natural language indicators
         nl_indicators = [
-            "find", "show", "list", "display", "get", "search", "create",
-            "delete", "remove", "copy", "move", "what", "how", "where",
-            "all", "files", "directories", "with", "that", "containing"
+            "find",
+            "show",
+            "list",
+            "display",
+            "get",
+            "search",
+            "create",
+            "delete",
+            "remove",
+            "copy",
+            "move",
+            "what",
+            "how",
+            "where",
+            "all",
+            "files",
+            "directories",
+            "with",
+            "that",
+            "containing",
         ]
 
         word_count = len(text.split())
@@ -241,9 +268,9 @@ class EnhancedSuggestionEngine:
     def _generate_from_description(
         self,
         description: str,
-        cwd: Optional[str],
-        history: Optional[List[str]],
-    ) -> Optional[Dict[str, Any]]:
+        cwd: str | None,
+        history: list[str] | None,
+    ) -> dict[str, Any] | None:
         """
         Generate command suggestion from description.
 
@@ -259,9 +286,7 @@ class EnhancedSuggestionEngine:
             return None
 
         try:
-            command = self.command_generator.generate_command(
-                description, cwd, history
-            )
+            command = self.command_generator.generate_command(description, cwd, history)
 
             if command:
                 return {
@@ -277,8 +302,8 @@ class EnhancedSuggestionEngine:
 
     def _add_explanations(
         self,
-        suggestions: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        suggestions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """
         Add explanations to suggestions.
 

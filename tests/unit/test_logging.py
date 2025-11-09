@@ -13,9 +13,6 @@ Created by: orpheus497
 """
 
 import logging
-from pathlib import Path
-
-import pytest
 
 from daedelus.utils.logging_config import ColoredFormatter, get_logger, setup_logging
 
@@ -115,7 +112,7 @@ class TestSetupLogging:
         """Test that setup creates log directory if needed."""
         log_path = temp_dir / "nested" / "dir" / "test.log"
 
-        logger = setup_logging(log_path=log_path)
+        setup_logging(log_path=log_path)
 
         assert log_path.parent.exists()
 
@@ -163,7 +160,7 @@ class TestSetupLogging:
         """Test that file logging creates parent directory."""
         log_path = temp_dir / "subdir" / "test.log"
 
-        logger = setup_logging(log_path=log_path)
+        setup_logging(log_path=log_path)
 
         assert log_path.parent.exists()
 
@@ -230,8 +227,7 @@ class TestLogRotation:
 
         # Check that at least one handler is RotatingFileHandler
         has_rotating = any(
-            isinstance(h, logging.handlers.RotatingFileHandler)
-            for h in logger.handlers
+            isinstance(h, logging.handlers.RotatingFileHandler) for h in logger.handlers
         )
 
         assert has_rotating
@@ -243,8 +239,7 @@ class TestLogRotation:
         logger = setup_logging(log_path=log_path, console=False)
 
         rotating_handler = next(
-            h for h in logger.handlers
-            if isinstance(h, logging.handlers.RotatingFileHandler)
+            h for h in logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
         )
 
         assert rotating_handler.maxBytes == 10 * 1024 * 1024  # 10MB
@@ -256,8 +251,7 @@ class TestLogRotation:
         logger = setup_logging(log_path=log_path, console=False)
 
         rotating_handler = next(
-            h for h in logger.handlers
-            if isinstance(h, logging.handlers.RotatingFileHandler)
+            h for h in logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
         )
 
         assert rotating_handler.backupCount == 5
@@ -271,8 +265,10 @@ class TestLogFormats:
         logger = setup_logging(console=True)
 
         console_handler = next(
-            h for h in logger.handlers
-            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.handlers.RotatingFileHandler)
+            h
+            for h in logger.handlers
+            if isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.handlers.RotatingFileHandler)
         )
 
         # Should use ColoredFormatter

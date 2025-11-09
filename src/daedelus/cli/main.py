@@ -13,13 +13,12 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import click
 
 from daedelus import __version__
 from daedelus.daemon.daemon import DaedelusDaemon
-from daedelus.daemon.ipc import IPCClient, MessageType
+from daedelus.daemon.ipc import IPCClient
 from daedelus.utils.config import Config
 from daedelus.utils.logging_config import setup_logging
 
@@ -40,7 +39,7 @@ logger = logging.getLogger(__name__)
     help="Increase verbosity (-v, -vv, -vvv)",
 )
 @click.pass_context
-def cli(ctx: click.Context, config: Optional[Path], verbose: int) -> None:
+def cli(ctx: click.Context, config: Path | None, verbose: int) -> None:
     """
     Daedalus - Self-Learning Terminal Assistant
 
@@ -137,7 +136,7 @@ def start(ctx: click.Context, foreground: bool) -> None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(log_path, "a") as log_file:
-            process = subprocess.Popen(
+            subprocess.Popen(
                 cmd,
                 stdout=log_file,
                 stderr=log_file,
@@ -217,6 +216,7 @@ def status(ctx: click.Context, output_json: bool) -> None:
     if not is_daemon_running(config):
         if output_json:
             import json
+
             click.echo(json.dumps({"status": "stopped"}))
         else:
             click.echo("⚫ Daemon is not running")
@@ -229,6 +229,7 @@ def status(ctx: click.Context, output_json: bool) -> None:
 
         if output_json:
             import json
+
             click.echo(json.dumps(status_data, indent=2))
         else:
             click.echo("🟢 Daemon is running")
@@ -239,7 +240,7 @@ def status(ctx: click.Context, output_json: bool) -> None:
 
             if "database" in status_data:
                 db = status_data["database"]
-                click.echo(f"\nDatabase:")
+                click.echo("\nDatabase:")
                 click.echo(f"  Total commands: {db.get('total_commands', 0)}")
                 click.echo(f"  Success rate: {db.get('success_rate', 0):.1f}%")
 
@@ -288,6 +289,7 @@ def search(ctx: click.Context, query: str, limit: int) -> None:
             cwd = result.get("cwd", "")
 
             from datetime import datetime
+
             time_str = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
 
             click.echo(f"  {time_str} | {cwd}")
@@ -302,8 +304,9 @@ def search(ctx: click.Context, query: str, limit: int) -> None:
 @click.argument("shell", type=click.Choice(["zsh", "bash", "fish"]))
 def shell_integration(shell: str) -> None:
     """Print path to shell integration script."""
-    import daedelus
     import sys
+
+    import daedelus
 
     # Get the package installation directory
     package_dir = Path(daedelus.__file__).parent.parent.parent
@@ -349,6 +352,7 @@ def info(ctx: click.Context) -> None:
 
 
 # Helper functions
+
 
 def is_daemon_running(config: Config) -> bool:
     """Check if daemon is running."""

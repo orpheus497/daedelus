@@ -10,9 +10,7 @@ Created by: orpheus497
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
-
-import numpy as np
+from typing import Any
 
 from daedelus.core.database import CommandDatabase
 from daedelus.core.embeddings import CommandEmbedder
@@ -67,10 +65,10 @@ class SuggestionEngine:
     def get_suggestions(
         self,
         partial: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
+        cwd: str | None = None,
+        history: list[str] | None = None,
         context_window: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get command suggestions using multi-tier cascade.
 
@@ -83,7 +81,7 @@ class SuggestionEngine:
         Returns:
             List of suggestion dicts with 'command', 'confidence', 'source'
         """
-        suggestions: List[Dict[str, Any]] = []
+        suggestions: list[dict[str, Any]] = []
 
         # Tier 1: Exact prefix match
         tier1 = self._tier1_exact_prefix(partial, cwd)
@@ -108,16 +106,13 @@ class SuggestionEngine:
                 unique_suggestions.append(sug)
 
         # Filter by confidence
-        filtered = [
-            s for s in unique_suggestions
-            if s["confidence"] >= self.min_confidence
-        ]
+        filtered = [s for s in unique_suggestions if s["confidence"] >= self.min_confidence]
 
         # Sort by confidence (descending)
         filtered.sort(key=lambda x: x["confidence"], reverse=True)
 
         # Limit to max suggestions
-        result = filtered[:self.max_suggestions]
+        result = filtered[: self.max_suggestions]
 
         logger.debug(f"Generated {len(result)} suggestions for '{partial}'")
         return result
@@ -125,8 +120,8 @@ class SuggestionEngine:
     def _tier1_exact_prefix(
         self,
         partial: str,
-        cwd: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        cwd: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Tier 1: Exact prefix matching.
 
@@ -174,12 +169,14 @@ class SuggestionEngine:
                 # In production, could use more sophisticated scoring
                 confidence = min(1.0, frequency / 10.0)
 
-                suggestions.append({
-                    "command": row["command"],
-                    "confidence": confidence,
-                    "source": "exact_prefix",
-                    "frequency": frequency,
-                })
+                suggestions.append(
+                    {
+                        "command": row["command"],
+                        "confidence": confidence,
+                        "source": "exact_prefix",
+                        "frequency": frequency,
+                    }
+                )
 
             logger.debug(f"Tier 1: Found {len(suggestions)} exact matches")
             return suggestions
@@ -191,9 +188,9 @@ class SuggestionEngine:
     def _tier2_semantic(
         self,
         partial: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        cwd: str | None = None,
+        history: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Tier 2: Semantic similarity using embeddings.
 
@@ -230,11 +227,13 @@ class SuggestionEngine:
                 # Use similarity as confidence
                 confidence = result["similarity"]
 
-                suggestions.append({
-                    "command": result["command"],
-                    "confidence": confidence,
-                    "source": "semantic",
-                })
+                suggestions.append(
+                    {
+                        "command": result["command"],
+                        "confidence": confidence,
+                        "source": "semantic",
+                    }
+                )
 
             logger.debug(f"Tier 2: Found {len(suggestions)} semantic matches")
             return suggestions
@@ -246,9 +245,9 @@ class SuggestionEngine:
     def _tier3_contextual(
         self,
         partial: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        cwd: str | None = None,
+        history: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Tier 3: Contextual predictions using patterns.
 
@@ -285,7 +284,9 @@ class SuggestionEngine:
                 GROUP BY h2.command
                 ORDER BY frequency DESC
                 LIMIT ?
-            """.format("AND h2.command LIKE ? || '%'" if partial.strip() else "")
+            """.format(
+                "AND h2.command LIKE ? || '%'" if partial.strip() else ""
+            )
 
             params = [last_command]
             if partial.strip():
@@ -302,12 +303,14 @@ class SuggestionEngine:
                 # Confidence based on how often this sequence occurs
                 confidence = min(0.8, frequency / 5.0)  # Cap at 0.8 for patterns
 
-                suggestions.append({
-                    "command": row["command"],
-                    "confidence": confidence,
-                    "source": "contextual_pattern",
-                    "frequency": frequency,
-                })
+                suggestions.append(
+                    {
+                        "command": row["command"],
+                        "confidence": confidence,
+                        "source": "contextual_pattern",
+                        "frequency": frequency,
+                    }
+                )
 
             logger.debug(f"Tier 3: Found {len(suggestions)} pattern matches")
             return suggestions
@@ -318,10 +321,10 @@ class SuggestionEngine:
 
     def rank_suggestions(
         self,
-        suggestions: List[Dict[str, Any]],
+        suggestions: list[dict[str, Any]],
         boost_recent: bool = True,
         boost_cwd: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Re-rank suggestions using additional signals.
 
@@ -341,7 +344,7 @@ class SuggestionEngine:
 
         return suggestions
 
-    def explain_suggestion(self, suggestion: Dict[str, Any]) -> str:
+    def explain_suggestion(self, suggestion: dict[str, Any]) -> str:
         """
         Generate human-readable explanation for a suggestion.
 
@@ -366,7 +369,6 @@ class SuggestionEngine:
 
 # Example usage
 if __name__ == "__main__":
-    from pathlib import Path
 
     logging.basicConfig(level=logging.DEBUG)
 

@@ -12,13 +12,14 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Import with graceful degradation
 try:
-    from jinja2 import Environment, Template, TemplateSyntaxError
+    from jinja2 import Template, TemplateSyntaxError
+
     JINJA2_AVAILABLE = True
 except ImportError:
     JINJA2_AVAILABLE = False
@@ -32,9 +33,9 @@ class CommandTemplate:
     name: str  # Template name (unique identifier)
     pattern: str  # Template pattern with variables (e.g., "git clone {{repo}}")
     description: str  # Human-readable description
-    variables: List[str]  # List of variable names
+    variables: list[str]  # List of variable names
     category: str  # Category (git, docker, system, etc.)
-    examples: List[str]  # Example usage
+    examples: list[str]  # Example usage
     created: str  # Creation timestamp
 
 
@@ -108,7 +109,7 @@ class TemplateManager:
         ),
     ]
 
-    def __init__(self, storage_path: Optional[Path] = None) -> None:
+    def __init__(self, storage_path: Path | None = None) -> None:
         """
         Initialize template manager.
 
@@ -116,7 +117,7 @@ class TemplateManager:
             storage_path: Path to template storage file (JSON)
         """
         self.storage_path = storage_path
-        self.templates: Dict[str, CommandTemplate] = {}
+        self.templates: dict[str, CommandTemplate] = {}
 
         # Load built-in templates
         for template in self.BUILTIN_TEMPLATES:
@@ -134,7 +135,7 @@ class TemplateManager:
             return
 
         try:
-            with open(self.storage_path, "r") as f:
+            with open(self.storage_path) as f:
                 data = json.load(f)
 
             for name, template_data in data.items():
@@ -174,7 +175,7 @@ class TemplateManager:
         pattern: str,
         description: str,
         category: str = "custom",
-        examples: Optional[List[str]] = None,
+        examples: list[str] | None = None,
     ) -> CommandTemplate:
         """
         Add a new template.
@@ -214,16 +215,16 @@ class TemplateManager:
         logger.info(f"Added template: {name}")
         return template
 
-    def _extract_variables(self, pattern: str) -> List[str]:
+    def _extract_variables(self, pattern: str) -> list[str]:
         """Extract variable names from template pattern."""
         # Match {{variable}} or {variable}
-        matches = re.findall(r'\{\{?\s*(\w+)\s*\}\}?', pattern)
+        matches = re.findall(r"\{\{?\s*(\w+)\s*\}\}?", pattern)
         return list(dict.fromkeys(matches))  # Remove duplicates, preserve order
 
     def render_template(
         self,
         name: str,
-        variables: Dict[str, str],
+        variables: dict[str, str],
         allow_missing: bool = False,
     ) -> str:
         """
@@ -271,9 +272,9 @@ class TemplateManager:
 
     def list_templates(
         self,
-        category: Optional[str] = None,
+        category: str | None = None,
         include_builtin: bool = True,
-    ) -> List[CommandTemplate]:
+    ) -> list[CommandTemplate]:
         """
         List available templates.
 
@@ -297,7 +298,7 @@ class TemplateManager:
 
         return sorted(templates, key=lambda t: (t.category, t.name))
 
-    def get_template(self, name: str) -> Optional[CommandTemplate]:
+    def get_template(self, name: str) -> CommandTemplate | None:
         """
         Get a template by name.
 
@@ -338,9 +339,9 @@ class TemplateManager:
 
     def discover_templates(
         self,
-        commands: List[str],
+        commands: list[str],
         min_frequency: int = 3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Discover potential templates from command history.
 
@@ -362,7 +363,7 @@ class TemplateManager:
             # Would suggest: git commit -m '{{message}}'
         """
         # Group commands by base command
-        command_groups: Dict[str, List[str]] = {}
+        command_groups: dict[str, list[str]] = {}
 
         for cmd in commands:
             parts = cmd.split()
@@ -389,23 +390,25 @@ class TemplateManager:
                     variable_parts = []
                     for cmd in group_commands:
                         if cmd.startswith(common_prefix):
-                            var_part = cmd[len(common_prefix):].strip()
+                            var_part = cmd[len(common_prefix) :].strip()
                             if var_part:
                                 variable_parts.append(var_part)
 
                     if variable_parts:
                         # Suggest template
                         suggested_pattern = f"{common_prefix}{{{{value}}}}"
-                        suggestions.append({
-                            "pattern": suggested_pattern,
-                            "frequency": len(group_commands),
-                            "examples": group_commands[:3],
-                            "description": f"Auto-discovered {base} pattern",
-                        })
+                        suggestions.append(
+                            {
+                                "pattern": suggested_pattern,
+                                "frequency": len(group_commands),
+                                "examples": group_commands[:3],
+                                "description": f"Auto-discovered {base} pattern",
+                            }
+                        )
 
         return sorted(suggestions, key=lambda x: x["frequency"], reverse=True)
 
-    def _find_common_prefix(self, strings: List[str]) -> str:
+    def _find_common_prefix(self, strings: list[str]) -> str:
         """Find common prefix of strings."""
         if not strings:
             return ""
@@ -419,7 +422,7 @@ class TemplateManager:
 
         return prefix.strip()
 
-    def get_categories(self) -> List[str]:
+    def get_categories(self) -> list[str]:
         """Get list of all template categories."""
         categories = {t.category for t in self.templates.values()}
         return sorted(categories)
@@ -441,7 +444,6 @@ if __name__ == "__main__":
 
     print("\nRendering test:")
     rendered = manager.render_template(
-        "git-clone",
-        {"repo": "https://github.com/user/repo.git", "dir": "myproject"}
+        "git-clone", {"repo": "https://github.com/user/repo.git", "dir": "myproject"}
     )
     print(f"  {rendered}")

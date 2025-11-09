@@ -10,7 +10,6 @@ Tests the complete pipeline:
 Created by: orpheus497
 """
 
-import numpy as np
 import pytest
 
 from daedelus.core.database import CommandDatabase
@@ -274,6 +273,7 @@ class TestFullWorkflow:
 
         # Manually insert old commands
         from datetime import datetime, timedelta
+
         old_timestamp = (datetime.now() - timedelta(days=100)).timestamp()
 
         for i in range(5):

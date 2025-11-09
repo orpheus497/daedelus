@@ -7,18 +7,16 @@ Created by: orpheus497
 """
 
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Import with graceful degradation
 try:
     from textual.app import App, ComposeResult
-    from textual.containers import Container, Horizontal, Vertical
+    from textual.containers import Horizontal
     from textual.widgets import Button, DataTable, Footer, Header, Static
-    from rich.table import Table
+
     TEXTUAL_AVAILABLE = True
 except ImportError:
     TEXTUAL_AVAILABLE = False
@@ -28,6 +26,7 @@ try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table as RichTable
+
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -85,7 +84,7 @@ class DashboardApp(App):
         ("e", "export", "Export"),
     ]
 
-    def __init__(self, db_stats: Dict[str, Any], **kwargs: Any) -> None:
+    def __init__(self, db_stats: dict[str, Any], **kwargs: Any) -> None:
         """
         Initialize dashboard app.
 
@@ -179,7 +178,7 @@ class DashboardApp(App):
             self.action_quit()
 
 
-def show_dashboard_rich(db_stats: Dict[str, Any]) -> None:
+def show_dashboard_rich(db_stats: dict[str, Any]) -> None:
     """
     Show dashboard using Rich (fallback if Textual not available).
 
@@ -232,7 +231,7 @@ def show_dashboard_rich(db_stats: Dict[str, Any]) -> None:
     console.print(commands_table)
 
 
-def run_dashboard(db_stats: Dict[str, Any], use_tui: bool = True) -> None:
+def run_dashboard(db_stats: dict[str, Any], use_tui: bool = True) -> None:
     """
     Run the dashboard interface.
 
