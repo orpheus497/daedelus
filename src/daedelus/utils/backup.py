@@ -8,6 +8,7 @@ Created by: orpheus497
 
 import gzip
 import logging
+import re
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -171,15 +172,18 @@ class BackupManager:
             # Parse timestamp from filename
             try:
                 # Extract timestamp (format: daedelus_backup_20250109_143022.db.gz)
-                parts = backup_file.stem.split("_")
-                if len(parts) >= 3:
-                    date_str = parts[2]
-                    time_str = parts[3] if len(parts) > 3 else "000000"
+                # Use regex for more robust parsing
+                match = re.search(r"daedelus_backup_(\d{8})_(\d{6})", backup_file.name)
+                if match:
+                    date_str = match.group(1)
+                    time_str = match.group(2)
                     timestamp = datetime.strptime(
                         f"{date_str}_{time_str}",
                         "%Y%m%d_%H%M%S"
                     )
                 else:
+                    # Fallback to file modification time if filename doesn't match pattern
+                    logger.warning(f"Backup filename doesn't match expected format: {backup_file.name}")
                     timestamp = datetime.fromtimestamp(backup_file.stat().st_mtime)
 
                 backups.append({

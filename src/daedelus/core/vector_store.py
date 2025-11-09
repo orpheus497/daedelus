@@ -12,8 +12,8 @@ Phase 2 will upgrade to sqlite-vss for better integration with the database.
 Created by: orpheus497
 """
 
+import json
 import logging
-import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -122,6 +122,15 @@ class VectorStore:
         logger.debug(f"Added vector {idx}: {command[:30]}...")
 
         return idx
+
+    def is_built(self) -> bool:
+        """
+        Check if the index has been built.
+
+        Returns:
+            True if index is built and ready for queries, False otherwise
+        """
+        return self._built
 
     def build(self) -> None:
         """
@@ -242,8 +251,8 @@ class VectorStore:
 
         # Save metadata
         meta_path = self.index_path.with_suffix(".meta")
-        with open(meta_path, "wb") as f:
-            pickle.dump(self.metadata, f)
+        with open(meta_path, "w") as f:
+            json.dump(self.metadata, f, indent=2)
 
         logger.info(f"Index saved to {self.index_path}")
 
@@ -267,8 +276,8 @@ class VectorStore:
         self._built = True
 
         # Load metadata
-        with open(meta_path, "rb") as f:
-            self.metadata = pickle.load(f)
+        with open(meta_path, "r") as f:
+            self.metadata = json.load(f)
 
         logger.info(
             f"Index loaded from {self.index_path} "

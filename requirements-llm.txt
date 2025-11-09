@@ -8,8 +8,8 @@
 llama-cpp-python==0.2.20     # MIT - Llama.cpp bindings
 
 # Vector Database (upgrade from Annoy)
-sqlite-vss                   # Apache 2.0 - SQLite vector similarity search
-apsw                         # ZLIB - Advanced SQLite wrapper
+sqlite-vss>=0.1.2            # Apache 2.0 - SQLite vector similarity search
+apsw>=3.40.0                 # ZLIB - Advanced SQLite wrapper
 
 # PEFT Fine-Tuning
 peft==0.7.1                  # Apache 2.0 - Parameter-efficient fine-tuning

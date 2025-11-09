@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Pattern, Set
+from typing import Any, Dict, List, Optional, Pattern, Set
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ class SafetyAnalyzer:
         enabled: bool = True,
         level: str = "warn",
         custom_patterns: Optional[List[Dict[str, str]]] = None,
-        whitelist_patterns: Optional[List[str]]] = None,
+        whitelist_patterns: Optional[List[str]] = None,
     ) -> None:
         """
         Initialize safety analyzer.
@@ -339,7 +339,7 @@ class SafetyAnalyzer:
         return stats
 
 
-def load_safety_analyzer_from_config(config: Dict[str, any]) -> SafetyAnalyzer:
+def load_safety_analyzer_from_config(config: Dict[str, Any]) -> SafetyAnalyzer:
     """
     Load safety analyzer from configuration dictionary.
 

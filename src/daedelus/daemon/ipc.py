@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +177,7 @@ class IPCServer:
             )
             try:
                 conn.sendall(error_response.to_json().encode("utf-8"))
-            except:
+            except Exception:
                 pass  # Connection might be closed
 
         finally:
@@ -303,8 +303,8 @@ class IPCClient:
         self,
         partial: str,
         cwd: str,
-        history: list[str],
-    ) -> list[Dict[str, Any]]:
+        history: List[str],
+    ) -> List[Dict[str, Any]]:
         """
         Request command suggestions.
 

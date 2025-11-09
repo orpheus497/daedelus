@@ -111,6 +111,7 @@ class CommandEmbedder:
 
         try:
             # Train unsupervised FastText model
+            logger.info(f"Training FastText model on {len(commands)} commands...")
             self.model = fasttext.train_unsupervised(
                 str(train_file),
                 model="skipgram",  # Skip-gram is better for rare words
@@ -137,9 +138,16 @@ class CommandEmbedder:
                 f"Vocabulary size: {len(self.model.words)}"
             )
 
+        except Exception as e:
+            logger.error(f"FastText training failed: {e}", exc_info=True)
+            if train_file.exists():
+                train_file.unlink(missing_ok=True)
+            raise RuntimeError(f"Failed to train FastText model: {e}") from e
+
         finally:
             # Clean up temp file
-            train_file.unlink()
+            if train_file.exists():
+                train_file.unlink()
 
     def load(self) -> None:
         """

@@ -30,7 +30,7 @@ def test_package_imports():
     from daedelus.utils.config import Config
     from daedelus.utils.logging_config import setup_logging
 
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.2.0"
 
 
 def test_config_creation():
