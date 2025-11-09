@@ -4,6 +4,9 @@ LLM Manager for Daedelus Phase 2.
 Manages the local LLM (Phi-3-mini via llama.cpp) for command understanding
 and generation.
 
+The LLM understands its identity as Deus (Daedelus) and its purpose
+as a terminal assistant created by orpheus497.
+
 Created by: orpheus497
 """
 

@@ -43,12 +43,27 @@ def cli(ctx: click.Context, config: Path | None, verbose: int) -> None:
     """
     Daedelus - Self-Learning Terminal Assistant
 
-    A privacy-first, offline AI assistant that learns from your command usage.
-    All quality-of-life features are automatically active when running.
+    A privacy-first, offline AI assistant that learns from your command usage
+    and builds its own intelligence locally. Formal name: Daedelus, Nickname: Deus
 
-    Quick alias: deus
+    Features:
+      • 🧠 Self-learning AI that builds from your usage patterns
+      • ⚡ Ultra-fast suggestions (<50ms)
+      • 🔒 100% offline, privacy-first (no data ever leaves your machine)
+      • 🎯 Context-aware command completion
+      • 🤖 LLM-powered explanations and command generation
+      • 🔄 Continuous learning and model fine-tuning
 
-    Created by: orpheus497
+    Quick Start:
+      daedelus setup    # Initialize configuration
+      daedelus start    # Start the daemon
+      daedelus repl     # Launch interactive mode (all features active)
+
+    Quick alias: deus (works exactly the same as daedelus)
+      Example: deus start, deus repl, deus status
+
+    Created and Designed by: orpheus497
+    License: MIT | 100% FOSS
     """
     # Set up logging
     log_level = logging.WARNING
@@ -68,9 +83,19 @@ def cli(ctx: click.Context, config: Path | None, verbose: int) -> None:
 @click.pass_context
 def setup(ctx: click.Context) -> None:
     """
-    Set up Daedalus for first-time use.
+    Set up Daedelus for first-time use.
 
-    Creates configuration file and data directories.
+    This command initializes Daedelus by creating:
+      • Configuration file at ~/.config/daedelus/config.yaml
+      • Data directory at ~/.local/share/daedelus/
+      • Models directory at ~/.local/share/models/
+
+    After setup, you'll need to:
+      1. Start the daemon: daedelus start
+      2. Add shell integration to your shell RC file
+      3. (Optional) Download LLM model for advanced features
+
+    Daedelus is designed and created by orpheus497.
     """
     config: Config = ctx.obj["config"]
 
@@ -107,7 +132,19 @@ def setup(ctx: click.Context) -> None:
 )
 @click.pass_context
 def start(ctx: click.Context, foreground: bool) -> None:
-    """Start the Daedalus daemon."""
+    """
+    Start the Daedelus daemon.
+
+    The daemon runs in the background and:
+      • Monitors your terminal commands
+      • Learns from your usage patterns
+      • Provides intelligent suggestions via shell integration
+      • Builds local AI models from your interactions
+      • Maintains complete privacy (no data leaves your machine)
+
+    Use --foreground to run in the current terminal (useful for debugging).
+    For automatic startup on boot, use: ./scripts/install-systemd-service.sh
+    """
     config: Config = ctx.obj["config"]
 
     # Check if already running
@@ -160,7 +197,12 @@ def start(ctx: click.Context, foreground: bool) -> None:
 @cli.command()
 @click.pass_context
 def stop(ctx: click.Context) -> None:
-    """Stop the Daedalus daemon."""
+    """
+    Stop the Daedelus daemon.
+
+    Gracefully shuts down the daemon and saves all learned data.
+    Your command history and AI models are preserved for the next session.
+    """
     config: Config = ctx.obj["config"]
 
     if not is_daemon_running(config):
@@ -213,7 +255,18 @@ def restart(ctx: click.Context) -> None:
 )
 @click.pass_context
 def status(ctx: click.Context, output_json: bool) -> None:
-    """Show daemon status."""
+    """
+    Show daemon status and statistics.
+
+    Displays:
+      • Daemon running state and uptime
+      • Number of commands logged and learned
+      • Suggestions generated
+      • Database statistics and success rates
+      • Overall learning progress
+
+    Use --json for machine-readable output.
+    """
     config: Config = ctx.obj["config"]
 
     if not is_daemon_running(config):
@@ -261,7 +314,19 @@ def status(ctx: click.Context, output_json: bool) -> None:
 )
 @click.pass_context
 def search(ctx: click.Context, query: str, limit: int) -> None:
-    """Search command history."""
+    """
+    Search command history with fuzzy matching.
+
+    Uses intelligent fuzzy matching to find commands even with typos
+    or partial matches. Searches through your entire command history.
+
+    Examples:
+      daedelus search "git push"      # Find all git push commands
+      daedelus search docker -n 50    # Show 50 Docker commands
+      daedelus search "file operations"  # Semantic search
+
+    Quick alias: ds "query" (with shell integration)
+    """
     config: Config = ctx.obj["config"]
 
     if not is_daemon_running(config):
@@ -593,22 +658,48 @@ def websearch(ctx: click.Context, query: tuple, detailed: bool, results: int) ->
 @cli.command()
 @click.pass_context
 def info(ctx: click.Context) -> None:
-    """Show system information."""
+    """
+    Show system information and identity.
+
+    Displays Daedelus version, configuration paths, model status,
+    and creator information.
+    """
     config: Config = ctx.obj["config"]
 
-    click.echo("Daedalus System Information")
-    click.echo("=" * 40)
-    click.echo(f"Version: {__version__}")
-    click.echo(f"Config: {config.config_path}")
-    click.echo(f"Data dir: {config.data_dir}")
-    click.echo(f"Socket: {config.get('daemon.socket_path')}")
-    click.echo(f"Log: {config.get('daemon.log_path')}")
-    click.echo(f"Database: {config.get('database.path')}")
-    click.echo(f"\nPhase 1 (Embeddings):")
-    click.echo(f"  Model: {config.get('model.model_path')}")
-    click.echo(f"\nPhase 2 (LLM):")
+    from daedelus import __formal_name__, __social_name__, __creator__, __purpose__
+
+    click.echo("=" * 60)
+    click.echo("  Daedelus System Information")
+    click.echo("=" * 60)
+    click.echo(f"\n📋 Identity:")
+    click.echo(f"  Formal Name: {__formal_name__}")
+    click.echo(f"  Social Name: {__social_name__}")
+    click.echo(f"  Creator: {__creator__}")
+    click.echo(f"  Designer: {__creator__}")
+    click.echo(f"  Purpose: {__purpose__}")
+    click.echo(f"\n📦 Version: {__version__}")
+    click.echo(f"📄 License: MIT (100% FOSS)")
+    click.echo(f"\n🗂️  Configuration:")
+    click.echo(f"  Config: {config.config_path}")
+    click.echo(f"  Data dir: {config.data_dir}")
+    click.echo(f"  Socket: {config.get('daemon.socket_path')}")
+    click.echo(f"  Log: {config.get('daemon.log_path')}")
+    click.echo(f"  Database: {config.get('database.path')}")
+
+    db_path = Path(config.get("database.path"))
+    if db_path.exists():
+        size_mb = db_path.stat().st_size / (1024 * 1024)
+        click.echo(f"  Database size: {size_mb:.2f} MB")
+
+    click.echo(f"\n🧠 Phase 1 (Embedding Model):")
+    click.echo(f"  Model Type: FastText + Annoy")
+    click.echo(f"  Model Path: {config.get('model.model_path')}")
+    click.echo(f"  Purpose: Fast semantic command similarity")
+
+    click.echo(f"\n🤖 Phase 2 (LLM - Deus Model):")
     click.echo(f"  Enabled: {config.get('llm.enabled')}")
-    click.echo(f"  Model: {config.get('llm.model_path')}")
+    click.echo(f"  Model Path: {config.get('llm.model_path')}")
+    click.echo(f"  Purpose: Command explanation, generation, Q&A")
 
     # Check model existence
     llm_model_path = Path(config.get('llm.model_path'))
@@ -617,12 +708,10 @@ def info(ctx: click.Context) -> None:
         click.echo(f"  Status: ✅ Found ({size_mb:.1f} MB)")
     else:
         click.echo(f"  Status: ❌ Not found")
-        click.echo(f"  Hint: Download a GGUF model and place it at the path above")
+        click.echo(f"  Hint: Download a GGUF model with: daedelus model download")
 
-    db_path = Path(config.get("database.path"))
-    if db_path.exists():
-        size_mb = db_path.stat().st_size / (1024 * 1024)
-        click.echo(f"\nDatabase size: {size_mb:.2f} MB")
+    click.echo(f"\n💡 The AI models understand their identity and were designed by {__creator__}")
+    click.echo("=" * 60)
 
 
 @cli.command()

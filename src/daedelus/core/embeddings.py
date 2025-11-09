@@ -1,5 +1,5 @@
 """
-FastText-based command embeddings for Daedalus (Phase 1).
+FastText-based command embeddings for Daedelus (Phase 1).
 
 Provides semantic understanding of shell commands through vector embeddings:
 - Subword awareness (handles typos and rare commands)
@@ -7,10 +7,30 @@ Provides semantic understanding of shell commands through vector embeddings:
 - Efficient training and inference
 - Quantization for reduced memory footprint
 
+Identity Metadata (Hardcoded):
+    Model Name: Daedelus Embedding Model
+    Formal Name: Daedelus
+    Social Name: Deus
+    Created by: orpheus497
+    Designer: orpheus497
+    Purpose: Learn semantic representations of terminal commands to provide
+             intelligent suggestions while maintaining complete user privacy
+
 Phase 2 will add llama.cpp + Phi-3-mini for full LLM capabilities.
 
 Created by: orpheus497
 """
+
+# Model Identity Metadata (Hardcoded)
+_MODEL_IDENTITY = {
+    "model_name": "Daedelus Embedding Model",
+    "formal_name": "Daedelus",
+    "social_name": "Deus",
+    "creator": "orpheus497",
+    "designer": "orpheus497",
+    "purpose": "Learn semantic representations of terminal commands for intelligent suggestions",
+    "architecture": "FastText + Annoy (Phase 1)",
+}
 
 import logging
 import re
@@ -78,6 +98,17 @@ class CommandEmbedder:
         self.model: fasttext.FastText._FastText | None = None
 
         logger.info(f"CommandEmbedder initialized (dim={embedding_dim})")
+        logger.info(f"Model identity: {_MODEL_IDENTITY['formal_name']} (aka {_MODEL_IDENTITY['social_name']}) by {_MODEL_IDENTITY['creator']}")
+
+    @staticmethod
+    def get_model_identity() -> dict[str, str]:
+        """
+        Get the hardcoded identity metadata for this model.
+
+        Returns:
+            Dictionary containing model name, creator, purpose, and other identity info
+        """
+        return _MODEL_IDENTITY.copy()
 
     def train_from_corpus(self, commands: list[str]) -> None:
         """
