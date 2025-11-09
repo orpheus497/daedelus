@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daedelus"
-version = "0.1.0"
+version = "0.2.0"
 description = "Self-contained terminal assistant with adaptive AI micro-model"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,11 +23,14 @@ keywords = [
     "command-line",
     "shell",
     "autocomplete",
-    "machine-learning"
+    "machine-learning",
+    "privacy",
+    "offline"
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
@@ -38,6 +41,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: System :: Shells",
     "Topic :: Utilities",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 # ========================================
@@ -59,6 +64,16 @@ dependencies = [
 
     # Core Python packages
     "numpy>=1.24.0",                # BSD - Array operations
+
+    # UI & Templates (Phase 1.5 Enhancements)
+    "rich>=13.0.0",                 # MIT - Terminal formatting and UI
+    "textual>=0.40.0",              # MIT - TUI framework for dashboard
+    "jinja2>=3.1.0",                # BSD 3-Clause - Template engine
+
+    # Model Management
+    "requests>=2.31.0",             # Apache 2.0 - HTTP client for downloads
+    "tqdm>=4.65.0",                 # MIT/MPL - Progress bars
+    "huggingface_hub>=0.19.0",      # Apache 2.0 - Model downloads
 ]
 
 # ========================================
@@ -77,6 +92,7 @@ dev = [
     "ruff>=0.1.0",                  # MIT - Fast linter
     "mypy>=1.5.0",                  # MIT - Type checker
     "isort>=5.12.0",                # MIT - Import sorter
+    "pre-commit>=3.5.0",            # MIT - Pre-commit hooks
 
     # Profiling & Debugging
     "memory-profiler>=0.61.0",      # BSD - Memory profiling
@@ -86,6 +102,9 @@ dev = [
     # Documentation
     "sphinx>=7.0.0",                # BSD - Documentation generator
     "sphinx-rtd-theme>=1.3.0",      # MIT - Read The Docs theme
+
+    # Coverage
+    "coverage[toml]>=7.3.0",        # Apache 2.0 - Coverage tool
 ]
 
 # ========================================
@@ -110,8 +129,8 @@ llm = [
 # PROJECT ENTRY POINTS
 # ========================================
 [project.scripts]
-daedelus = "daedelus.cli:main"
-daedelus-daemon = "daedelus.daemon.main:start_daemon"
+daedelus = "daedelus.cli.main:main"
+daedelus-daemon = "daedelus.daemon.daemon:main"
 
 # ========================================
 # PROJECT URLS
@@ -127,8 +146,7 @@ Changelog = "https://github.com/orpheus497/daedelus/blob/main/CHANGELOG.md"
 # SETUPTOOLS CONFIGURATION
 # ========================================
 [tool.setuptools]
-packages = ["daedelus"]
-package-dir = {"" = "src"}
+packages = {find = {where = ["src"]}}
 
 [tool.setuptools.package-data]
 daedelus = ["py.typed", "*.yaml", "*.sql"]

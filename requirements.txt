@@ -1,0 +1,34 @@
+# Daedelus Requirements
+# Generated from pyproject.toml
+# Install with: pip install -r requirements.txt
+# Created by: orpheus497
+
+# ========================================
+# Phase 1 Dependencies (Embedding-Based)
+# ========================================
+
+# Embeddings & Vector Search
+fasttext==0.9.2              # MIT - Word embeddings with subword support
+annoy==1.17.3                # Apache 2.0 - Fast approximate nearest neighbors
+
+# Terminal Integration
+prompt-toolkit==3.0.43       # BSD 3-Clause - Terminal UI components
+ptyprocess==0.7.0            # ISC - PTY handling for command monitoring
+
+# Utilities
+platformdirs==4.1.0          # MIT - User data directories
+pyyaml==6.0.1                # MIT - Configuration management
+click==8.1.7                 # BSD 3-Clause - CLI framework
+
+# Core Python packages
+numpy>=1.24.0                # BSD - Array operations
+
+# UI & Templates (Phase 1.5 Enhancements)
+rich>=13.0.0                 # MIT - Terminal formatting and UI
+textual>=0.40.0              # MIT - TUI framework for dashboard
+jinja2>=3.1.0                # BSD 3-Clause - Template engine
+
+# Model Management
+requests>=2.31.0             # Apache 2.0 - HTTP client for downloads
+tqdm>=4.65.0                 # MIT/MPL - Progress bars
+huggingface_hub>=0.19.0      # Apache 2.0 - Model downloads

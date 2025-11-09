@@ -178,6 +178,42 @@ peft:
   lora_dropout: 0.1
 
 # ============================================
+# Command Safety Settings
+# ============================================
+safety:
+  # Enable command safety analysis
+  enabled: true
+
+  # Safety level: off, warn, block
+  # - off: No safety checks
+  # - warn: Show warnings but allow execution
+  # - block: Block dangerous commands
+  level: warn
+
+  # Patterns to flag as dangerous (regular expressions)
+  dangerous_patterns:
+    - 'rm\s+-rf\s+/'
+    - 'dd\s+.*of=/dev/'
+    - 'mkfs\.'
+    - 'chmod\s+-R\s+777'
+    - ':(){:|:&};:'  # Fork bomb
+    - 'sudo\s+rm'
+    - '>\s*/dev/sd'
+
+  # Commands that always require confirmation
+  require_confirmation:
+    - rm
+    - dd
+    - mkfs
+    - fdisk
+    - wipefs
+
+  # Whitelist patterns (never flag these)
+  whitelist_patterns:
+    - 'rm -rf ./build'
+    - 'rm -rf ./dist'
+
+# ============================================
 # Advanced Settings
 # ============================================
 advanced:
