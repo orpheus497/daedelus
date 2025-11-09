@@ -481,10 +481,6 @@ class ModelManager:
 
         Returns:
             Path to new model version
-
-        Note:
-            Actual implementation requires transformers/PEFT for merging.
-            This is a placeholder that demonstrates the architecture.
         """
         current = self.get_current_model()
         if not current:
