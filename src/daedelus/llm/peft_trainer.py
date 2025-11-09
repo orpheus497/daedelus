@@ -9,19 +9,32 @@ Created by: orpheus497
 
 import json
 import logging
+import subprocess
+import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 try:
     from peft import LoraConfig, PeftModel, get_peft_model
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        DataCollatorForLanguageModeling,
+        Trainer,
+        TrainingArguments,
+    )
+    from datasets import Dataset
 except ImportError:
     LoraConfig = None  # type: ignore
     get_peft_model = None  # type: ignore
     PeftModel = None  # type: ignore
     AutoModelForCausalLM = None  # type: ignore
     AutoTokenizer = None  # type: ignore
+    DataCollatorForLanguageModeling = None  # type: ignore
+    Trainer = None  # type: ignore
+    TrainingArguments = None  # type: ignore
+    Dataset = None  # type: ignore
 
 
 class PEFTTrainer:
@@ -172,7 +185,12 @@ class PEFTTrainer:
         )
 
         # Load tokenizer
-        AutoTokenizer.from_pretrained(self.model_name)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        # Set padding token if not present
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
 
         # Configure LoRA
         peft_config = LoraConfig(
@@ -190,11 +208,11 @@ class PEFTTrainer:
         logger.info(f"Trainable parameters: {model.print_trainable_parameters()}")
 
         # Format training data
-        formatted_data = []
+        formatted_texts = []
         for example in training_data:
-            # Format as chat
+            # Format as chat for Phi-3
             text = f"<|user|>\n{example['instruction']}<|end|>\n<|assistant|>\n{example['output']}<|end|>"
-            formatted_data.append(text)
+            formatted_texts.append(text)
 
         # Save formatted data for inspection
         data_file = output_dir / "training_data.json"
@@ -203,12 +221,100 @@ class PEFTTrainer:
 
         logger.info(f"Training data saved to {data_file}")
 
-        # TODO: Implement actual training loop
-        # For now, just save the configuration
+        # Tokenize training data
+        logger.info("Tokenizing training data...")
 
-        # Save adapter
-        logger.info(f"Saving adapter to {output_dir}...")
+        def tokenize_function(examples: dict[str, list[str]]) -> dict[str, list]:
+            """Tokenize examples for training."""
+            tokenized = tokenizer(
+                examples["text"],
+                truncation=True,
+                max_length=512,
+                padding="max_length",
+                return_tensors=None,
+            )
+            # For causal LM, labels are the same as input_ids
+            tokenized["labels"] = tokenized["input_ids"].copy()
+            return tokenized
+
+        # Create HuggingFace Dataset
+        dataset_dict = {"text": formatted_texts}
+        dataset = Dataset.from_dict(dataset_dict)
+
+        # Tokenize dataset
+        tokenized_dataset = dataset.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=dataset.column_names,
+        )
+
+        logger.info(f"Dataset tokenized: {len(tokenized_dataset)} examples")
+
+        # Configure training arguments
+        training_args = TrainingArguments(
+            output_dir=str(output_dir / "checkpoints"),
+            num_train_epochs=num_epochs,
+            per_device_train_batch_size=batch_size,
+            gradient_accumulation_steps=4,  # Effective batch size = 4 * batch_size
+            learning_rate=learning_rate,
+            warmup_steps=100,
+            logging_steps=10,
+            save_strategy="epoch",
+            save_total_limit=2,  # Keep only 2 latest checkpoints
+            fp16=True,  # Mixed precision training
+            optim="adamw_torch",
+            report_to="none",  # Disable wandb/tensorboard
+            logging_dir=str(output_dir / "logs"),
+            remove_unused_columns=False,
+        )
+
+        # Create data collator
+        data_collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer,
+            mlm=False,  # Causal LM, not masked LM
+        )
+
+        # Initialize trainer
+        logger.info("Initializing trainer...")
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=tokenized_dataset,
+            data_collator=data_collator,
+        )
+
+        # Execute training loop with gradient descent
+        logger.info("Starting training loop...")
+        try:
+            train_result = trainer.train()
+
+            # Log training metrics
+            logger.info("Training completed successfully!")
+            logger.info(f"Training loss: {train_result.training_loss:.4f}")
+            logger.info(f"Training steps: {train_result.global_step}")
+
+            # Save metrics
+            metrics_file = output_dir / "training_metrics.json"
+            with open(metrics_file, "w") as f:
+                json.dump(
+                    {
+                        "training_loss": float(train_result.training_loss),
+                        "global_step": train_result.global_step,
+                        "num_epochs": num_epochs,
+                        "num_examples": len(training_data),
+                    },
+                    f,
+                    indent=2,
+                )
+
+        except Exception as e:
+            logger.error(f"Training failed: {e}")
+            raise
+
+        # Save final adapter
+        logger.info(f"Saving trained adapter to {output_dir}...")
         model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
 
         # Save config
         config_file = output_dir / "adapter_config.json"
@@ -221,6 +327,8 @@ class PEFTTrainer:
                     "lora_dropout": self.lora_dropout,
                     "num_examples": len(training_data),
                     "num_epochs": num_epochs,
+                    "batch_size": batch_size,
+                    "learning_rate": learning_rate,
                 },
                 f,
                 indent=2,
@@ -310,30 +418,191 @@ class PEFTTrainer:
         self,
         output_path: Path,
         quantization: str = "q4_k_m",
+        llama_cpp_path: Path | None = None,
     ) -> None:
         """
         Export adapter for use with llama.cpp.
 
-        Args:
-            output_path: Path for exported model
-            quantization: Quantization format (q4_k_m, q8_0, etc.)
+        Merges the LoRA adapter with the base model and converts to GGUF format
+        for use with llama.cpp inference.
 
-        Note:
-            This requires additional conversion tools.
-            See: https://github.com/ggerganov/llama.cpp
+        Args:
+            output_path: Path for exported GGUF model
+            quantization: Quantization format (q4_k_m, q8_0, f16, etc.)
+            llama_cpp_path: Path to llama.cpp repository (auto-detect if None)
+
+        Raises:
+            RuntimeError: If conversion fails or tools not found
+            FileNotFoundError: If adapter not loaded
         """
         logger.info(f"Exporting adapter to {output_path}...")
 
-        # TODO: Implement actual export
-        # Would involve:
-        # 1. Merge adapter with base model
-        # 2. Convert to GGUF format
-        # 3. Quantize
+        if self.model is None:
+            raise FileNotFoundError(
+                "No adapter loaded. Call load_adapter() first or train a new adapter."
+            )
 
-        raise NotImplementedError(
-            "Export to llama.cpp format requires additional conversion tools. "
-            "See llama.cpp documentation for details."
-        )
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Step 1: Merge adapter with base model
+        logger.info("Merging LoRA adapter with base model...")
+        try:
+            merged_model = self.model.merge_and_unload()
+        except AttributeError:
+            logger.error("Model does not have merge_and_unload method. Loading adapter first...")
+            # If model is not a PeftModel, try loading the adapter
+            if self.adapter_path and self.adapter_path.exists():
+                base_model = AutoModelForCausalLM.from_pretrained(self.model_name)
+                peft_model = PeftModel.from_pretrained(base_model, str(self.adapter_path))
+                merged_model = peft_model.merge_and_unload()
+            else:
+                raise
+
+        # Step 2: Save merged model in HuggingFace format
+        logger.info("Saving merged model in HuggingFace format...")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "merged_model"
+            merged_model.save_pretrained(temp_path)
+            self.tokenizer.save_pretrained(temp_path)
+
+            logger.info(f"Merged model saved to temporary directory: {temp_path}")
+
+            # Step 3: Find llama.cpp tools
+            if llama_cpp_path is None:
+                # Try to auto-detect llama.cpp
+                possible_paths = [
+                    Path.home() / "llama.cpp",
+                    Path("/usr/local/llama.cpp"),
+                    Path("/opt/llama.cpp"),
+                ]
+
+                for path in possible_paths:
+                    if path.exists() and (path / "convert.py").exists():
+                        llama_cpp_path = path
+                        break
+
+                if llama_cpp_path is None:
+                    logger.warning(
+                        "llama.cpp not found. Trying system-wide python scripts..."
+                    )
+                    # Try to find convert.py in PATH
+                    try:
+                        result = subprocess.run(
+                            ["which", "convert-hf-to-gguf.py"],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        if result.returncode == 0:
+                            llama_cpp_path = Path(result.stdout.strip()).parent
+                    except Exception:
+                        pass
+
+            if llama_cpp_path is None or not llama_cpp_path.exists():
+                raise RuntimeError(
+                    "llama.cpp tools not found. Please install llama.cpp and provide path.\n"
+                    "Clone from: https://github.com/ggerganov/llama.cpp"
+                )
+
+            logger.info(f"Using llama.cpp from: {llama_cpp_path}")
+
+            # Step 4: Convert to GGUF using convert.py
+            logger.info("Converting to GGUF format (f16)...")
+            temp_gguf = temp_path.parent / "model_f16.gguf"
+
+            convert_script = llama_cpp_path / "convert.py"
+            if not convert_script.exists():
+                # Try newer script name
+                convert_script = llama_cpp_path / "convert-hf-to-gguf.py"
+
+            if not convert_script.exists():
+                raise FileNotFoundError(
+                    f"Conversion script not found in {llama_cpp_path}. "
+                    "Expected convert.py or convert-hf-to-gguf.py"
+                )
+
+            try:
+                result = subprocess.run(
+                    [
+                        "python",
+                        str(convert_script),
+                        str(temp_path),
+                        "--outfile",
+                        str(temp_gguf),
+                        "--outtype",
+                        "f16",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=600,  # 10 minute timeout
+                )
+                logger.debug(f"Conversion output: {result.stdout}")
+                logger.info("✓ Converted to GGUF (f16)")
+
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Conversion failed: {e.stderr}")
+                raise RuntimeError(f"GGUF conversion failed: {e.stderr}")
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("Conversion timed out after 10 minutes")
+
+            # Step 5: Quantize to target format
+            if quantization != "f16":
+                logger.info(f"Quantizing to {quantization}...")
+
+                quantize_binary = llama_cpp_path / "quantize"
+                if not quantize_binary.exists():
+                    # Try in build directory
+                    quantize_binary = llama_cpp_path / "build" / "bin" / "quantize"
+
+                if not quantize_binary.exists():
+                    logger.warning(
+                        f"Quantize binary not found. Saving as f16. "
+                        f"Build llama.cpp to enable quantization."
+                    )
+                    # Just copy f16 version
+                    import shutil
+
+                    shutil.copy2(temp_gguf, output_path)
+                else:
+                    try:
+                        result = subprocess.run(
+                            [
+                                str(quantize_binary),
+                                str(temp_gguf),
+                                str(output_path),
+                                quantization.upper(),
+                            ],
+                            capture_output=True,
+                            text=True,
+                            check=True,
+                            timeout=600,
+                        )
+                        logger.debug(f"Quantization output: {result.stdout}")
+                        logger.info(f"✓ Quantized to {quantization}")
+
+                    except subprocess.CalledProcessError as e:
+                        logger.error(f"Quantization failed: {e.stderr}")
+                        raise RuntimeError(f"Quantization failed: {e.stderr}")
+                    except subprocess.TimeoutExpired:
+                        raise RuntimeError("Quantization timed out after 10 minutes")
+            else:
+                # Just copy f16 version
+                import shutil
+
+                shutil.copy2(temp_gguf, output_path)
+
+        # Step 6: Verify output
+        if not output_path.exists():
+            raise RuntimeError(f"Export failed: output file not created at {output_path}")
+
+        file_size_mb = output_path.stat().st_size / (1024 * 1024)
+        logger.info(f"✓ Export complete: {output_path}")
+        logger.info(f"  Size: {file_size_mb:.1f} MB")
+        logger.info(f"  Format: GGUF ({quantization})")
+
+        return
 
     def __repr__(self) -> str:
         """String representation."""

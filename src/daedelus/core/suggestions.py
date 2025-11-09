@@ -10,6 +10,8 @@ Created by: orpheus497
 """
 
 import logging
+import math
+from datetime import datetime, timedelta
 from typing import Any
 
 from daedelus.core.database import CommandDatabase
@@ -324,25 +326,263 @@ class SuggestionEngine:
         suggestions: list[dict[str, Any]],
         boost_recent: bool = True,
         boost_cwd: bool = True,
+        current_cwd: str | None = None,
     ) -> list[dict[str, Any]]:
         """
-        Re-rank suggestions using additional signals.
+        Re-rank suggestions using advanced multi-factor scoring.
+
+        Combines multiple signals to produce optimal suggestion ranking:
+        - Recency weighting (exponential decay)
+        - Directory-specific boosting (context awareness)
+        - Success rate integration (learn from failures)
+        - Frequency scoring (logarithmic diminishing returns)
 
         Args:
             suggestions: Initial suggestions
-            boost_recent: Boost recently used commands
-            boost_cwd: Boost commands from current directory
+            boost_recent: Apply recency weighting
+            boost_cwd: Apply directory-specific boosting
+            current_cwd: Current working directory for context
 
         Returns:
-            Re-ranked suggestions
+            Re-ranked suggestions sorted by combined score
         """
-        # TODO: Implement advanced ranking
-        # - Recency weighting
-        # - Directory-specific boosting
-        # - Success rate integration
-        # - User feedback learning
+        if not suggestions:
+            return suggestions
 
-        return suggestions
+        logger.debug(f"Re-ranking {len(suggestions)} suggestions...")
+
+        # Enrich suggestions with additional metadata
+        enriched = []
+        for sug in suggestions:
+            command = sug["command"]
+            base_confidence = sug.get("confidence", 0.5)
+
+            # Get command statistics from database
+            stats = self._get_command_statistics(command)
+
+            # Calculate individual factors
+            recency_factor = self._calculate_recency_factor(stats) if boost_recent else 1.0
+            directory_boost = (
+                self._calculate_directory_boost(stats, current_cwd) if boost_cwd else 1.0
+            )
+            success_factor = self._calculate_success_factor(stats)
+            frequency_factor = self._calculate_frequency_factor(stats)
+
+            # Combined score: base confidence × all factors
+            combined_score = (
+                base_confidence * recency_factor * directory_boost * success_factor * frequency_factor
+            )
+
+            enriched_sug = {
+                **sug,
+                "recency_factor": recency_factor,
+                "directory_boost": directory_boost,
+                "success_factor": success_factor,
+                "frequency_factor": frequency_factor,
+                "combined_score": combined_score,
+                "stats": stats,
+            }
+
+            enriched.append(enriched_sug)
+
+        # Sort by combined score (descending)
+        enriched.sort(key=lambda x: x["combined_score"], reverse=True)
+
+        logger.debug(
+            f"Re-ranked suggestions - top score: {enriched[0]['combined_score']:.4f}"
+            if enriched
+            else "No suggestions to rank"
+        )
+
+        return enriched
+
+    def _get_command_statistics(self, command: str) -> dict[str, Any]:
+        """
+        Retrieve statistics for a command from the database.
+
+        Args:
+            command: Command string
+
+        Returns:
+            Statistics dictionary with:
+            - total_executions: Total number of times executed
+            - successful_executions: Number of successful (exit_code=0) executions
+            - failed_executions: Number of failed executions
+            - last_used_timestamp: Most recent execution timestamp
+            - avg_duration: Average execution duration
+            - directories: List of directories where command was used
+            - total_frequency: Total frequency count
+        """
+        try:
+            # Query for command statistics
+            query = """
+                SELECT
+                    COUNT(*) as total_executions,
+                    SUM(CASE WHEN exit_code = 0 THEN 1 ELSE 0 END) as successful_executions,
+                    SUM(CASE WHEN exit_code != 0 THEN 1 ELSE 0 END) as failed_executions,
+                    MAX(timestamp) as last_used_timestamp,
+                    AVG(duration) as avg_duration,
+                    GROUP_CONCAT(DISTINCT cwd) as directories
+                FROM command_history
+                WHERE command = ?
+            """
+
+            cursor = self.db.conn.execute(query, (command,))
+            row = cursor.fetchone()
+
+            if row and row["total_executions"] > 0:
+                return {
+                    "total_executions": row["total_executions"],
+                    "successful_executions": row["successful_executions"],
+                    "failed_executions": row["failed_executions"],
+                    "last_used_timestamp": row["last_used_timestamp"],
+                    "avg_duration": row["avg_duration"] or 0.0,
+                    "directories": row["directories"].split(",") if row["directories"] else [],
+                    "total_frequency": row["total_executions"],
+                }
+            else:
+                # No statistics available, return defaults
+                return {
+                    "total_executions": 0,
+                    "successful_executions": 0,
+                    "failed_executions": 0,
+                    "last_used_timestamp": None,
+                    "avg_duration": 0.0,
+                    "directories": [],
+                    "total_frequency": 0,
+                }
+
+        except Exception as e:
+            logger.warning(f"Failed to get statistics for command '{command}': {e}")
+            return {
+                "total_executions": 0,
+                "successful_executions": 0,
+                "failed_executions": 0,
+                "last_used_timestamp": None,
+                "avg_duration": 0.0,
+                "directories": [],
+                "total_frequency": 0,
+            }
+
+    def _calculate_recency_factor(self, stats: dict[str, Any]) -> float:
+        """
+        Calculate recency weighting using exponential decay.
+
+        Formula: e^(-λ × days_since_last_use)
+        where λ = 0.1 (decay constant)
+
+        Args:
+            stats: Command statistics
+
+        Returns:
+            Recency factor (0.0 to 1.0)
+        """
+        last_used = stats.get("last_used_timestamp")
+
+        if last_used is None:
+            # No usage history, return neutral
+            return 0.5
+
+        # Calculate days since last use
+        now = datetime.now().timestamp()
+        days_since_use = (now - last_used) / 86400.0  # 86400 seconds in a day
+
+        # Exponential decay with λ = 0.1
+        decay_constant = 0.1
+        recency_factor = math.exp(-decay_constant * days_since_use)
+
+        return recency_factor
+
+    def _calculate_directory_boost(
+        self, stats: dict[str, Any], current_cwd: str | None
+    ) -> float:
+        """
+        Calculate directory-specific boost for context awareness.
+
+        Boost values:
+        - 2.0x if command used in exact same directory
+        - 1.5x if command used in parent or child directory
+        - 1.0x otherwise (no boost)
+
+        Args:
+            stats: Command statistics
+            current_cwd: Current working directory
+
+        Returns:
+            Directory boost factor (1.0 to 2.0)
+        """
+        if not current_cwd:
+            return 1.0
+
+        directories = stats.get("directories", [])
+
+        if not directories:
+            return 1.0
+
+        # Check for exact match
+        if current_cwd in directories:
+            return 2.0
+
+        # Check for parent/child relationship
+        for directory in directories:
+            if current_cwd.startswith(directory) or directory.startswith(current_cwd):
+                return 1.5
+
+        # No directory match
+        return 1.0
+
+    def _calculate_success_factor(self, stats: dict[str, Any]) -> float:
+        """
+        Calculate success rate factor to penalize frequently failing commands.
+
+        Formula: (successful_executions / total_executions)^2
+        Quadratic penalty ensures commands with low success rates are demoted.
+
+        Args:
+            stats: Command statistics
+
+        Returns:
+            Success factor (0.0 to 1.0)
+        """
+        total = stats.get("total_executions", 0)
+        successful = stats.get("successful_executions", 0)
+
+        if total == 0:
+            # No execution history, assume neutral
+            return 1.0
+
+        success_rate = successful / total
+
+        # Apply quadratic penalty
+        success_factor = success_rate**2
+
+        return success_factor
+
+    def _calculate_frequency_factor(self, stats: dict[str, Any]) -> float:
+        """
+        Calculate frequency factor with logarithmic diminishing returns.
+
+        Formula: log(frequency + 1)
+        Ensures frequently used commands are boosted but with diminishing returns.
+
+        Args:
+            stats: Command statistics
+
+        Returns:
+            Frequency factor (>= 0.0)
+        """
+        frequency = stats.get("total_frequency", 0)
+
+        # Logarithmic scaling to prevent over-boosting very frequent commands
+        # log(1) = 0, log(2) = 0.69, log(10) = 2.30, log(100) = 4.61
+        frequency_factor = math.log(frequency + 1)
+
+        # Normalize to reasonable range (0.0 to ~2.0)
+        # Commands used 1 time: ~0.69
+        # Commands used 10 times: ~2.30
+        # Commands used 100 times: ~4.61
+        # We keep raw log value as higher frequency should still boost significantly
+        return frequency_factor
 
     def explain_suggestion(self, suggestion: dict[str, Any]) -> str:
         """
