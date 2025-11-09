@@ -89,15 +89,98 @@ if command -v daedelus &> /dev/null; then
     echo "✅ Installation Complete!"
     echo "=========================================="
     echo ""
-    echo "Next steps:"
-    echo "  1. Run 'daedelus setup' to initialize"
-    echo "  2. Run 'daedelus start' to start the daemon"
-    echo "  3. Add shell integration to your shell RC file"
+
+    # Offer to run setup automatically
+    read -p "Run 'daedelus setup' now? (Y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+        echo ""
+        echo "Running daedelus setup..."
+        daedelus setup || {
+            echo "⚠️  Setup encountered an error, but you can run it manually later"
+        }
+        echo ""
+    fi
+
+    # Detect user's shell
+    USER_SHELL=$(basename "$SHELL")
+    echo "Detected shell: $USER_SHELL"
     echo ""
-    echo "Shell integration:"
-    echo "  ZSH:  Add to ~/.zshrc:  source \$(daedelus shell-integration zsh)"
-    echo "  Bash: Add to ~/.bashrc: source \$(daedelus shell-integration bash)"
-    echo "  Fish: Add to config:    source (daedelus shell-integration fish)"
+
+    # Offer to add shell integration automatically
+    if [[ "$USER_SHELL" == "zsh" ]] || [[ "$USER_SHELL" == "bash" ]] || [[ "$USER_SHELL" == "fish" ]]; then
+        echo "Shell integration can be automatically added to your shell config."
+        read -p "Add shell integration to your $USER_SHELL config? (Y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+            if [[ "$USER_SHELL" == "zsh" ]]; then
+                RC_FILE="$HOME/.zshrc"
+                INTEGRATION_LINE="source \$(daedelus shell-integration zsh)"
+            elif [[ "$USER_SHELL" == "bash" ]]; then
+                RC_FILE="$HOME/.bashrc"
+                INTEGRATION_LINE="source \$(daedelus shell-integration bash)"
+            elif [[ "$USER_SHELL" == "fish" ]]; then
+                RC_FILE="$HOME/.config/fish/config.fish"
+                INTEGRATION_LINE="source (daedelus shell-integration fish)"
+                mkdir -p "$HOME/.config/fish"
+            fi
+
+            # Check if already added
+            if grep -q "daedelus shell-integration" "$RC_FILE" 2>/dev/null; then
+                echo "✓ Shell integration already present in $RC_FILE"
+            else
+                echo "" >> "$RC_FILE"
+                echo "# Daedelus shell integration" >> "$RC_FILE"
+                echo "$INTEGRATION_LINE" >> "$RC_FILE"
+                echo "✓ Added shell integration to $RC_FILE"
+                echo ""
+                echo "⚠️  Please restart your shell or run:"
+                echo "   source $RC_FILE"
+            fi
+        else
+            echo ""
+            echo "To add shell integration manually later:"
+            echo "  ZSH:  Add to ~/.zshrc:  source \$(daedelus shell-integration zsh)"
+            echo "  Bash: Add to ~/.bashrc: source \$(daedelus shell-integration bash)"
+            echo "  Fish: Add to config:    source (daedelus shell-integration fish)"
+        fi
+    else
+        echo "Shell integration:"
+        echo "  ZSH:  Add to ~/.zshrc:  source \$(daedelus shell-integration zsh)"
+        echo "  Bash: Add to ~/.bashrc: source \$(daedelus shell-integration bash)"
+        echo "  Fish: Add to config:    source (daedelus shell-integration fish)"
+    fi
+
+    echo ""
+
+    # Offer to start daemon
+    read -p "Start the Daedelus daemon now? (Y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+        echo ""
+        echo "Starting daemon..."
+        daedelus start --background || {
+            echo "⚠️  Failed to start daemon. You can start it manually with:"
+            echo "   daedelus start"
+        }
+    else
+        echo ""
+        echo "To start the daemon later, run:"
+        echo "  daedelus start"
+    fi
+
+    echo ""
+    echo "=========================================="
+    echo "Installation and Setup Complete!"
+    echo "=========================================="
+    echo ""
+    echo "Quick commands:"
+    echo "  daedelus status      # Check daemon status"
+    echo "  daedelus repl        # Launch interactive mode"
+    echo "  daedelus --help      # See all commands"
+    echo ""
+    echo "For systemd auto-start on boot:"
+    echo "  ./scripts/install-systemd-service.sh"
     echo ""
 else
     echo ""
