@@ -251,9 +251,9 @@ class ModelManager:
             logger.debug(f"Conversion output: {result.stdout}")
 
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"GGUF conversion failed: {e.stderr}")
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Conversion timed out after 10 minutes")
+            raise RuntimeError(f"GGUF conversion failed: {e.stderr}") from e
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError("Conversion timed out after 10 minutes") from e
 
         # Quantize if needed
         if quantization != "f16":
@@ -286,9 +286,9 @@ class ModelManager:
                 temp_f16.unlink()  # Clean up f16 version
 
             except subprocess.CalledProcessError as e:
-                raise RuntimeError(f"Quantization failed: {e.stderr}")
-            except subprocess.TimeoutExpired:
-                raise RuntimeError("Quantization timed out after 10 minutes")
+                raise RuntimeError(f"Quantization failed: {e.stderr}") from e
+            except subprocess.TimeoutExpired as e:
+                raise RuntimeError("Quantization timed out after 10 minutes") from e
         else:
             # Just use f16 version
             shutil.copy2(temp_f16, output_path)
@@ -504,8 +504,8 @@ class ModelManager:
 
         # Import required libraries for model merging
         try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
             from peft import PeftModel
+            from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError:
             logger.error(
                 "transformers and peft are required for model forging. "
@@ -528,7 +528,7 @@ class ModelManager:
 
         except Exception as e:
             logger.error(f"Failed to load base model: {e}")
-            raise RuntimeError(f"Base model loading failed: {e}")
+            raise RuntimeError(f"Base model loading failed: {e}") from e
 
         # Step 2: Load and merge LoRA adapter
         logger.info(f"Loading LoRA adapter from {adapter_path}...")
@@ -545,7 +545,7 @@ class ModelManager:
 
         except Exception as e:
             logger.error(f"Failed to load/merge adapter: {e}")
-            raise RuntimeError(f"Adapter merge failed: {e}")
+            raise RuntimeError(f"Adapter merge failed: {e}") from e
 
         # Step 3: Save merged model in HuggingFace format (temporary)
         logger.info("Saving merged model in HuggingFace format...")
@@ -558,11 +558,11 @@ class ModelManager:
             try:
                 merged_model.save_pretrained(temp_hf_path)
                 tokenizer.save_pretrained(temp_hf_path)
-                logger.info(f"✓ Merged model saved to temporary directory")
+                logger.info("✓ Merged model saved to temporary directory")
 
             except Exception as e:
                 logger.error(f"Failed to save merged model: {e}")
-                raise RuntimeError(f"Model save failed: {e}")
+                raise RuntimeError(f"Model save failed: {e}") from e
 
             # Step 4: Convert to GGUF format using llama.cpp
             logger.info("Converting merged model to GGUF format...")
