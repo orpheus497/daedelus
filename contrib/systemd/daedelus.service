@@ -1,0 +1,25 @@
+[Unit]
+Description=Daedelus Terminal Assistant Daemon
+Documentation=https://github.com/orpheus497/daedelus
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/daedelus-daemon
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=daedelus
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

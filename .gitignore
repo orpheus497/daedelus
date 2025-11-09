@@ -4,6 +4,9 @@
 # ===========================
 # Development Documentation
 # ===========================
+# .dev-docs/ - AI-generated documentation (excluded from repository)
+.dev-docs/
+
 # .devdocs/ is included in repository (contains design docs and planning)
 
 # ===========================

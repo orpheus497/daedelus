@@ -17,7 +17,7 @@ Features:
     - ✅ Cross-platform compatible (Linux primary, macOS/Windows secondary)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "orpheus497"
 __license__ = "MIT"
 

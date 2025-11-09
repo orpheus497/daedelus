@@ -7,12 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Phase 2 (Planned - Q2 2025)
+### Changed
+
+- **Project Configuration** (`pyproject.toml`)
+  - Fixed entry point paths for CLI commands (`daedelus.cli.main:main`)
+  - Fixed daemon entry point (`daedelus.daemon.daemon:main`)
+  - Updated setuptools to use automatic package discovery
+  - Updated version to 0.2.0
+  - Added new dependencies for UI enhancements (rich, textual, jinja2)
+  - Added model management dependencies (requests, tqdm, huggingface_hub)
+  - Added pre-commit to development dependencies
+  - Updated development status classifier to Beta
+
+- **Git Configuration** (`.gitignore`)
+  - Added `.dev-docs/` directory exclusion for AI-generated documentation
+  - Maintains separation between project documentation and development artifacts
+
+### Added
+
+- **Infrastructure & DevOps**
+  - Pre-commit hooks configuration (`.pre-commit-config.yaml`)
+    - Automated code formatting with Black
+    - Import sorting with isort
+    - Linting with Ruff
+    - Type checking with mypy
+    - Security scanning with Bandit
+    - File hygiene checks
+  - GitHub Actions CI/CD pipeline (`.github/workflows/test.yml`)
+    - Multi-Python version testing (3.10, 3.11, 3.12)
+    - Multi-OS testing (Ubuntu, macOS)
+    - Automated linting and type checking
+    - Code coverage reporting to Codecov
+    - Security scanning
+  - GitHub Actions release pipeline (`.github/workflows/release.yml`)
+    - Automated package building
+    - TestPyPI testing
+    - PyPI publishing on version tags
+    - GitHub release creation with artifacts
+  - Systemd service integration (`contrib/systemd/`)
+    - User service file for automatic daemon management
+    - Socket activation support
+    - Security hardening (PrivateTmp, ProtectSystem, NoNewPrivileges)
+    - Installation documentation
+
+- **Dependency Management**
+  - Requirements files for different installation scenarios
+    - `requirements.txt` - Core Phase 1 dependencies
+    - `requirements-dev.txt` - Development tools and testing
+    - `requirements-llm.txt` - Phase 2 LLM features
+  - All dependencies verified as FOSS with permissive licenses
+
+### Fixed
+
+- Entry point configuration in `pyproject.toml` preventing CLI installation
+- Package discovery configuration preventing proper installation
+- Version synchronization across project files
+
+### Phase 2 LLM Enhancement (Implemented)
 - LLM integration (llama.cpp + Phi-3-mini)
 - RAG pipeline for context injection
 - PEFT/LoRA fine-tuning on daemon shutdown
-- Natural language command explanations
-- Command generation from descriptions
+- Natural language command explanations (`src/daedelus/llm/command_explainer.py`)
+- Command generation from descriptions (`src/daedelus/llm/command_generator.py`)
+- Enhanced suggestions with LLM fallback (`src/daedelus/llm/enhanced_suggestions.py`)
+- Comprehensive test suite (179+ tests, >80% coverage)
 
 ## [0.1.0] - 2025-11-09
 

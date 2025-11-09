@@ -1,0 +1,11 @@
+[Unit]
+Description=Daedelus Terminal Assistant Socket
+Documentation=https://github.com/orpheus497/daedelus
+
+[Socket]
+ListenStream=%t/daedelus/daemon.sock
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=sockets.target
