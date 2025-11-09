@@ -4,27 +4,36 @@ Documentation=https://github.com/orpheus497/daedelus
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 ExecStart=/usr/bin/env daedelus start
 ExecStop=/usr/bin/env daedelus stop
 ExecReload=/usr/bin/env daedelus restart
 Restart=on-failure
 RestartSec=5s
-User=%i
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10s
 WorkingDirectory=%h
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=daedelus
+
+# Environment
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
 
 # Resource limits
 LimitNOFILE=4096
 Nice=10
+CPUQuota=50%
+MemoryMax=512M
 
-# Security hardening
+# Security hardening (relaxed for terminal assistant)
 PrivateTmp=true
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=%h/.local/share/daedelus %h/.cache/daedelus
+ProtectSystem=false
+ProtectHome=false
+ReadWritePaths=%h/.local/share/daedelus %h/.cache/daedelus %h/.config/daedelus
 
 [Install]
 WantedBy=default.target

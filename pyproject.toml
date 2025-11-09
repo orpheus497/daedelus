@@ -154,7 +154,15 @@ Changelog = "https://github.com/orpheus497/daedelus/blob/main/CHANGELOG.md"
 packages = {find = {where = ["src"]}}
 
 [tool.setuptools.package-data]
-daedelus = ["py.typed", "*.yaml", "*.sql"]
+daedelus = [
+    "py.typed",
+    "*.yaml",
+    "*.sql",
+    "shell_clients/**/*",
+    "shell_clients/bash/*",
+    "shell_clients/zsh/*",
+    "shell_clients/fish/*",
+]
 
 # ========================================
 # BLACK CODE FORMATTER

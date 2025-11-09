@@ -45,8 +45,18 @@ ask_yes_no() {
     done
 }
 
-# 1. Stop the daemon if running
-echo -e "${BLUE}[1/6]${NC} Checking for running daemon..."
+# 1. Stop the daemon and systemd service if running
+echo -e "${BLUE}[1/7]${NC} Checking for running daemon and services..."
+
+# Check for systemd service first
+if systemctl --user is-active --quiet daedelus 2>/dev/null; then
+    echo -e "${YELLOW}Stopping systemd service...${NC}"
+    systemctl --user stop daedelus || true
+    systemctl --user disable daedelus || true
+    echo -e "${GREEN}✓${NC} Systemd service stopped and disabled"
+fi
+
+# Stop daemon if running
 if command -v daedelus &> /dev/null; then
     if daedelus status &> /dev/null; then
         echo -e "${YELLOW}Stopping daemon...${NC}"
@@ -54,11 +64,38 @@ if command -v daedelus &> /dev/null; then
         sleep 1
     fi
 fi
-echo -e "${GREEN}✓${NC} Daemon stopped"
+
+# Force kill any remaining processes
+DAEMON_PIDS=$(pgrep -f "daedelus-daemon\|daedelus start" || true)
+if [ -n "$DAEMON_PIDS" ]; then
+    echo -e "${YELLOW}Found lingering daemon processes, terminating...${NC}"
+    kill $DAEMON_PIDS 2>/dev/null || true
+    sleep 1
+    # Force kill if still running
+    kill -9 $DAEMON_PIDS 2>/dev/null || true
+fi
+
+echo -e "${GREEN}✓${NC} All processes stopped"
 echo ""
 
-# 2. Remove shell integration
-echo -e "${BLUE}[2/6]${NC} Removing shell integration..."
+# 2. Remove systemd service files
+echo -e "${BLUE}[2/7]${NC} Removing systemd service files..."
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+if [ -f "$SYSTEMD_USER_DIR/daedelus.service" ]; then
+    if ask_yes_no "Remove systemd service file?" "y"; then
+        rm -f "$SYSTEMD_USER_DIR/daedelus.service"
+        systemctl --user daemon-reload 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} Systemd service file removed"
+    else
+        echo -e "${YELLOW}⚠${NC}  Systemd service file kept"
+    fi
+else
+    echo -e "${GREEN}✓${NC} No systemd service found"
+fi
+echo ""
+
+# 3. Remove shell integration
+echo -e "${BLUE}[3/7]${NC} Removing shell integration..."
 echo -e "${YELLOW}Please manually remove these lines from your shell config:${NC}"
 echo ""
 echo -e "  ${RED}# From ~/.zshrc:${NC}"
@@ -71,15 +108,39 @@ echo -e "  ${RED}# From ~/.config/fish/config.fish:${NC}"
 echo -e "  ${RED}source (daedelus shell-integration fish)${NC}"
 echo ""
 
-if ask_yes_no "Have you removed the shell integration?" "n"; then
-    echo -e "${GREEN}✓${NC} Shell integration noted for removal"
+# Offer to automatically remove shell integration
+if ask_yes_no "Automatically remove shell integration from config files?" "y"; then
+    # Remove from common RC files
+    for RC_FILE in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.config/fish/config.fish"; do
+        if [ -f "$RC_FILE" ]; then
+            if grep -q "daedelus shell-integration" "$RC_FILE"; then
+                # Create backup
+                cp "$RC_FILE" "${RC_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+                # Remove the integration lines
+                sed -i.tmp '/# Daedelus shell integration/d' "$RC_FILE"
+                sed -i.tmp '/daedelus shell-integration/d' "$RC_FILE"
+                rm -f "${RC_FILE}.tmp"
+                echo -e "${GREEN}✓${NC} Removed from $RC_FILE (backup created)"
+            fi
+        fi
+    done
 else
-    echo -e "${YELLOW}⚠${NC}  Remember to remove shell integration manually!"
+    echo -e "${YELLOW}Please manually remove these lines from your shell config:${NC}"
+    echo ""
+    echo -e "  ${RED}# From ~/.zshrc:${NC}"
+    echo -e "  ${RED}source \$(daedelus shell-integration zsh)${NC}"
+    echo ""
+    echo -e "  ${RED}# From ~/.bashrc:${NC}"
+    echo -e "  ${RED}source \$(daedelus shell-integration bash)${NC}"
+    echo ""
+    echo -e "  ${RED}# From ~/.config/fish/config.fish:${NC}"
+    echo -e "  ${RED}source (daedelus shell-integration fish)${NC}"
+    echo ""
 fi
 echo ""
 
-# 3. Uninstall Python package
-echo -e "${BLUE}[3/6]${NC} Uninstalling daedelus package..."
+# 4. Uninstall Python package
+echo -e "${BLUE}[4/7]${NC} Uninstalling daedelus package..."
 if pip show daedelus &> /dev/null; then
     echo -e "${YELLOW}Uninstalling via pip...${NC}"
     pip uninstall -y daedelus || true
@@ -97,8 +158,8 @@ if [ -d "$VENV_DIR" ]; then
 fi
 echo ""
 
-# 4. Remove configuration
-echo -e "${BLUE}[4/6]${NC} Configuration files..."
+# 5. Remove configuration
+echo -e "${BLUE}[5/7]${NC} Configuration files..."
 if [ -d "$CONFIG_DIR" ]; then
     echo -e "  Found: ${CONFIG_DIR}"
     if ask_yes_no "Remove configuration files?" "y"; then
@@ -112,8 +173,8 @@ else
 fi
 echo ""
 
-# 5. Remove data
-echo -e "${BLUE}[5/6]${NC} Data files..."
+# 6. Remove data
+echo -e "${BLUE}[6/7]${NC} Data files..."
 if [ -d "$DATA_DIR" ]; then
     # Calculate size
     DATA_SIZE=$(du -sh "$DATA_DIR" 2>/dev/null | cut -f1)
@@ -136,8 +197,8 @@ else
 fi
 echo ""
 
-# 6. Remove LLM models
-echo -e "${BLUE}[6/6]${NC} LLM models..."
+# 7. Remove LLM models
+echo -e "${BLUE}[7/7]${NC} LLM models..."
 DAEDELUS_MODEL="${MODELS_DIR}/model.gguf"
 if [ -f "$DAEDELUS_MODEL" ]; then
     MODEL_SIZE=$(du -sh "$DAEDELUS_MODEL" 2>/dev/null | cut -f1)
@@ -192,6 +253,45 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}Thank you for trying Daedalus!${NC}"
+
+# Final verification
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}   Post-Uninstall Verification${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Check for remaining processes
+REMAINING_PROCS=$(pgrep -f "daedelus" || true)
+if [ -n "$REMAINING_PROCS" ]; then
+    echo -e "${YELLOW}⚠  Warning: Found remaining daedelus processes:${NC}"
+    ps -f -p $REMAINING_PROCS || true
+    echo ""
+    if ask_yes_no "Kill remaining processes?" "y"; then
+        kill -9 $REMAINING_PROCS 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} Processes terminated"
+    fi
+else
+    echo -e "${GREEN}✓${NC} No remaining processes found"
+fi
+
+# Check for command availability
+if command -v daedelus &> /dev/null; then
+    echo -e "${YELLOW}⚠  Warning: 'daedelus' command still available${NC}"
+    echo -e "${YELLOW}   You may need to restart your shell or check your PATH${NC}"
+else
+    echo -e "${GREEN}✓${NC} 'daedelus' command successfully removed"
+fi
+
+# Check for daemon socket
+SOCKET_PATH="$HOME/.local/share/daedelus/runtime/daemon.sock"
+if [ -S "$SOCKET_PATH" ]; then
+    echo -e "${YELLOW}⚠  Warning: Daemon socket still exists${NC}"
+    rm -f "$SOCKET_PATH" || true
+else
+    echo -e "${GREEN}✓${NC} No daemon socket found"
+fi
+
+echo ""
+echo -e "${BLUE}Thank you for trying Daedelus!${NC}"
 echo -e "Feedback and issues: ${BLUE}https://github.com/orpheus497/daedelus/issues${NC}"
 echo ""

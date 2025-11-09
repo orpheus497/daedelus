@@ -1,0 +1,46 @@
+# MANIFEST.in - Include additional files in sdist/bdist
+# Created by: orpheus497
+
+# Core documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+include QUICKSTART.md
+include CONTRIBUTING.md
+
+# Configuration files
+include config.example.yaml
+include requirements*.txt
+
+# Installation scripts
+include install.sh
+include uninstall.sh
+recursive-include scripts *.sh
+
+# Systemd service files
+recursive-include systemd *.service
+
+# Shell integration files (now in package)
+# These are handled by package_data in pyproject.toml
+# recursive-include src/daedelus/shell_clients *
+
+# Documentation
+recursive-include docs *.md *.rst *.txt
+
+# Tests (include in sdist but not bdist_wheel)
+recursive-include tests *.py
+
+# Exclude compiled files and caches
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .git*
+
+# Exclude development and build artifacts
+prune .venv
+prune venv
+prune build
+prune dist
+prune *.egg-info
