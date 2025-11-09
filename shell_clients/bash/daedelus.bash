@@ -272,7 +272,7 @@ daedelus_init() {
     # Check if daemon is running
     if ! daedelus_is_daemon_running; then
         echo "⚠️  Daedelus daemon not running"
-        echo "Start it with: daedelus start"
+        echo "Start it with: daedelus start (or: deus start)"
         return 1
     fi
 
@@ -300,6 +300,9 @@ alias dstatus='daedelus status'
 
 # Quick alias to search history
 alias dsearch='daedelus search'
+
+# Quick alias for REPL
+alias di='daedelus repl'
 
 # ============================================
 # End of Daedelus Bash Integration

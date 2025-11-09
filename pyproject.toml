@@ -128,6 +128,9 @@ dev = [
 [project.scripts]
 daedelus = "daedelus.cli.main:main"
 daedelus-daemon = "daedelus.daemon.daemon:main"
+# Short aliases
+deus = "daedelus.cli.main:main"
+deus-daemon = "daedelus.daemon.daemon:main"
 
 # ========================================
 # PROJECT URLS
