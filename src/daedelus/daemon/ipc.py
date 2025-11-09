@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +20,15 @@ class MessageType(Enum):
     """IPC message types."""
 
     # Shell -> Daemon
-    SUGGEST = "suggest"           # Request command suggestions
-    LOG_COMMAND = "log_command"   # Log executed command
-    COMPLETE = "complete"         # Request completion options
-    SEARCH = "search"             # Search command history
+    SUGGEST = "suggest"  # Request command suggestions
+    LOG_COMMAND = "log_command"  # Log executed command
+    COMPLETE = "complete"  # Request completion options
+    SEARCH = "search"  # Search command history
 
     # Control messages
-    PING = "ping"                 # Health check
-    STATUS = "status"             # Get daemon status
-    SHUTDOWN = "shutdown"         # Graceful shutdown
+    PING = "ping"  # Health check
+    STATUS = "status"  # Get daemon status
+    SHUTDOWN = "shutdown"  # Graceful shutdown
 
     # Responses
     SUCCESS = "success"
@@ -46,7 +46,7 @@ class IPCMessage:
     }
     """
 
-    def __init__(self, msg_type: MessageType, data: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, msg_type: MessageType, data: dict[str, Any] | None = None) -> None:
         """
         Create IPC message.
 
@@ -59,10 +59,12 @@ class IPCMessage:
 
     def to_json(self) -> str:
         """Serialize message to JSON string."""
-        return json.dumps({
-            "type": self.type.value,
-            "data": self.data,
-        })
+        return json.dumps(
+            {
+                "type": self.type.value,
+                "data": self.data,
+            }
+        )
 
     @classmethod
     def from_json(cls, json_str: str) -> "IPCMessage":
@@ -84,7 +86,7 @@ class IPCMessage:
             data = obj.get("data", {})
             return cls(msg_type, data)
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            raise ValueError(f"Invalid IPC message: {e}")
+            raise ValueError(f"Invalid IPC message: {e}") from e
 
     def __repr__(self) -> str:
         """String representation."""
@@ -109,7 +111,7 @@ class IPCServer:
         """
         self.socket_path = socket_path
         self.handler = handler
-        self.socket: Optional[socket.socket] = None
+        self.socket: socket.socket | None = None
 
     def start(self) -> None:
         """
@@ -121,6 +123,7 @@ class IPCServer:
         # Remove old socket file if exists
         try:
             import os
+
             os.unlink(self.socket_path)
         except FileNotFoundError:
             pass
@@ -133,6 +136,7 @@ class IPCServer:
         # Set restrictive permissions (owner only)
         import os
         import stat
+
         os.chmod(self.socket_path, stat.S_IRUSR | stat.S_IWUSR)
 
         logger.info(f"IPC server listening on {self.socket_path}")
@@ -238,6 +242,7 @@ class IPCServer:
         # Remove socket file
         try:
             import os
+
             os.unlink(self.socket_path)
         except FileNotFoundError:
             pass
@@ -303,8 +308,8 @@ class IPCClient:
         self,
         partial: str,
         cwd: str,
-        history: List[str],
-    ) -> List[Dict[str, Any]]:
+        history: list[str],
+    ) -> list[dict[str, Any]]:
         """
         Request command suggestions.
 
@@ -375,10 +380,10 @@ class IPCClient:
             msg = IPCMessage(MessageType.PING)
             response = self.send_message(msg)
             return response.type == MessageType.SUCCESS
-        except:
+        except Exception:
             return False
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """
         Get daemon status.
 

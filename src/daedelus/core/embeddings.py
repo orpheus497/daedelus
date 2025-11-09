@@ -17,7 +17,6 @@ import re
 import shlex
 import tempfile
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -76,11 +75,11 @@ class CommandEmbedder:
         self.word_ngrams = word_ngrams
         self.epoch = epoch
 
-        self.model: Optional[fasttext.FastText._FastText] = None
+        self.model: fasttext.FastText._FastText | None = None
 
         logger.info(f"CommandEmbedder initialized (dim={embedding_dim})")
 
-    def train_from_corpus(self, commands: List[str]) -> None:
+    def train_from_corpus(self, commands: list[str]) -> None:
         """
         Train FastText model from command corpus.
 
@@ -111,6 +110,10 @@ class CommandEmbedder:
 
         try:
             # Train unsupervised FastText model
+            if fasttext is None:
+                raise ImportError(
+                    "fasttext is not installed. Install it with: pip install fasttext==0.9.2"
+                )
             logger.info(f"Training FastText model on {len(commands)} commands...")
             self.model = fasttext.train_unsupervised(
                 str(train_file),
@@ -133,10 +136,7 @@ class CommandEmbedder:
             # Save model
             self.save()
 
-            logger.info(
-                f"Model trained successfully. "
-                f"Vocabulary size: {len(self.model.words)}"
-            )
+            logger.info(f"Model trained successfully. " f"Vocabulary size: {len(self.model.words)}")
 
         except Exception as e:
             logger.error(f"FastText training failed: {e}", exc_info=True)
@@ -158,6 +158,11 @@ class CommandEmbedder:
         """
         if not self.model_path.exists():
             raise FileNotFoundError(f"Model not found: {self.model_path}")
+
+        if fasttext is None:
+            raise ImportError(
+                "fasttext is not installed. Install it with: pip install fasttext==0.9.2"
+            )
 
         logger.info(f"Loading model from {self.model_path}")
         self.model = fasttext.load_model(str(self.model_path))
@@ -211,9 +216,9 @@ class CommandEmbedder:
 
     def encode_context(
         self,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
-        partial: Optional[str] = None,
+        cwd: str | None = None,
+        history: list[str] | None = None,
+        partial: str | None = None,
     ) -> npt.NDArray[np.float32]:
         """
         Encode context information into a vector.
@@ -261,7 +266,7 @@ class CommandEmbedder:
         else:
             return np.zeros(self.embedding_dim, dtype=np.float32)
 
-    def tokenize(self, command: str) -> List[str]:
+    def tokenize(self, command: str) -> list[str]:
         """
         Tokenize shell command into meaningful tokens.
 
@@ -318,9 +323,9 @@ class CommandEmbedder:
     def get_similar_commands(
         self,
         command: str,
-        candidates: List[str],
+        candidates: list[str],
         top_k: int = 5,
-    ) -> List[tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Find most similar commands from a list of candidates.
 

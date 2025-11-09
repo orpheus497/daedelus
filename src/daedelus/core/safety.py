@@ -11,8 +11,8 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Pattern, Set
+from re import Pattern
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class DangerousPattern:
     pattern: str  # Regex pattern
     description: str  # Human-readable description
     level: SafetyLevel  # Danger level
-    examples: List[str]  # Example dangerous commands
+    examples: list[str]  # Example dangerous commands
 
 
 @dataclass
@@ -42,8 +42,8 @@ class SafetyReport:
 
     command: str  # Original command
     level: SafetyLevel  # Safety level
-    warnings: List[str]  # List of warnings
-    matched_patterns: List[DangerousPattern]  # Patterns that matched
+    warnings: list[str]  # List of warnings
+    matched_patterns: list[DangerousPattern]  # Patterns that matched
     safe_to_execute: bool  # Whether command can be executed
     explanation: str  # Human-readable explanation
 
@@ -163,8 +163,8 @@ class SafetyAnalyzer:
         self,
         enabled: bool = True,
         level: str = "warn",
-        custom_patterns: Optional[List[Dict[str, str]]] = None,
-        whitelist_patterns: Optional[List[str]] = None,
+        custom_patterns: list[dict[str, str]] | None = None,
+        whitelist_patterns: list[str] | None = None,
     ) -> None:
         """
         Initialize safety analyzer.
@@ -179,7 +179,7 @@ class SafetyAnalyzer:
         self.level = level.lower()
 
         # Compile dangerous patterns
-        self.patterns: List[DangerousPattern] = self.DANGEROUS_PATTERNS.copy()
+        self.patterns: list[DangerousPattern] = self.DANGEROUS_PATTERNS.copy()
 
         # Add custom patterns
         if custom_patterns:
@@ -194,7 +194,7 @@ class SafetyAnalyzer:
                 )
 
         # Compile whitelist
-        self.whitelist: List[Pattern] = []
+        self.whitelist: list[Pattern] = []
         if whitelist_patterns:
             for pattern in whitelist_patterns:
                 try:
@@ -204,7 +204,7 @@ class SafetyAnalyzer:
 
         logger.info(f"Safety analyzer initialized (level={self.level}, enabled={self.enabled})")
 
-    def analyze(self, command: str, context: Optional[Dict[str, str]] = None) -> SafetyReport:
+    def analyze(self, command: str, context: dict[str, str] | None = None) -> SafetyReport:
         """
         Analyze a command for safety issues.
 
@@ -237,8 +237,8 @@ class SafetyAnalyzer:
             )
 
         # Check against dangerous patterns
-        matched_patterns: List[DangerousPattern] = []
-        warnings: List[str] = []
+        matched_patterns: list[DangerousPattern] = []
+        warnings: list[str] = []
         max_level = SafetyLevel.SAFE
 
         for pattern in self.patterns:
@@ -292,7 +292,7 @@ class SafetyAnalyzer:
     def _generate_explanation(
         self,
         command: str,
-        matched_patterns: List[DangerousPattern],
+        matched_patterns: list[DangerousPattern],
         level: SafetyLevel,
     ) -> str:
         """Generate human-readable explanation of safety analysis."""
@@ -320,7 +320,7 @@ class SafetyAnalyzer:
 
         return "".join(parts)
 
-    def get_statistics(self) -> Dict[str, int]:
+    def get_statistics(self) -> dict[str, int]:
         """
         Get statistics about loaded patterns.
 
@@ -329,9 +329,7 @@ class SafetyAnalyzer:
         """
         stats = {
             "total_patterns": len(self.patterns),
-            "dangerous_patterns": sum(
-                1 for p in self.patterns if p.level == SafetyLevel.DANGEROUS
-            ),
+            "dangerous_patterns": sum(1 for p in self.patterns if p.level == SafetyLevel.DANGEROUS),
             "warning_patterns": sum(1 for p in self.patterns if p.level == SafetyLevel.WARNING),
             "whitelist_patterns": len(self.whitelist),
             "enabled": int(self.enabled),
@@ -339,7 +337,7 @@ class SafetyAnalyzer:
         return stats
 
 
-def load_safety_analyzer_from_config(config: Dict[str, Any]) -> SafetyAnalyzer:
+def load_safety_analyzer_from_config(config: dict[str, Any]) -> SafetyAnalyzer:
     """
     Load safety analyzer from configuration dictionary.
 

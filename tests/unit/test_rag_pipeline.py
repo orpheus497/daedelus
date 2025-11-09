@@ -4,10 +4,9 @@ Unit tests for RAGPipeline.
 Tests context retrieval and prompt construction for LLM.
 """
 
+from unittest.mock import Mock
+
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
-from typing import List, Dict, Any
 
 
 @pytest.fixture
@@ -361,8 +360,8 @@ class TestRelevanceFiltering:
         # Mock results with varying confidence
         mock_vector_store.search.return_value = [
             ("git commit", 0.95),  # High confidence
-            ("git add", 0.88),     # Medium confidence
-            ("ls -la", 0.45),      # Low confidence
+            ("git add", 0.88),  # Medium confidence
+            ("ls -la", 0.45),  # Low confidence
         ]
 
         rag = RAGPipeline(mock_db, mock_embedder, mock_vector_store, min_similarity=0.5)

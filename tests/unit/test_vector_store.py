@@ -13,9 +13,6 @@ Tests all major functionality:
 Created by: orpheus497
 """
 
-import pickle
-from pathlib import Path
-
 import numpy as np
 import pytest
 

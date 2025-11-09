@@ -17,15 +17,13 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Import with graceful degradation
 try:
     from huggingface_hub import hf_hub_download
-    from tqdm import tqdm
-    import requests
+
     HF_AVAILABLE = True
 except ImportError:
     HF_AVAILABLE = False
@@ -42,9 +40,9 @@ class ModelInfo:
     version: int  # Version number (0 for base Phi-3)
     created: datetime  # Creation timestamp
     checksum: str  # SHA256 checksum
-    parent: Optional[str]  # Parent model name (for lineage tracking)
+    parent: str | None  # Parent model name (for lineage tracking)
     training_commands: int  # Number of commands used for training
-    metadata: Dict[str, str]  # Additional metadata
+    metadata: dict[str, str]  # Additional metadata
 
 
 class ModelManager:
@@ -103,13 +101,13 @@ class ModelManager:
 
         logger.info(f"Model manager initialized: {self.models_dir}")
 
-    def _load_metadata(self) -> Dict[str, ModelInfo]:
+    def _load_metadata(self) -> dict[str, ModelInfo]:
         """Load model metadata from JSON."""
         if not self.metadata_file.exists():
             return {}
 
         try:
-            with open(self.metadata_file, "r") as f:
+            with open(self.metadata_file) as f:
                 data = json.load(f)
 
             metadata = {}
@@ -178,8 +176,7 @@ class ModelManager:
         """
         if not HF_AVAILABLE:
             raise RuntimeError(
-                "huggingface_hub not installed. "
-                "Install with: pip install 'daedelus[llm]'"
+                "huggingface_hub not installed. " "Install with: pip install 'daedelus[llm]'"
             )
 
         if model_name not in self.MODEL_REGISTRY:
@@ -241,7 +238,7 @@ class ModelManager:
             logger.error(f"Download failed: {e}")
             if target_path.exists():
                 target_path.unlink()
-            raise RuntimeError(f"Failed to download {model_name}: {e}")
+            raise RuntimeError(f"Failed to download {model_name}: {e}") from e
 
     def initialize_daedelus(self, base_model: str = "phi-3-mini") -> Path:
         """
@@ -303,7 +300,7 @@ class ModelManager:
 
         return daedelus_v1_path
 
-    def get_current_model(self) -> Optional[ModelInfo]:
+    def get_current_model(self) -> ModelInfo | None:
         """
         Get information about the currently active model.
 
@@ -328,7 +325,7 @@ class ModelManager:
         self,
         adapter_path: Path,
         training_commands: int,
-        notes: Optional[str] = None,
+        notes: str | None = None,
     ) -> Path:
         """
         Forge the next version of Daedelus by merging adapter.
@@ -396,11 +393,13 @@ class ModelManager:
         current_link.symlink_to(next_model_path.name)
 
         logger.info(f"✓ Forged: {next_model_path}")
-        logger.info(f"  Total training: {self.metadata[f'daedelus_v{next_version}'].training_commands} commands")
+        logger.info(
+            f"  Total training: {self.metadata[f'daedelus_v{next_version}'].training_commands} commands"
+        )
 
         return next_model_path
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """
         List all available models.
 
@@ -411,7 +410,7 @@ class ModelManager:
         models.sort(key=lambda m: m.version)
         return models
 
-    def get_model_info(self, model_name: str) -> Optional[ModelInfo]:
+    def get_model_info(self, model_name: str) -> ModelInfo | None:
         """
         Get information about a specific model.
 
@@ -454,7 +453,7 @@ class ModelManager:
             logger.error(f"  Actual:   {actual_checksum[:16]}...")
             return False
 
-    def get_lineage(self, model_name: str) -> List[str]:
+    def get_lineage(self, model_name: str) -> list[str]:
         """
         Get the lineage of a model (chain of parents).
 
@@ -516,8 +515,7 @@ class ModelManager:
         """
         # Get all daedelus versions
         daedelus_models = [
-            info for info in self.metadata.values()
-            if info.name.startswith("daedelus_v")
+            info for info in self.metadata.values() if info.name.startswith("daedelus_v")
         ]
         daedelus_models.sort(key=lambda m: m.version, reverse=True)
 

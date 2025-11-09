@@ -4,10 +4,10 @@ Unit tests for LLMManager.
 Tests LLM inference capabilities via llama.cpp.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
-from typing import Dict, List
+from unittest.mock import patch
+
+import pytest
 
 
 class MockLlama:
@@ -19,41 +19,45 @@ class MockLlama:
         self.n_gpu_layers = n_gpu_layers
         self.kwargs = kwargs
 
-    def __call__(self, prompt: str, max_tokens: int = 100, **kwargs) -> Dict:
+    def __call__(self, prompt: str, max_tokens: int = 100, **kwargs) -> dict:
         """Mock completion."""
         return {
-            "choices": [{
-                "text": f"Generated response for: {prompt[:30]}...",
-                "finish_reason": "stop",
-            }],
+            "choices": [
+                {
+                    "text": f"Generated response for: {prompt[:30]}...",
+                    "finish_reason": "stop",
+                }
+            ],
             "usage": {
                 "prompt_tokens": len(prompt.split()),
                 "completion_tokens": max_tokens,
                 "total_tokens": len(prompt.split()) + max_tokens,
-            }
+            },
         }
 
-    def create_chat_completion(self, messages: List[Dict], **kwargs) -> Dict:
+    def create_chat_completion(self, messages: list[dict], **kwargs) -> dict:
         """Mock chat completion."""
         last_message = messages[-1]["content"] if messages else ""
         return {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": f"Chat response for: {last_message[:30]}...",
-                },
-                "finish_reason": "stop",
-            }],
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": f"Chat response for: {last_message[:30]}...",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
             "usage": {
                 "prompt_tokens": sum(len(m["content"].split()) for m in messages),
                 "completion_tokens": 50,
                 "total_tokens": sum(len(m["content"].split()) for m in messages) + 50,
-            }
+            },
         }
 
-    def tokenize(self, text: str) -> List[int]:
+    def tokenize(self, text: str) -> list[int]:
         """Mock tokenization."""
-        return [i for i in range(len(text.split()))]
+        return list(range(len(text.split())))
 
 
 @pytest.fixture
@@ -77,6 +81,7 @@ class TestLLMManagerImport:
         """Test that module can be imported even without llama-cpp-python."""
         # This should not raise an error
         from daedelus.llm import llm_manager
+
         assert llm_manager is not None
 
     def test_missing_dependency_error(self, tmp_path):
@@ -340,6 +345,7 @@ class TestLLMErrorHandling:
 
     def test_generation_error_handling(self, mock_llama, mock_model_file):
         """Test error handling during generation."""
+
         # Mock Llama that raises an error
         class ErrorLlama(MockLlama):
             def __call__(self, *args, **kwargs):
@@ -355,6 +361,7 @@ class TestLLMErrorHandling:
 
     def test_chat_error_handling(self, mock_llama, mock_model_file):
         """Test error handling during chat completion."""
+
         # Mock Llama that raises an error
         class ErrorLlama(MockLlama):
             def create_chat_completion(self, *args, **kwargs):

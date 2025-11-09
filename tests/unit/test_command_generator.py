@@ -4,8 +4,9 @@ Unit tests for CommandGenerator.
 Tests command generation from natural language descriptions.
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 
 @pytest.fixture
@@ -104,9 +105,7 @@ class TestBasicGeneration:
         mock_llm.generate.return_value = "find . -name '*.log' -mtime +30 -delete"
 
         generator = CommandGenerator(mock_llm, mock_rag)
-        command = generator.generate_command(
-            "delete log files older than 30 days"
-        )
+        command = generator.generate_command("delete log files older than 30 days")
 
         assert isinstance(command, str)
         assert "find" in command or "log" in command
@@ -140,9 +139,7 @@ class TestMultipleAlternatives:
         from daedelus.llm.command_generator import CommandGenerator
 
         # Mock returns many alternatives
-        mock_llm.generate.return_value = "\n".join([
-            "cmd1", "cmd2", "cmd3", "cmd4", "cmd5"
-        ])
+        mock_llm.generate.return_value = "\n".join(["cmd1", "cmd2", "cmd3", "cmd4", "cmd5"])
 
         generator = CommandGenerator(mock_llm, mock_rag)
         commands = generator.generate_command(
@@ -299,11 +296,7 @@ class TestCommandCompletion:
         """Test basic partial completion."""
         from daedelus.llm.command_generator import CommandGenerator
 
-        mock_llm.generate.return_value = (
-            "git commit\n"
-            "git commit -m\n"
-            "git commit -am"
-        )
+        mock_llm.generate.return_value = "git commit\n" "git commit -m\n" "git commit -am"
 
         generator = CommandGenerator(mock_llm, mock_rag)
         completions = generator.complete_partial("git com")
@@ -335,13 +328,15 @@ class TestCommandCompletion:
         from daedelus.llm.command_generator import CommandGenerator
 
         # Mock returns many completions
-        mock_llm.generate.return_value = "\n".join([
-            "git commit",
-            "git commit -m",
-            "git commit -am",
-            "git commit --amend",
-            "git commit -a",
-        ])
+        mock_llm.generate.return_value = "\n".join(
+            [
+                "git commit",
+                "git commit -m",
+                "git commit -am",
+                "git commit --amend",
+                "git commit -a",
+            ]
+        )
 
         generator = CommandGenerator(mock_llm, mock_rag)
         completions = generator.complete_partial("git com")
@@ -477,9 +472,7 @@ class TestErrorHandling:
         from daedelus.llm.command_generator import CommandGenerator
 
         # Mock returns only explanations, no actual commands
-        mock_llm.generate.return_value = (
-            "This would list all files in the directory."
-        )
+        mock_llm.generate.return_value = "This would list all files in the directory."
 
         generator = CommandGenerator(mock_llm, mock_rag)
         command = generator.generate_command("list files")

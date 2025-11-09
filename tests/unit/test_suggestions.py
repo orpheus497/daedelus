@@ -14,7 +14,6 @@ Tests all major functionality:
 Created by: orpheus497
 """
 
-import numpy as np
 import pytest
 
 from daedelus.core.database import CommandDatabase
@@ -385,7 +384,7 @@ class TestMultiTierCascade:
         suggestions = engine.get_suggestions("git")
 
         # Should have suggestions from different tiers
-        sources = set(s["source"] for s in suggestions)
+        sources = {s["source"] for s in suggestions}
         # At least one tier should be represented
         assert len(sources) >= 1
 

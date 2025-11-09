@@ -10,12 +10,11 @@ Created by: orpheus497
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 try:
-    from peft import LoraConfig, get_peft_model, PeftModel
+    from peft import LoraConfig, PeftModel, get_peft_model
     from transformers import AutoModelForCausalLM, AutoTokenizer
 except ImportError:
     LoraConfig = None  # type: ignore
@@ -43,7 +42,7 @@ class PEFTTrainer:
     def __init__(
         self,
         model_name: str = "microsoft/Phi-3-mini-4k-instruct",
-        adapter_path: Optional[Path] = None,
+        adapter_path: Path | None = None,
         r: int = 8,
         lora_alpha: int = 32,
         lora_dropout: float = 0.1,
@@ -60,8 +59,7 @@ class PEFTTrainer:
         """
         if LoraConfig is None:
             raise ImportError(
-                "PEFT dependencies not installed. "
-                "Install with: pip install 'daedelus[llm]'"
+                "PEFT dependencies not installed. " "Install with: pip install 'daedelus[llm]'"
             )
 
         self.model_name = model_name
@@ -77,10 +75,10 @@ class PEFTTrainer:
 
     def prepare_training_data(
         self,
-        commands: List[str],
-        descriptions: Optional[List[str]] = None,
+        commands: list[str],
+        descriptions: list[str] | None = None,
         max_samples: int = 1000,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """
         Prepare training data from command history.
 
@@ -132,8 +130,8 @@ class PEFTTrainer:
 
     def train_adapter(
         self,
-        training_data: List[Dict[str, str]],
-        output_dir: Optional[Path] = None,
+        training_data: list[dict[str, str]],
+        output_dir: Path | None = None,
         num_epochs: int = 3,
         batch_size: int = 4,
         learning_rate: float = 1e-4,
@@ -174,7 +172,7 @@ class PEFTTrainer:
         )
 
         # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        AutoTokenizer.from_pretrained(self.model_name)
 
         # Configure LoRA
         peft_config = LoraConfig(
@@ -230,7 +228,7 @@ class PEFTTrainer:
 
         logger.info("Adapter training complete")
 
-    def load_adapter(self, adapter_path: Optional[Path] = None) -> None:
+    def load_adapter(self, adapter_path: Path | None = None) -> None:
         """
         Load a trained LoRA adapter.
 

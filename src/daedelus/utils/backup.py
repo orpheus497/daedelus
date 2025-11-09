@@ -12,7 +12,6 @@ import re
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ class BackupManager:
     def __init__(
         self,
         source_db: Path,
-        backup_dir: Optional[Path] = None,
+        backup_dir: Path | None = None,
         max_backups: int = 5,
     ) -> None:
         """
@@ -45,9 +44,7 @@ class BackupManager:
         """
         self.source_db = Path(source_db).expanduser()
         self.backup_dir = (
-            Path(backup_dir).expanduser()
-            if backup_dir
-            else self.source_db.parent / "backups"
+            Path(backup_dir).expanduser() if backup_dir else self.source_db.parent / "backups"
         )
         self.max_backups = max_backups
 
@@ -56,7 +53,7 @@ class BackupManager:
 
         logger.info(f"Backup manager initialized: {self.backup_dir}")
 
-    def create_backup(self, compress: bool = True, note: Optional[str] = None) -> Path:
+    def create_backup(self, compress: bool = True, note: str | None = None) -> Path:
         """
         Create a backup of the database.
 
@@ -114,7 +111,7 @@ class BackupManager:
             logger.error(f"Backup creation failed: {e}")
             if backup_path.exists():
                 backup_path.unlink()
-            raise IOError(f"Failed to create backup: {e}")
+            raise OSError(f"Failed to create backup: {e}") from e
 
     def restore_backup(self, backup_path: Path, create_backup_first: bool = True) -> None:
         """
@@ -157,9 +154,9 @@ class BackupManager:
 
         except Exception as e:
             logger.error(f"Restoration failed: {e}")
-            raise IOError(f"Failed to restore backup: {e}")
+            raise OSError(f"Failed to restore backup: {e}") from e
 
-    def list_backups(self) -> List[dict]:
+    def list_backups(self) -> list[dict]:
         """
         List all available backups.
 
@@ -177,22 +174,23 @@ class BackupManager:
                 if match:
                     date_str = match.group(1)
                     time_str = match.group(2)
-                    timestamp = datetime.strptime(
-                        f"{date_str}_{time_str}",
-                        "%Y%m%d_%H%M%S"
-                    )
+                    timestamp = datetime.strptime(f"{date_str}_{time_str}", "%Y%m%d_%H%M%S")
                 else:
                     # Fallback to file modification time if filename doesn't match pattern
-                    logger.warning(f"Backup filename doesn't match expected format: {backup_file.name}")
+                    logger.warning(
+                        f"Backup filename doesn't match expected format: {backup_file.name}"
+                    )
                     timestamp = datetime.fromtimestamp(backup_file.stat().st_mtime)
 
-                backups.append({
-                    "path": backup_file,
-                    "name": backup_file.name,
-                    "timestamp": timestamp,
-                    "size_bytes": backup_file.stat().st_size,
-                    "compressed": backup_file.suffix == ".gz",
-                })
+                backups.append(
+                    {
+                        "path": backup_file,
+                        "name": backup_file.name,
+                        "timestamp": timestamp,
+                        "size_bytes": backup_file.stat().st_size,
+                        "compressed": backup_file.suffix == ".gz",
+                    }
+                )
 
             except Exception as e:
                 logger.warning(f"Failed to parse backup {backup_file.name}: {e}")
@@ -212,7 +210,7 @@ class BackupManager:
             return 0
 
         # Delete oldest backups
-        to_delete = backups[self.max_backups:]
+        to_delete = backups[self.max_backups :]
         deleted_count = 0
 
         for backup in to_delete:
@@ -270,7 +268,7 @@ class BackupManager:
             logger.error(f"Backup verification failed: {e}")
             return False
 
-    def get_latest_backup(self) -> Optional[Path]:
+    def get_latest_backup(self) -> Path | None:
         """
         Get the most recent backup.
 
@@ -282,7 +280,7 @@ class BackupManager:
             return None
         return backups[0]["path"]
 
-    def auto_backup(self, interval_hours: int = 24) -> Optional[Path]:
+    def auto_backup(self, interval_hours: int = 24) -> Path | None:
         """
         Create automatic backup if needed based on interval.
 
@@ -305,7 +303,9 @@ class BackupManager:
         age = datetime.now() - latest_time
 
         if age > timedelta(hours=interval_hours):
-            logger.info(f"Last backup is {age.total_seconds() / 3600:.1f}h old, creating new backup")
+            logger.info(
+                f"Last backup is {age.total_seconds() / 3600:.1f}h old, creating new backup"
+            )
             return self.create_backup(note="auto")
         else:
             logger.debug(f"Last backup is {age.total_seconds() / 3600:.1f}h old, no backup needed")

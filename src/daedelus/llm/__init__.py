@@ -11,12 +11,12 @@ Provides local LLM capabilities for:
 Created by: orpheus497
 """
 
-from daedelus.llm.llm_manager import LLMManager
 from daedelus.llm.command_explainer import CommandExplainer
 from daedelus.llm.command_generator import CommandGenerator
-from daedelus.llm.rag_pipeline import RAGPipeline
-from daedelus.llm.peft_trainer import PEFTTrainer
 from daedelus.llm.enhanced_suggestions import EnhancedSuggestionEngine
+from daedelus.llm.llm_manager import LLMManager
+from daedelus.llm.peft_trainer import PEFTTrainer
+from daedelus.llm.rag_pipeline import RAGPipeline
 
 __all__ = [
     "LLMManager",

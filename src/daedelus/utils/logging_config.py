@@ -14,7 +14,6 @@ import logging
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 class ColoredFormatter(logging.Formatter):
@@ -24,10 +23,10 @@ class ColoredFormatter(logging.Formatter):
 
     # ANSI color codes
     COLORS = {
-        "DEBUG": "\033[36m",     # Cyan
-        "INFO": "\033[32m",      # Green
-        "WARNING": "\033[33m",   # Yellow
-        "ERROR": "\033[31m",     # Red
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
         "CRITICAL": "\033[35m",  # Magenta
     }
     RESET = "\033[0m"
@@ -38,9 +37,7 @@ class ColoredFormatter(logging.Formatter):
         # Add color to level name
         levelname = record.levelname
         if levelname in self.COLORS:
-            record.levelname = (
-                f"{self.COLORS[levelname]}{self.BOLD}{levelname}{self.RESET}"
-            )
+            record.levelname = f"{self.COLORS[levelname]}{self.BOLD}{levelname}{self.RESET}"
 
         # Format the message
         result = super().format(record)
@@ -52,7 +49,7 @@ class ColoredFormatter(logging.Formatter):
 
 
 def setup_logging(
-    log_path: Optional[Path] = None,
+    log_path: Path | None = None,
     level: int = logging.INFO,
     console: bool = True,
     debug: bool = False,
@@ -113,8 +110,7 @@ def setup_logging(
 
         # File gets more detailed format
         file_format = (
-            "%(asctime)s | %(levelname)-8s | %(name)s | "
-            "%(funcName)s:%(lineno)d | %(message)s"
+            "%(asctime)s | %(levelname)-8s | %(name)s | " "%(funcName)s:%(lineno)d | %(message)s"
         )
         file_formatter = logging.Formatter(file_format, datefmt="%Y-%m-%d %H:%M:%S")
         file_handler.setFormatter(file_formatter)

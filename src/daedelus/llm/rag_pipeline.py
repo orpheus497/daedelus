@@ -8,7 +8,7 @@ Created by: orpheus497
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from daedelus.core.database import CommandDatabase
 from daedelus.core.embeddings import CommandEmbedder
@@ -57,12 +57,12 @@ class RAGPipeline:
     def retrieve_context(
         self,
         query: str,
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
+        cwd: str | None = None,
+        history: list[str] | None = None,
         include_similar: bool = True,
         include_recent: bool = True,
         include_patterns: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Retrieve relevant context for a query.
 
@@ -154,7 +154,7 @@ class RAGPipeline:
 
         return context
 
-    def format_context_for_llm(self, context: Dict[str, Any]) -> str:
+    def format_context_for_llm(self, context: dict[str, Any]) -> str:
         """
         Format retrieved context into a string for LLM prompt.
 
@@ -194,8 +194,8 @@ class RAGPipeline:
         self,
         query: str,
         task_type: str = "explain",
-        cwd: Optional[str] = None,
-        history: Optional[List[str]] = None,
+        cwd: str | None = None,
+        history: list[str] | None = None,
     ) -> str:
         """
         Build a complete prompt with retrieved context.
@@ -266,7 +266,6 @@ Response:"""
 
 # Example usage
 if __name__ == "__main__":
-    from pathlib import Path
 
     logging.basicConfig(level=logging.DEBUG)
 
@@ -296,6 +295,7 @@ if __name__ == "__main__":
     # prompt = rag.build_prompt("ls", task_type="explain")
 
     print("\nExample formatted context:")
+
     # Mock pipeline for demonstration
     class MockRAG(RAGPipeline):
         def __init__(self):

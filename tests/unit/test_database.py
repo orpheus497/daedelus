@@ -13,12 +13,7 @@ Tests all major functionality:
 Created by: orpheus497
 """
 
-import sqlite3
-import tempfile
 from datetime import datetime, timedelta
-from pathlib import Path
-
-import pytest
 
 from daedelus.core.database import CommandDatabase
 
@@ -42,23 +37,8 @@ class TestCommandDatabaseInit:
         db = CommandDatabase(temp_dir / "test.db")
 
         # Check tables exist
-        cursor = db.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
+        cursor = db.conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = [row[0] for row in cursor.fetchall()]
-
-        expected_tables = [
-            "command_fts",
-            "command_fts_config",
-            "command_fts_content",
-            "command_fts_data",
-            "command_fts_docsize",
-            "command_fts_idx",
-            "command_history",
-            "command_patterns",
-            "command_sequences",
-            "sessions",
-        ]
 
         for table in ["command_history", "sessions", "command_patterns", "command_sequences"]:
             assert table in tables
@@ -80,9 +60,7 @@ class TestCommandDatabaseInit:
         """Test that indexes are created."""
         db = CommandDatabase(temp_dir / "test.db")
 
-        cursor = db.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' ORDER BY name"
-        )
+        cursor = db.conn.execute("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name")
         indexes = [row[0] for row in cursor.fetchall()]
 
         expected = ["idx_command", "idx_cwd", "idx_exit_code", "idx_session", "idx_timestamp"]
@@ -190,7 +168,9 @@ class TestCommandInsertion:
         test_db.insert_command("cmd2", "/tmp", 0, session_id)
         test_db.insert_command("cmd3", "/tmp", 0, session_id)
 
-        cursor = test_db.conn.execute("SELECT total_commands FROM sessions WHERE id = ?", (session_id,))
+        cursor = test_db.conn.execute(
+            "SELECT total_commands FROM sessions WHERE id = ?", (session_id,)
+        )
         count = cursor.fetchone()[0]
 
         assert count == 3
@@ -230,7 +210,9 @@ class TestCommandInsertion:
             session_id=session_id,
         )
 
-        cursor = test_db.conn.execute("SELECT exit_code FROM command_history WHERE id = ?", (cmd_id,))
+        cursor = test_db.conn.execute(
+            "SELECT exit_code FROM command_history WHERE id = ?", (cmd_id,)
+        )
         exit_code = cursor.fetchone()[0]
 
         assert exit_code == 1
