@@ -4,6 +4,8 @@ RAG (Retrieval-Augmented Generation) pipeline for Daedelus.
 Retrieves relevant context from command history and embeddings to enhance
 LLM responses.
 
+Now includes token compression for efficient semantic comprehension.
+
 Created by: orpheus497
 """
 
@@ -15,6 +17,15 @@ from daedelus.core.embeddings import CommandEmbedder
 from daedelus.core.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
+
+# Import token compression (optional)
+try:
+    from daedelus.llm.semantic_chunker import SemanticChunker, TokenCompressor
+
+    COMPRESSION_AVAILABLE = True
+except ImportError:
+    COMPRESSION_AVAILABLE = False
+    logger.debug("Token compression not available")
 
 
 class RAGPipeline:
@@ -37,6 +48,8 @@ class RAGPipeline:
         embedder: CommandEmbedder,
         vector_store: VectorStore,
         max_context_commands: int = 10,
+        enable_compression: bool = True,
+        compression_aggressive: bool = False,
     ) -> None:
         """
         Initialize RAG pipeline.
@@ -46,11 +59,31 @@ class RAGPipeline:
             embedder: Command embedder
             vector_store: Vector store for similarity search
             max_context_commands: Maximum commands in context
+            enable_compression: Enable token compression
+            compression_aggressive: Use aggressive compression
         """
         self.db = db
         self.embedder = embedder
         self.vector_store = vector_store
         self.max_context_commands = max_context_commands
+
+        # Initialize token compression if available
+        self.compressor = None
+        if enable_compression and COMPRESSION_AVAILABLE:
+            try:
+                chunker = SemanticChunker(
+                    embedder=embedder,
+                    similarity_threshold=0.75,
+                    max_chunk_tokens=512,
+                )
+                self.compressor = TokenCompressor(
+                    semantic_chunker=chunker,
+                    aggressive=compression_aggressive,
+                )
+                logger.info("Token compression enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize token compression: {e}")
+                self.compressor = None
 
         logger.info("RAG pipeline initialized")
 
@@ -196,6 +229,7 @@ class RAGPipeline:
         task_type: str = "explain",
         cwd: str | None = None,
         history: list[str] | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         """
         Build a complete prompt with retrieved context.
@@ -205,6 +239,7 @@ class RAGPipeline:
             task_type: Type of task ('explain', 'generate', 'suggest')
             cwd: Current working directory
             history: Recent command history
+            max_tokens: Maximum tokens for prompt (enables compression)
 
         Returns:
             Complete prompt with system instructions and context
@@ -217,30 +252,27 @@ class RAGPipeline:
 
         # Build prompt based on task type
         if task_type == "explain":
-            prompt = f"""You are a helpful Linux command expert. Explain commands clearly and concisely.
-
-Context:
-{context_str}
+            system_prompt = "You are a helpful Linux command expert. Explain commands clearly and concisely."
+            prompt_template = f"""Context:
+{{context}}
 
 Command to explain: {query}
 
 Provide a clear, concise explanation of what this command does."""
 
         elif task_type == "generate":
-            prompt = f"""You are a helpful Linux command expert. Generate appropriate shell commands based on descriptions.
-
-Context:
-{context_str}
+            system_prompt = "You are a helpful Linux command expert. Generate appropriate shell commands based on descriptions."
+            prompt_template = f"""Context:
+{{context}}
 
 Task: {query}
 
 Generate the appropriate shell command to accomplish this task. Provide only the command, no explanation."""
 
         elif task_type == "suggest":
-            prompt = f"""You are a helpful Linux command expert. Suggest the best command to use.
-
-Context:
-{context_str}
+            system_prompt = "You are a helpful Linux command expert. Suggest the best command to use."
+            prompt_template = f"""Context:
+{{context}}
 
 Partial command or task: {query}
 
@@ -248,14 +280,35 @@ Suggest the most appropriate command to use. Provide only the command."""
 
         else:
             # Generic prompt
-            prompt = f"""You are a helpful Linux command expert.
-
-Context:
-{context_str}
+            system_prompt = "You are a helpful Linux command expert."
+            prompt_template = f"""Context:
+{{context}}
 
 Query: {query}
 
 Response:"""
+
+        # Apply token compression if enabled and max_tokens specified
+        if self.compressor and max_tokens:
+            try:
+                compressed = self.compressor.compress_prompt(
+                    system_prompt=system_prompt,
+                    user_query=query,
+                    context=context_str,
+                    max_total_tokens=max_tokens,
+                )
+
+                context_str = compressed["context"]
+                logger.debug(f"Context compressed for token limit: {max_tokens}")
+
+            except Exception as e:
+                logger.warning(f"Token compression failed: {e}")
+                # Continue with uncompressed context
+
+        # Build final prompt
+        prompt = f"""{system_prompt}
+
+{prompt_template.format(context=context_str)}"""
 
         return prompt
 

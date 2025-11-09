@@ -143,7 +143,8 @@ llm:
 
   # Path to GGUF model file (TinyLlama 1.1B recommended - 100% FOSS)
   # Automatically scans for any .gguf file in ~/.local/share/models/
-  model_path: null   # Default: auto-detects first .gguf file in models directory
+  # PRIORITY: deus.gguf > daedelus_v*.gguf > other .gguf files
+  model_path: null   # Default: auto-detects models in priority order
 
   # Context length for LLM
   context_length: 2048
@@ -157,6 +158,9 @@ llm:
 
   # Maximum tokens to generate
   max_tokens: 100
+
+  # Number of GPU layers to offload (0 = CPU only)
+  n_gpu_layers: 0
 
 # ============================================
 # Phase 2: PEFT Settings
@@ -176,6 +180,65 @@ peft:
 
   # LoRA dropout
   lora_dropout: 0.1
+
+# ============================================
+# Deus Model Settings (Continuous Learning)
+# ============================================
+deus:
+  # Enable deus.gguf model system
+  # When enabled, deus.gguf is prioritized over other models
+  enabled: true
+
+  # Automatic fine-tuning threshold (number of commands)
+  # Training triggers automatically when this threshold is reached
+  training_threshold: 500
+
+  # Enable manual training command
+  # Allows users to trigger training via "daedelus train" command
+  manual_training_enabled: true
+
+  # Show training progress notifications
+  show_notifications: true
+
+  # Show status bars during training
+  show_status_bars: true
+
+  # Prompt for model download if no models available
+  auto_download_prompt: true
+
+# ============================================
+# Token Compression Settings
+# ============================================
+compression:
+  # Enable semantic token compression
+  enabled: true
+
+  # Semantic similarity threshold for chunking (0.0 - 1.0)
+  # Higher = more aggressive chunking
+  similarity_threshold: 0.75
+
+  # Maximum tokens per chunk
+  max_chunk_tokens: 512
+
+  # Minimum sentences per chunk
+  min_chunk_sentences: 2
+
+  # Use aggressive compression (higher compression ratio)
+  aggressive: false
+
+# ============================================
+# Continuous Learning Settings
+# ============================================
+continuous_learning:
+  # Enable continuous learning for embeddings
+  # The daedelus embedding model learns from new commands
+  enabled: true
+
+  # Minimum new commands before incremental training
+  embedding_training_threshold: 100
+
+  # Enable periodic embedding updates
+  periodic_updates: true
 
 # ============================================
 # Command Safety Settings
