@@ -19,9 +19,13 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional
 
-import fasttext
 import numpy as np
 import numpy.typing as npt
+
+try:
+    import fasttext
+except ImportError:
+    fasttext = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 

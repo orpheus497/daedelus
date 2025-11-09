@@ -145,16 +145,17 @@ class SuggestionEngine:
 
         try:
             # Query database for prefix matches
+            cwd_filter = "AND cwd LIKE ? || '%'" if cwd else ""
             query = f"""
                 SELECT command, COUNT(*) as frequency, MAX(timestamp) as last_used
                 FROM command_history
                 WHERE command LIKE ? || '%'
                   AND exit_code = 0
-                  {}
+                  {cwd_filter}
                 GROUP BY command
                 ORDER BY frequency DESC, last_used DESC
                 LIMIT ?
-            """.format("AND cwd LIKE ? || '%'" if cwd else "")
+            """
 
             params = [partial]
             if cwd:
