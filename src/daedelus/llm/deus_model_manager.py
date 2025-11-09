@@ -11,8 +11,48 @@ Manages the deus.gguf model lifecycle:
 The deus.gguf model is the continuously trained and fine-tuned model
 that grows with user interactions.
 
+Identity Metadata (Hardcoded):
+    Model Name: Deus (deus.gguf)
+    Formal Name: Daedelus
+    Social Name: Deus
+    Created by: orpheus497
+    Designer: orpheus497
+    Purpose: Continuously learning LLM that understands terminal commands and
+             provides intelligent assistance while maintaining user privacy
+
 Created by: orpheus497
 """
+
+# Deus Model Identity Metadata (Hardcoded)
+_DEUS_IDENTITY = {
+    "model_name": "Deus",
+    "model_file": "deus.gguf",
+    "formal_name": "Daedelus",
+    "social_name": "Deus",
+    "creator": "orpheus497",
+    "designer": "orpheus497",
+    "purpose": "Continuously learning LLM for intelligent terminal command assistance",
+    "architecture": "LLM + RAG + PEFT/LoRA (Phase 2)",
+}
+
+# System prompt that includes identity information
+_SYSTEM_PROMPT_WITH_IDENTITY = """You are Deus (formal name: Daedelus), a self-learning AI terminal assistant.
+
+Identity:
+- Name: Deus (nickname) / Daedelus (formal name)
+- Creator: orpheus497
+- Designer: orpheus497
+- Purpose: Intelligent terminal command assistance with complete privacy
+
+Core Principles:
+- You learn from user interactions to provide personalized suggestions
+- You operate 100% offline and maintain strict user privacy
+- You understand shell commands, their context, and best practices
+- You provide clear, concise, and helpful responses
+- You are continuously learning and improving from user feedback
+
+Your role is to assist users with terminal commands, explain their functionality,
+suggest alternatives, and help solve command-line problems efficiently."""
 
 import logging
 from pathlib import Path
@@ -73,6 +113,30 @@ class DeusModelManager:
         self._detect_models()
 
         logger.info(f"DeusModelManager initialized (models_dir={self.models_dir})")
+        logger.info(f"Deus identity: {_DEUS_IDENTITY['formal_name']} (aka {_DEUS_IDENTITY['social_name']}) by {_DEUS_IDENTITY['creator']}")
+
+    @staticmethod
+    def get_model_identity() -> dict[str, str]:
+        """
+        Get the hardcoded identity metadata for the Deus model.
+
+        Returns:
+            Dictionary containing model name, creator, purpose, and other identity info
+        """
+        return _DEUS_IDENTITY.copy()
+
+    @staticmethod
+    def get_system_prompt() -> str:
+        """
+        Get the system prompt with hardcoded identity information.
+
+        This prompt ensures the LLM understands its identity as Deus/Daedelus
+        and its purpose as a terminal assistant created by orpheus497.
+
+        Returns:
+            System prompt string with identity information
+        """
+        return _SYSTEM_PROMPT_WITH_IDENTITY
 
     def _detect_models(self) -> None:
         """
