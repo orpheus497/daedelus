@@ -466,7 +466,7 @@ class SettingsPanel(Container):
         """
         super().__init__(**kwargs)
         self.config = config
-        self.original_config = config.to_dict()
+        self.original_config = config.config.copy()
 
     def compose(self) -> ComposeResult:
         """Compose settings panel UI"""
@@ -567,7 +567,8 @@ class SettingsPanel(Container):
     def action_reload_settings(self) -> None:
         """Reload settings from file"""
         try:
-            self.config.load()
+            # Reload config by re-instantiating from the same path
+            self.config = Config(self.config.config_path, self.config.data_dir)
             self.settings_modified = False
             self.update_status("Settings reloaded from file", success=True)
 
