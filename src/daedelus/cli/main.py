@@ -977,14 +977,14 @@ def train(ctx: click.Context, force: bool, epochs: int, min_commands: int) -> No
         return
 
     try:
-        from daedelus.core.database import Database
+        from daedelus.core.database import CommandDatabase
         from daedelus.llm.model_manager import ModelManager
         from daedelus.llm.peft_trainer import PEFTTrainer
 
         click.echo("🎓 Starting manual training session...")
 
         # Initialize components
-        db = Database(config.get("database.path"))
+        db = CommandDatabase(config.get("database.path"))
         models_dir = Path(config.get("llm.model_path")).parent
         model_manager = ModelManager(models_dir)
 
@@ -1282,7 +1282,7 @@ def config_show(ctx: click.Context) -> None:
 
     click.echo("Current Configuration")
     click.echo("=" * 60)
-    click.echo(json.dumps(config.config_data, indent=2, sort_keys=True))
+    click.echo(json.dumps(config.config, indent=2, sort_keys=True))
 
 
 @cli.command()
@@ -1307,7 +1307,7 @@ def repl(ctx: click.Context) -> None:
     try:
         from daedelus.cli.repl import start_repl
 
-        client = IPCClient(config)
+        client = IPCClient(config.get("daemon.socket_path"))
         start_repl(client)
 
     except ImportError as e:
@@ -1349,7 +1349,7 @@ def search(ctx: click.Context, query: tuple[str, ...], limit: int) -> None:
         from daedelus.utils.fuzzy import get_matcher
         from daedelus.utils.highlighting import get_highlighter
 
-        client = IPCClient(config)
+        client = IPCClient(config.get("daemon.socket_path"))
         response = client.send_request("get_recent_commands", {"n": 500})
 
         if response.get("status") != "ok":
@@ -1432,7 +1432,7 @@ def analytics(ctx: click.Context, detailed: bool) -> None:
         from rich.console import Console
         from rich.table import Table
 
-        client = IPCClient(config)
+        client = IPCClient(config.get("daemon.socket_path"))
         response = client.send_request("get_stats", {})
 
         if response.get("status") != "ok":
