@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import signal
+import socket
 import sys
 import time
 import uuid
@@ -194,7 +195,18 @@ class DaedelusDaemon:
         self._excluded_patterns = []
         for pattern in excluded_patterns:
             try:
-                self._excluded_patterns.append(re.compile(pattern, re.IGNORECASE))
+                # Validate pattern complexity to prevent ReDoS
+                if len(pattern) > 1000:
+                    logger.warning(f"Privacy pattern too long, skipping: {pattern[:50]}...")
+                    continue
+                if pattern.count("*") > 10 or pattern.count("+") > 10:
+                    logger.warning(f"Privacy pattern too complex, skipping: {pattern[:50]}...")
+                    continue
+
+                # Compile and add pattern
+                compiled = re.compile(pattern, re.IGNORECASE)
+                self._excluded_patterns.append(compiled)
+                logger.debug(f"Added privacy pattern: {pattern}")
             except re.error as e:
                 logger.warning(f"Invalid privacy pattern '{pattern}': {e}")
 
@@ -253,20 +265,30 @@ class DaedelusDaemon:
 
     def _run_event_loop(self) -> None:
         """Main event loop - handle IPC connections."""
+        # Set socket timeout to allow checking self.running periodically
+        self.ipc_server.socket.settimeout(1.0)
+
         while self.running:
             try:
-                # Accept connection (blocking)
-                conn, addr = self.ipc_server.socket.accept()
+                try:
+                    # Accept connection (with timeout)
+                    conn, addr = self.ipc_server.socket.accept()
 
-                # Handle in foreground (for simplicity)
-                # In production, could use threading or async
-                self.ipc_server.handle_connection(conn, addr)
+                    # Handle in foreground (for simplicity)
+                    # In production, could use threading or async
+                    self.ipc_server.handle_connection(conn, addr)
 
-                self.stats["requests_handled"] += 1
+                    self.stats["requests_handled"] += 1
+
+                except socket.timeout:
+                    # Normal timeout, check if we should continue
+                    continue
 
             except Exception as e:
                 if self.running:  # Only log if not shutting down
                     logger.error(f"Error in event loop: {e}", exc_info=True)
+
+        logger.info("Daemon event loop exiting gracefully")
 
     # ========================================
     # IPC Message Handlers
@@ -340,7 +362,7 @@ class DaedelusDaemon:
             )
 
             # Add to vector store if model is ready
-            if self.embedder.model and self.vector_store._built:
+            if self.embedder.model and self.vector_store.is_built():
                 try:
                     embedding = self.embedder.encode_command(command)
                     # Note: Can't add to built index, will rebuild on shutdown

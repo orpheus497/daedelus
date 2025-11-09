@@ -134,6 +134,7 @@ class CommandDatabase:
         self.conn = sqlite3.connect(
             self.db_path,
             check_same_thread=False,  # Allow multi-threaded access
+            timeout=30.0,  # 30 second timeout for busy database
         )
         self.conn.row_factory = sqlite3.Row  # Return rows as dictionaries
 

@@ -7,7 +7,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Critical Syntax Errors** (`src/daedelus/core/safety.py`)
+  - Fixed extra bracket in type annotation at line 167 (`Optional[List[str]]]` → `Optional[List[str]]`)
+  - Fixed invalid `any` type hint to `Any` at line 342
+  - Added missing `Any` import from typing module
+  - Ensures code compiles and type checking passes
+
+- **Import Organization** (`src/daedelus/core/templates.py`)
+  - Moved `datetime` import from line 428 to top of file (line 13)
+  - Prevents `NameError` when `add_template()` function is called
+  - Follows Python import convention (all imports at top)
+
+- **Type Hint Consistency** (`src/daedelus/daemon/ipc.py`)
+  - Changed `list[str]` and `list[Dict[str, Any]]` to `List[str]` and `List[Dict[str, Any]]` at lines 306-307
+  - Added `List` to typing imports for consistency with codebase style
+  - Ensures mypy type checking passes without inconsistencies
+
+- **Version Mismatch** (`tests/test_smoke.py`)
+  - Updated version assertion from `"0.1.0"` to `"0.2.0"` at line 33
+  - Aligns test expectations with current project version
+  - Smoke tests now pass
+
+- **Database Connection Timeout** (`src/daedelus/core/database.py`)
+  - Added `timeout=30.0` parameter to SQLite connection at line 137
+  - Prevents indefinite blocking on busy database
+  - Improves reliability under concurrent access
+
+- **Error Handling for Model Training** (`src/daedelus/core/embeddings.py`)
+  - Wrapped FastText training in try/except/finally block with proper error handling
+  - Added informative logging before training starts
+  - Ensures temporary training file cleanup even on failure
+  - Raises `RuntimeError` with clear message on training failure
+
+- **Event Loop Blocking on Shutdown** (`src/daedelus/daemon/daemon.py`)
+  - Added socket timeout (1.0 second) to IPC server socket
+  - Allows daemon event loop to check `self.running` flag periodically
+  - Daemon now exits gracefully when stopped instead of hanging
+  - Added log message "Daemon event loop exiting gracefully"
+
+- **User-Provided Regex Pattern Validation** (`src/daedelus/daemon/daemon.py`)
+  - Added validation for privacy filter regex patterns to prevent ReDoS attacks
+  - Rejects patterns longer than 1000 characters
+  - Rejects patterns with more than 10 repetition operators (`*` or `+`)
+  - Logs warnings for rejected patterns with truncated preview
+
+- **Private Attribute Access** (`src/daedelus/daemon/daemon.py`)
+  - Changed `self.vector_store._built` to `self.vector_store.is_built()` at line 365
+  - Uses new public method instead of accessing private attribute
+  - Improves encapsulation and code maintainability
+
+- **Bare Except Clause** (`src/daedelus/daemon/ipc.py`)
+  - Changed bare `except:` to `except Exception:` at line 180
+  - Prevents accidentally catching system exit signals (KeyboardInterrupt, SystemExit)
+  - Follows Python best practices
+
+- **Timestamp Parsing Robustness** (`src/daedelus/utils/backup.py`)
+  - Replaced fragile string splitting with regex pattern matching
+  - Uses `re.search(r"daedelus_backup_(\d{8})_(\d{6})", ...)` for timestamp extraction
+  - Falls back to file modification time if filename doesn't match expected pattern
+  - Added warning log when filename format is unexpected
+  - More maintainable and less error-prone
+
+- **Metadata Storage Security** (`src/daedelus/core/vector_store.py`)
+  - Replaced pickle with JSON for vector store metadata storage
+  - Changed `import pickle` to `import json`
+  - Changed `pickle.dump()/pickle.load()` to `json.dump()/json.load()`
+  - Eliminates code execution risk from tampered metadata files
+  - Metadata files are now human-readable for debugging
+
+### Added
+
+- **Public Method for Index Status** (`src/daedelus/core/vector_store.py`)
+  - Added `is_built()` public method to check if vector index has been built
+  - Returns boolean indicating whether index is ready for queries
+  - Replaces need to access private `_built` attribute
+  - Improves API design and encapsulation
+
+- **Socket Import** (`src/daedelus/daemon/daemon.py`)
+  - Added `import socket` for socket timeout handling
+  - Required for graceful daemon shutdown implementation
+
+- **Regex Import** (`src/daedelus/utils/backup.py`)
+  - Added `import re` for robust timestamp parsing
+  - Enables regex-based filename pattern matching
+
 ### Changed
+
+- **Dependency Specifications** (`requirements-llm.txt`)
+  - Pinned `sqlite-vss>=0.1.2` (was unpinned)
+  - Pinned `apsw>=3.40.0` (was unpinned)
+  - Ensures reproducible builds and prevents breaking changes
+
+- **Development Dependencies** (`requirements-dev.txt`)
+  - Added `bandit>=1.7.0` for security scanning
+  - Enhances security testing capabilities
 
 - **Project Configuration** (`pyproject.toml`)
   - Fixed entry point paths for CLI commands (`daedelus.cli.main:main`)

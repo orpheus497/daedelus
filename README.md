@@ -309,6 +309,9 @@ ruff check src/daedelus
 
 # Formatting
 black src/daedelus
+
+# Security scanning
+bandit -r src/daedelus
 ```
 
 ## 🗺️ Roadmap

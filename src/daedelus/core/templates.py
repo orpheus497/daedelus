@@ -10,6 +10,7 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -422,10 +423,6 @@ class TemplateManager:
         """Get list of all template categories."""
         categories = {t.category for t in self.templates.values()}
         return sorted(categories)
-
-
-# Convenience functions
-from datetime import datetime
 
 
 if __name__ == "__main__":
