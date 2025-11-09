@@ -19,7 +19,11 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import numpy.typing as npt
-from annoy import AnnoyIndex
+
+try:
+    from annoy import AnnoyIndex
+except ImportError:
+    AnnoyIndex = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
