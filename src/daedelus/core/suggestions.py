@@ -11,7 +11,7 @@ Created by: orpheus497
 
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from daedelus.core.database import CommandDatabase
@@ -370,7 +370,11 @@ class SuggestionEngine:
 
             # Combined score: base confidence × all factors
             combined_score = (
-                base_confidence * recency_factor * directory_boost * success_factor * frequency_factor
+                base_confidence
+                * recency_factor
+                * directory_boost
+                * success_factor
+                * frequency_factor
             )
 
             enriched_sug = {
@@ -493,9 +497,7 @@ class SuggestionEngine:
 
         return recency_factor
 
-    def _calculate_directory_boost(
-        self, stats: dict[str, Any], current_cwd: str | None
-    ) -> float:
+    def _calculate_directory_boost(self, stats: dict[str, Any], current_cwd: str | None) -> float:
         """
         Calculate directory-specific boost for context awareness.
 

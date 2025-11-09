@@ -16,6 +16,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 try:
+    from datasets import Dataset
     from peft import LoraConfig, PeftModel, get_peft_model
     from transformers import (
         AutoModelForCausalLM,
@@ -24,7 +25,6 @@ try:
         Trainer,
         TrainingArguments,
     )
-    from datasets import Dataset
 except ImportError:
     LoraConfig = None  # type: ignore
     get_peft_model = None  # type: ignore
@@ -483,9 +483,7 @@ class PEFTTrainer:
                         break
 
                 if llama_cpp_path is None:
-                    logger.warning(
-                        "llama.cpp not found. Trying system-wide python scripts..."
-                    )
+                    logger.warning("llama.cpp not found. Trying system-wide python scripts...")
                     # Try to find convert.py in PATH
                     try:
                         result = subprocess.run(
@@ -543,9 +541,9 @@ class PEFTTrainer:
 
             except subprocess.CalledProcessError as e:
                 logger.error(f"Conversion failed: {e.stderr}")
-                raise RuntimeError(f"GGUF conversion failed: {e.stderr}")
-            except subprocess.TimeoutExpired:
-                raise RuntimeError("Conversion timed out after 10 minutes")
+                raise RuntimeError(f"GGUF conversion failed: {e.stderr}") from e
+            except subprocess.TimeoutExpired as e:
+                raise RuntimeError("Conversion timed out after 10 minutes") from e
 
             # Step 5: Quantize to target format
             if quantization != "f16":
@@ -558,8 +556,8 @@ class PEFTTrainer:
 
                 if not quantize_binary.exists():
                     logger.warning(
-                        f"Quantize binary not found. Saving as f16. "
-                        f"Build llama.cpp to enable quantization."
+                        "Quantize binary not found. Saving as f16. "
+                        "Build llama.cpp to enable quantization."
                     )
                     # Just copy f16 version
                     import shutil
@@ -584,9 +582,9 @@ class PEFTTrainer:
 
                     except subprocess.CalledProcessError as e:
                         logger.error(f"Quantization failed: {e.stderr}")
-                        raise RuntimeError(f"Quantization failed: {e.stderr}")
-                    except subprocess.TimeoutExpired:
-                        raise RuntimeError("Quantization timed out after 10 minutes")
+                        raise RuntimeError(f"Quantization failed: {e.stderr}") from e
+                    except subprocess.TimeoutExpired as e:
+                        raise RuntimeError("Quantization timed out after 10 minutes") from e
             else:
                 # Just copy f16 version
                 import shutil
