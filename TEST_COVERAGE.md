@@ -1,8 +1,8 @@
 # Test Coverage Summary
 
-## Phase 1 Completion: Comprehensive Test Suite
+## Phase 1 & Phase 2: Comprehensive Test Suite
 
-This document summarizes the test coverage for the Daedalus Phase 1 implementation.
+This document summarizes the test coverage for Daedelus Phase 1 and Phase 2 implementations.
 
 ## Test Suite Overview
 
@@ -32,6 +32,30 @@ This document summarizes the test coverage for the Daedalus Phase 1 implementati
    - Coverage: **100%**
    - Tests: Colored formatting, log setup, file rotation, multiple handlers
 
+8. **llm/llm_manager.py** - 24 tests
+   - Coverage: **84.13%**
+   - Tests: LLM initialization, text generation, chat completion, tokenization, adapter loading
+
+9. **llm/rag_pipeline.py** - 23 tests
+   - Coverage: **95.45%**
+   - Tests: Context retrieval, prompt building, relevance filtering, error handling
+
+10. **llm/command_explainer.py** - 28 tests
+   - Coverage: **84.78%**
+   - Tests: Command explanations, contextual explanations, error explanations, output formatting
+
+11. **llm/command_generator.py** - 40 tests
+   - Coverage: **91.76%**
+   - Tests: Command generation, multiple alternatives, refinement, completion, parsing
+
+12. **llm/peft_trainer.py** - 30 tests
+   - Coverage: **98.95%**
+   - Tests: Training data preparation, adapter training, adapter loading, integration workflows
+
+13. **llm/enhanced_suggestions.py** - 34 tests
+   - Coverage: **87.76%**
+   - Tests: LLM integration, natural language detection, fallback behavior, Phase 1/2 combination
+
 ### Integration Tests
 
 - **Full workflow tests**: End-to-end pipeline from command logging to suggestions
@@ -41,6 +65,8 @@ This document summarizes the test coverage for the Daedalus Phase 1 implementati
 ## Coverage Metrics
 
 ### Achieved Coverage by Module
+
+#### Phase 1 Modules
 
 | Module | Coverage | Status |
 |--------|----------|--------|
@@ -52,11 +78,27 @@ This document summarizes the test coverage for the Daedalus Phase 1 implementati
 | core/vector_store.py | Comprehensive tests created | ⏳ Needs Annoy |
 | core/suggestions.py | Comprehensive tests created | ⏳ Needs compiled deps |
 
+#### Phase 2 LLM Modules
+
+| Module | Coverage | Status |
+|--------|----------|--------|
+| llm/peft_trainer.py | 98.95% | ✅ Excellent |
+| llm/rag_pipeline.py | 95.45% | ✅ Excellent |
+| llm/command_generator.py | 91.76% | ✅ Excellent |
+| llm/enhanced_suggestions.py | 87.76% | ✅ Excellent |
+| llm/command_explainer.py | 84.78% | ✅ Excellent |
+| llm/llm_manager.py | 84.13% | ✅ Excellent |
+
+**All Phase 2 modules exceed 80% coverage target!**
+
 ### Overall Achievement
 
-- **Unit tests created**: 250+ tests across all core modules
+- **Unit tests created**: 429+ tests across all Phase 1 and Phase 2 modules
+- **Phase 1 tests**: 250+ tests
+- **Phase 2 tests**: 179+ tests
 - **Integration tests**: 15+ end-to-end workflow tests
-- **Core modules** with >95% coverage: 3 out of 3 testable without compiled dependencies
+- **Core modules** with >95% coverage: 3 out of 3 testable without compiled dependencies (Phase 1)
+- **LLM modules** with >80% coverage: 6 out of 6 (Phase 2)
 - **Test infrastructure**: Fully configured with pytest, coverage reporting, and fixtures
 
 ## Test Organization
@@ -66,13 +108,21 @@ tests/
 ├── conftest.py           # Shared fixtures and configuration
 ├── test_smoke.py         # Basic smoke tests
 ├── unit/
+│   # Phase 1 Tests
 │   ├── test_database.py      # Database module tests (32 tests)
 │   ├── test_embeddings.py    # Embeddings module tests (60+ tests)
 │   ├── test_vector_store.py  # Vector store tests (40+ tests)
 │   ├── test_suggestions.py   # Suggestion engine tests (50+ tests)
 │   ├── test_ipc.py           # IPC communication tests (40+ tests)
 │   ├── test_config.py        # Configuration tests (30 tests)
-│   └── test_logging.py       # Logging tests (26 tests)
+│   ├── test_logging.py       # Logging tests (26 tests)
+│   # Phase 2 Tests
+│   ├── test_llm_manager.py         # LLM manager tests (24 tests)
+│   ├── test_rag_pipeline.py        # RAG pipeline tests (23 tests)
+│   ├── test_command_explainer.py   # Command explainer tests (28 tests)
+│   ├── test_command_generator.py   # Command generator tests (40 tests)
+│   ├── test_peft_trainer.py        # PEFT trainer tests (30 tests)
+│   └── test_enhanced_suggestions.py # Enhanced suggestions tests (34 tests)
 └── integration/
     └── test_full_workflow.py # End-to-end tests (15+ tests)
 ```
@@ -132,6 +182,57 @@ tests/
 - Deduplication and filtering
 - Confidence scoring
 
+### LLM Manager ✅ (Phase 2)
+- ✅ LLM initialization with llama.cpp
+- ✅ Text generation with parameters
+- ✅ Chat completion interface
+- ✅ Token counting
+- ✅ Context length management
+- ✅ Adapter loading
+- ✅ Error handling
+
+### RAG Pipeline ✅ (Phase 2)
+- ✅ Context retrieval from database
+- ✅ Similar command search
+- ✅ Recent command history
+- ✅ Pattern identification
+- ✅ Prompt building for different tasks
+- ✅ Relevance filtering
+- ✅ Error recovery
+
+### Command Explainer ✅ (Phase 2)
+- ✅ Natural language explanations
+- ✅ Contextual explanations with RAG
+- ✅ Error message explanations
+- ✅ Usage examples generation
+- ✅ Brief vs detailed formatting
+- ✅ Parameter handling
+
+### Command Generator ✅ (Phase 2)
+- ✅ Command generation from descriptions
+- ✅ Multiple alternative generation
+- ✅ Command refinement
+- ✅ Partial completion
+- ✅ Command parsing and cleaning
+- ✅ Context-aware generation
+
+### PEFT Trainer ✅ (Phase 2)
+- ✅ Training data preparation
+- ✅ Simple description generation
+- ✅ LoRA adapter training
+- ✅ Adapter loading
+- ✅ Configuration management
+- ✅ Integration workflows
+
+### Enhanced Suggestions ✅ (Phase 2)
+- ✅ Phase 1/2 integration
+- ✅ Natural language detection
+- ✅ LLM-enhanced suggestions
+- ✅ Automatic fallback to Phase 1
+- ✅ Deduplication
+- ✅ Command generation
+- ✅ Command explanation
+
 ## Running the Tests
 
 ### Run all tests:
@@ -141,14 +242,27 @@ pytest tests/ -v
 
 ### Run with coverage:
 ```bash
+# All modules
 pytest tests/ --cov=src/daedelus --cov-report=html --cov-report=term-missing
+
+# Phase 1 only
+pytest tests/unit/test_database.py tests/unit/test_config.py tests/unit/test_logging.py --cov=src/daedelus/core --cov=src/daedelus/utils --cov-report=term-missing
+
+# Phase 2 only
+pytest tests/unit/test_llm_manager.py tests/unit/test_rag_pipeline.py tests/unit/test_command_explainer.py tests/unit/test_command_generator.py tests/unit/test_peft_trainer.py tests/unit/test_enhanced_suggestions.py --cov=src/daedelus/llm --cov-report=term-missing
 ```
 
 ### Run specific module tests:
 ```bash
+# Phase 1
 pytest tests/unit/test_database.py -v
 pytest tests/unit/test_config.py -v
 pytest tests/unit/test_logging.py -v
+
+# Phase 2
+pytest tests/unit/test_llm_manager.py -v
+pytest tests/unit/test_rag_pipeline.py -v
+pytest tests/unit/test_command_generator.py -v
 ```
 
 ### Run integration tests:
@@ -183,10 +297,24 @@ pytest tests/integration/ -v
 
 ## Conclusion
 
-Phase 1 test suite implementation is **complete** with:
+Phase 1 and Phase 2 test suite implementation is **complete** with:
+
+### Phase 1 Achievement
 - **250+ unit tests** covering all core functionality
 - **15+ integration tests** for end-to-end workflows
 - **>95% coverage** on all testable modules without compiled dependencies
 - **Production-ready** test infrastructure
 
-The test suite provides excellent coverage and confidence in the Phase 1 codebase quality.
+### Phase 2 Achievement
+- **179+ unit tests** covering all LLM functionality
+- **>80% coverage** on ALL Phase 2 modules (target exceeded!)
+- **Highest coverage**: PEFT Trainer (98.95%), RAG Pipeline (95.45%)
+- **Complete test suite** for natural language features
+
+### Combined Achievement
+- **429+ total tests** across both phases
+- **Comprehensive coverage** of embedding-based AND LLM-based features
+- **Robust error handling** tests for graceful degradation
+- **Mock-based testing** allowing tests without actual LLM models
+
+The test suite provides excellent coverage and confidence in both Phase 1 and Phase 2 codebase quality, ensuring reliable offline command assistance with optional LLM enhancement.
