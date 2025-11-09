@@ -12,7 +12,7 @@ from typing import Generator
 
 import pytest
 
-from daedelus.core.database import Database
+from daedelus.core.database import CommandDatabase
 from daedelus.utils.config import Config
 
 
@@ -72,7 +72,7 @@ def test_config(temp_dir: Path) -> Config:
 
 
 @pytest.fixture
-def test_db(temp_dir: Path) -> Generator[Database, None, None]:
+def test_db(temp_dir: Path) -> Generator[CommandDatabase, None, None]:
     """
     Create a test database instance.
 
@@ -80,10 +80,10 @@ def test_db(temp_dir: Path) -> Generator[Database, None, None]:
         temp_dir: Temporary directory fixture
 
     Yields:
-        Database instance (closed after test)
+        CommandDatabase instance (closed after test)
     """
     db_path = temp_dir / "test.db"
-    db = Database(db_path)
+    db = CommandDatabase(db_path)
 
     yield db
 
