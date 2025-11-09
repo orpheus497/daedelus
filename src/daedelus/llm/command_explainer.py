@@ -93,7 +93,7 @@ class CommandExplainer:
                 prompt,
                 max_tokens=self.max_explanation_tokens,
                 temperature=0.3,  # Lower temperature for more focused explanations
-                stop=["Command:", "Next command:"],
+                stop=["<|end|>", "<|user|>", "Command:", "Next command:"],
             )
 
             return explanation.strip()
@@ -126,18 +126,22 @@ class CommandExplainer:
         # Get explanation
         explanation = self.explain_command(command, cwd=cwd, detailed=True)
 
-        # Generate examples
-        examples_prompt = f"""Based on this command: {command}
+        # Generate examples (using Phi-3 chat format)
+        examples_prompt = f"""<|system|>
+You are a helpful Linux command expert. Provide usage examples for shell commands.<|end|>
+<|user|>
+Based on this command: {command}
 
-Provide 3 common usage examples. Format as a numbered list.
-
-Examples:"""
+Provide 3 common usage examples. Format as a numbered list.<|end|>
+<|assistant|>
+"""
 
         try:
             examples_text = self.llm.generate(
                 examples_prompt,
                 max_tokens=200,
                 temperature=0.5,
+                stop=["<|end|>", "<|user|>"],
             )
 
             # Parse examples
@@ -180,19 +184,24 @@ Examples:"""
             ...     1
             ... )
         """
-        prompt = f"""A shell command failed. Explain what went wrong and how to fix it.
+        # Format in Phi-3 chat format
+        prompt = f"""<|system|>
+You are a helpful Linux command expert. Explain command errors and provide solutions.<|end|>
+<|user|>
+A shell command failed. Explain what went wrong and how to fix it.
 
 Command: {command}
 Exit code: {exit_code}
-Error message: {error_message}
-
-Explanation:"""
+Error message: {error_message}<|end|>
+<|assistant|>
+"""
 
         try:
             explanation = self.llm.generate(
                 prompt,
                 max_tokens=self.max_explanation_tokens,
                 temperature=0.4,
+                stop=["<|end|>", "<|user|>"],
             )
 
             return explanation.strip()
@@ -204,29 +213,34 @@ Explanation:"""
     def _build_simple_prompt(self, command: str, detailed: bool) -> str:
         """
         Build a simple prompt without RAG context.
+        Uses Phi-3 chat format for proper model interaction.
 
         Args:
             command: Command to explain
             detailed: Whether to be detailed
 
         Returns:
-            Prompt string
+            Prompt string in Phi-3 format
         """
         if detailed:
-            return f"""Explain this shell command in detail, including:
+            user_message = f"""Explain this shell command in detail, including:
 1. What it does
 2. Common use cases
 3. Important flags/options
 
-Command: {command}
-
-Explanation:"""
+Command: {command}"""
         else:
-            return f"""Explain this shell command in one clear sentence.
+            user_message = f"""Explain this shell command in one clear sentence.
 
-Command: {command}
+Command: {command}"""
 
-Explanation:"""
+        # Format in Phi-3 chat format
+        return f"""<|system|>
+You are a helpful Linux command expert. Explain shell commands clearly and accurately.<|end|>
+<|user|>
+{user_message}<|end|>
+<|assistant|>
+"""
 
     def __repr__(self) -> str:
         """String representation."""

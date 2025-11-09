@@ -97,8 +97,11 @@ class CommandGenerator:
                 prompt,
                 max_tokens=self.max_command_tokens,
                 temperature=0.3,  # Lower temperature for precise commands
-                stop=["Explanation:", "\n\n", "User:"],
+                stop=["<|end|>", "<|user|>", "\n\n"],  # Phi-3 chat format stop sequences
             )
+
+            # Log raw response for debugging
+            logger.debug(f"Raw LLM response: {repr(response)}")
 
             # Parse response
             commands = self._parse_commands(response)
@@ -138,18 +141,22 @@ class CommandGenerator:
         if not command:
             return {"command": "", "explanation": "Could not generate command."}
 
-        # Then generate explanation
-        explain_prompt = f"""Briefly explain what this command does:
+        # Then generate explanation (using Phi-3 chat format)
+        explain_prompt = f"""<|system|>
+You are a helpful Linux command expert. Explain commands briefly in one sentence.<|end|>
+<|user|>
+Briefly explain what this command does:
 
-Command: {command}
-
-Explanation (one sentence):"""
+Command: {command}<|end|>
+<|assistant|>
+"""
 
         try:
             explanation = self.llm.generate(
                 explain_prompt,
                 max_tokens=80,
                 temperature=0.3,
+                stop=["<|end|>", "<|user|>"],
             )
         except Exception as e:
             logger.warning(f"Failed to generate explanation: {e}")
@@ -185,19 +192,25 @@ Explanation (one sentence):"""
             >>> print(refined)
             "ls -la"
         """
-        prompt = f"""Modify this shell command according to the user's request.
+        # Format in Phi-3 chat format
+        prompt = f"""<|system|>
+You are a helpful Linux command expert. Modify shell commands as requested. Output only the modified command.<|end|>
+<|user|>
+Modify this shell command according to the user's request.
 
 Current command: {current_command}
 User request: {refinement}
 
-Modified command (only the command, no explanation):"""
+Modified command:<|end|>
+<|assistant|>
+"""
 
         try:
             refined = self.llm.generate(
                 prompt,
                 max_tokens=self.max_command_tokens,
                 temperature=0.2,  # Very low temperature for precise modifications
-                stop=["\n", "Explanation:"],
+                stop=["<|end|>", "<|user|>", "\n"],
             )
 
             # Clean up response
@@ -231,18 +244,24 @@ Modified command (only the command, no explanation):"""
             >>> print(completions)
             ["git commit", "git commit -m", "git commit -am"]
         """
-        prompt = f"""Complete this partial shell command with the most likely completions.
+        # Format in Phi-3 chat format
+        prompt = f"""<|system|>
+You are a helpful Linux command expert. Complete partial commands. Output only completed commands, one per line.<|end|>
+<|user|>
+Complete this partial shell command with the most likely completions.
 
 Partial command: {partial_command}
 
-Provide 3 possible completions, one per line (commands only, no explanations):"""
+Provide 3 possible completions, one per line:<|end|>
+<|assistant|>
+"""
 
         try:
             response = self.llm.generate(
                 prompt,
                 max_tokens=100,
                 temperature=0.4,
-                stop=["\n\n"],
+                stop=["<|end|>", "<|user|>"],
             )
 
             # Parse completions
@@ -262,26 +281,27 @@ Provide 3 possible completions, one per line (commands only, no explanations):""
     def _build_simple_prompt(self, description: str, multiple: bool) -> str:
         """
         Build a simple prompt without RAG context.
+        Uses Phi-3 chat format for proper model interaction.
 
         Args:
             description: Task description
             multiple: Whether to request multiple alternatives
 
         Returns:
-            Prompt string
+            Prompt string in Phi-3 format
         """
         if multiple:
-            return f"""Generate shell commands for this task. Provide 3 alternative approaches.
-
-Task: {description}
-
-Commands (one per line):"""
+            user_message = f"Generate shell commands for this task. Provide 3 alternative approaches, one per line.\n\nTask: {description}"
         else:
-            return f"""Generate a shell command for this task.
+            user_message = f"Generate a shell command for this task. Output only the command, no explanation or extra text.\n\nTask: {description}"
 
-Task: {description}
-
-Command (only the command, no explanation):"""
+        # Format in Phi-3 chat format
+        return f"""<|system|>
+You are a helpful Linux command expert. Generate only valid shell commands, nothing else.<|end|>
+<|user|>
+{user_message}<|end|>
+<|assistant|>
+"""
 
     def _parse_commands(self, response: str) -> list[str]:
         """
@@ -293,15 +313,26 @@ Command (only the command, no explanation):"""
         Returns:
             List of cleaned commands
         """
+        if not response or not response.strip():
+            logger.warning("Empty response from LLM")
+            return []
+
         # Split by newlines
         lines = response.strip().split("\n")
 
         commands = []
-        for line in lines:
+        for i, line in enumerate(lines):
             # Clean up line
             cleaned = self._clean_command(line)
             if cleaned:
+                logger.debug(f"Parsed command {i+1}: {cleaned}")
                 commands.append(cleaned)
+            elif line.strip():
+                # Log filtered lines for debugging
+                logger.debug(f"Filtered line {i+1}: {repr(line)}")
+
+        if not commands:
+            logger.warning(f"No valid commands extracted from response: {repr(response)}")
 
         return commands
 
@@ -314,6 +345,7 @@ Command (only the command, no explanation):"""
         - Markdown code blocks (```)
         - Extra whitespace
         - Explanatory text after #
+        - Common LLM prefixes
 
         Args:
             text: Raw command text
@@ -321,6 +353,15 @@ Command (only the command, no explanation):"""
         Returns:
             Cleaned command
         """
+        if not text:
+            return ""
+
+        # Extract commands from inline backticks (e.g., "use the `ls` command" -> "ls")
+        backtick_match = re.search(r"`([^`]+)`", text)
+        if backtick_match:
+            # Found a command in backticks, use that
+            text = backtick_match.group(1)
+
         # Remove markdown code blocks
         text = re.sub(r"```(?:bash|sh|shell)?\n?", "", text)
 
@@ -330,6 +371,20 @@ Command (only the command, no explanation):"""
         # Remove bullet points
         text = re.sub(r"^[-*]\s*", "", text.strip())
 
+        # Remove common LLM prefixes like "Command:", "Use:", "Try:", etc.
+        prefixes = [
+            r"^command:\s*",
+            r"^generated command:\s*",
+            r"^the command is:\s*",
+            r"^you can use:\s*",
+            r"^use:\s*",
+            r"^try:\s*",
+            r"^run:\s*",
+            r"^execute:\s*",
+        ]
+        for prefix in prefixes:
+            text = re.sub(prefix, "", text.strip(), flags=re.IGNORECASE)
+
         # Extract command (before any # comment that's clearly explanatory)
         # But preserve inline comments that are part of the command
         if " #" in text and len(text.split(" #")[0]) > 3:
@@ -338,13 +393,31 @@ Command (only the command, no explanation):"""
         # Clean up whitespace
         text = text.strip()
 
-        # Validate it looks like a command
+        # Validate it looks like a command (must have some content)
         if not text or len(text) < 2:
             return ""
 
-        # Check it starts with a command-like word (not explanation)
+        # Filter out explanatory text and natural language
         first_word = text.split()[0] if text.split() else ""
-        if first_word.lower() in ["this", "the", "it", "command", "use", "try"]:
+
+        # Filter obvious non-command text
+        if first_word.lower() in ["this", "the", "it", "that", "these", "here", "a", "an"]:
+            # Check if there's more after these words that looks like a command
+            remaining = " ".join(text.split()[1:]) if len(text.split()) > 1 else ""
+            if remaining and len(remaining) > 2:
+                # Check if the remaining text starts with a typical command word
+                remaining_first = remaining.split()[0].lower() if remaining.split() else ""
+                # If it's still explanatory (like "command lists..."), filter it
+                if remaining_first in ["command", "will", "can", "should", "would", "lists", "shows", "displays"]:
+                    return ""
+                text = remaining.strip()
+            else:
+                return ""
+
+        # Additional check: if text looks like natural language explanation, filter it
+        # Commands typically don't have common English words like "lists", "shows", "displays" as the command name
+        if first_word.lower() in ["lists", "shows", "displays", "prints", "creates", "removes", "deletes",
+                                  "will", "can", "should", "would", "could", "might", "may"]:
             return ""
 
         return text

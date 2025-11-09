@@ -98,14 +98,15 @@ class WebSearcher:
             AI-generated summary of search results
         """
         if not results:
-            # No results - use LLM's base knowledge
-            prompt = f"""Answer the following query concisely based on your knowledge:
+            # No results - use LLM's base knowledge (with Phi-3 chat format)
+            prompt = f"""<|system|>
+You are a helpful assistant. Answer questions clearly and accurately based on your knowledge.<|end|>
+<|user|>
+{query}<|end|>
+<|assistant|>
+"""
 
-Query: {query}
-
-Provide a clear, informative answer:"""
-
-            return self.llm.generate(prompt, max_tokens=300, temperature=0.3)
+            return self.llm.generate(prompt, max_tokens=300, temperature=0.3, stop=["<|end|>", "<|user|>"])
 
         # Build results context
         results_text = ""
@@ -123,15 +124,21 @@ Provide a clear, informative answer:"""
             max_tokens = 400
             instruction = "Provide a clear and concise summary in 2-3 paragraphs"
 
-        prompt = f"""Based on the following web search results, provide an informative summary.
+        # Format in Phi-3 chat format
+        prompt = f"""<|system|>
+You are a helpful assistant that summarizes web search results clearly and accurately.<|end|>
+<|user|>
+Based on the following web search results, provide an informative summary.
 
 Query: {query}
 
 Search Results:{results_text}
 
-{instruction}:"""
+{instruction}:<|end|>
+<|assistant|>
+"""
 
-        summary = self.llm.generate(prompt, max_tokens=max_tokens, temperature=0.3)
+        summary = self.llm.generate(prompt, max_tokens=max_tokens, temperature=0.3, stop=["<|end|>", "<|user|>"])
 
         logger.info("Generated summary from search results")
         return summary

@@ -491,16 +491,16 @@ def ask(ctx: click.Context, query: tuple) -> None:
             temperature=config.get("llm.temperature"),
         )
 
-        # Build a prompt for general questions
-        prompt = f"""You are a helpful assistant for shell commands and system administration.
-Answer the following question concisely and accurately.
-
-Question: {query_text}
-
-Answer:"""
+        # Use Phi-3 chat format for better results
+        prompt = f"""<|system|>
+You are a helpful assistant for shell commands and system administration. Answer questions concisely and accurately.<|end|>
+<|user|>
+{query_text}<|end|>
+<|assistant|>
+"""
 
         # Generate response
-        response = llm.generate(prompt, max_tokens=300, temperature=0.5)
+        response = llm.generate(prompt, max_tokens=300, temperature=0.5, stop=["<|end|>", "<|user|>"])
 
         click.echo(f"\nQuestion: {query_text}")
         click.echo(f"\nAnswer:\n{response}")
