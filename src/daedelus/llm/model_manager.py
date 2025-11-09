@@ -69,6 +69,13 @@ class ModelManager:
 
     # HuggingFace model registry
     MODEL_REGISTRY = {
+        "tinyllama": {
+            "repo": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+            "filename": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+            "size_mb": 669,
+            "description": "TinyLlama 1.1B Chat (Q4 quantized, 100% FOSS Apache 2.0)",
+            "checksum": None,  # Will be verified from HF
+        },
         "phi-3-mini": {
             "repo": "microsoft/Phi-3-mini-4k-instruct-gguf",
             "filename": "Phi-3-mini-4k-instruct-q4.gguf",
@@ -382,7 +389,7 @@ class ModelManager:
                 target_path.unlink()
             raise RuntimeError(f"Failed to download {model_name}: {e}") from e
 
-    def initialize_daedelus(self, base_model: str = "phi-3-mini") -> Path:
+    def initialize_daedelus(self, base_model: str = "tinyllama") -> Path:
         """
         Initialize the first Daedelus model from base.
 

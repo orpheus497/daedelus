@@ -16,11 +16,11 @@ Daedalus uses GGUF-format models compatible with llama.cpp for its LLM features.
 # Create models directory
 mkdir -p ~/.local/share/models
 
-# Download recommended model (Phi-3-mini)
-wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf
+# Download recommended model (TinyLlama - 100% FOSS)
+wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
 
-# Move to expected location
-mv Phi-3-mini-4k-instruct-q4.gguf ~/.local/share/models/model.gguf
+# Move to models directory (auto-detected, no need to rename)
+mv tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf ~/.local/share/models/
 
 # Restart Daedalus
 daedelus restart
@@ -33,21 +33,22 @@ daedelus explain "ls -la"
 
 ### Recommended Models
 
-#### 1. Phi-3-mini (Recommended)
-- **Size**: ~2.4GB
-- **RAM Required**: 4GB
-- **Speed**: Fast
-- **Quality**: High
-- **Best for**: General use, balanced performance
+#### 1. TinyLlama-1.1B (Recommended)
+- **Size**: ~669MB
+- **RAM Required**: 2GB
+- **Speed**: Very Fast
+- **Quality**: Good
+- **License**: 100% FOSS (Apache 2.0)
+- **Best for**: Fast responses, low-end systems, privacy-conscious users
 
 ```bash
-wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf
-mv Phi-3-mini-4k-instruct-q4.gguf ~/.local/share/models/model.gguf
+wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+mv tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf ~/.local/share/models/
 ```
 
-#### 2. TinyLlama-1.1B
-- **Size**: ~600MB
-- **RAM Required**: 2GB
+#### 2. Phi-3-mini
+- **Size**: ~2.4GB
+- **RAM Required**: 4GB
 - **Speed**: Very fast
 - **Quality**: Good
 - **Best for**: Low-end systems, quick responses
@@ -85,8 +86,8 @@ mv qwen2.5-3b-instruct-q4_k_m.gguf ~/.local/share/models/model.gguf
 
 | Model | Size | RAM | CPU Usage | Response Time | Quality | Use Case |
 |-------|------|-----|-----------|---------------|---------|----------|
-| TinyLlama-1.1B | 600MB | 2GB | Low | <1s | ⭐⭐⭐ | Lightweight systems |
-| Phi-3-mini | 2.4GB | 4GB | Medium | 1-2s | ⭐⭐⭐⭐ | **Recommended** |
+| TinyLlama-1.1B | 669MB | 2GB | Low | <1s | ⭐⭐⭐ | **Recommended** - 100% FOSS |
+| Phi-3-mini | 2.4GB | 4GB | Medium | 1-2s | ⭐⭐⭐⭐ | More capable |
 | Qwen2.5-3B | 3GB | 6GB | Medium | 2-3s | ⭐⭐⭐⭐ | Multilingual |
 | Mistral-7B | 4GB | 8GB | High | 3-5s | ⭐⭐⭐⭐⭐ | High performance |
 
@@ -327,7 +328,7 @@ daedelus start  # Starts daemon in background
    daedelus config set llm.temperature 0.9
    ```
 
-2. Try a different model (Phi-3-mini usually best for commands)
+2. Try a different model (TinyLlama recommended for speed and FOSS compliance)
 
 3. Check model is correct type (needs to be instruct/chat variant)
 
@@ -356,7 +357,7 @@ The `.gitignore` file ensures that if you fork or upload Daedalus:
 
 ## Best Practices
 
-1. **Start with Phi-3-mini** - Best balance for most users
+1. **Start with TinyLlama** - 100% FOSS, fast, and lightweight
 2. **Use Q4_K_M quantization** - Good quality, reasonable size
 3. **Keep daemon running** - Faster responses (model stays in RAM)
 4. **Adjust temperature** - Lower (0.3-0.5) for technical tasks, higher (0.7-0.9) for creative tasks

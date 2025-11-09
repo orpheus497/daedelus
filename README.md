@@ -55,7 +55,7 @@ FastText Embeddings → Annoy Vector Search → Pattern Learning
 
 ### Phase 2: LLM Enhancement ✅ (Current)
 ```
-Phase 1 + llama.cpp (Phi-3-mini) → RAG Pipeline → PEFT/LoRA Fine-Tuning
+Phase 1 + llama.cpp (TinyLlama) → RAG Pipeline → PEFT/LoRA Fine-Tuning
 ├── Natural language command explanations
 ├── Command generation from descriptions
 ├── Q&A about shell commands
@@ -112,6 +112,108 @@ source $(daedelus shell-integration bash)
 ```fish
 source (daedelus shell-integration fish)
 ```
+
+### Quick-Summon Aliases (Optional)
+
+For even faster access, source the alias file:
+
+**ZSH** (`~/.zshrc`):
+```bash
+# Add this line after the shell integration
+source ~/.local/share/daedelus/aliases.zsh
+```
+
+**Bash** (`~/.bashrc`):
+```bash
+# Add this line after the shell integration
+source ~/.local/share/daedelus/aliases.sh
+```
+
+Now you can use shortcuts:
+- `d i` - Start interactive mode
+- `ds "query"` - Search history
+- `dex "command"` - Explain command
+- `dgen "description"` - Generate command
+- `da` - Analytics
+- Plus 20+ more aliases! (Run `dtips` to see all)
+
+## ✨ Enhanced Features (NEW!)
+
+### 🎨 Interactive REPL Mode
+
+Launch a powerful terminal interface with syntax highlighting, fuzzy search, and AI assistance:
+
+```bash
+daedelus repl    # or: daedelus i  (or: d i with aliases)
+```
+
+Features:
+- **Syntax Highlighting** - Commands displayed with beautiful colors
+- **Auto-Completion** - Tab completion from your command history
+- **Fuzzy Search** - Find commands with partial matches (`/search docker`)
+- **AI Commands** - Explain, generate, and refine commands interactively
+- **History Navigation** - Use ↑/↓ arrows through your history
+- **Live Suggestions** - Get AI suggestions as you type
+
+REPL Commands:
+```
+/search <query>       - Fuzzy search command history
+/explain <command>    - Explain what a command does
+/generate <desc>      - Generate command from description
+/recent               - Show recent commands
+/stats                - Usage statistics
+/help                 - Show help
+/quit                 - Exit (or Ctrl+D)
+```
+
+### 🔍 Fuzzy Command Search
+
+Find commands even with typos or partial matches:
+
+```bash
+daedelus search "git push"      # Find all git push variants
+daedelus search docker -n 20    # Show 20 Docker command results
+daedelus search "file operations"  # Semantic search
+```
+
+Uses advanced fuzzy matching algorithms (thefuzz + Levenshtein distance) for intelligent results.
+
+### 🎨 Syntax Highlighting
+
+Highlight any command or code with 300+ language support:
+
+```bash
+daedelus highlight "git log --oneline --graph"
+daedelus highlight "SELECT * FROM users WHERE id = 1" --syntax sql
+daedelus highlight "def fibonacci(n):" --syntax python
+```
+
+Powered by Pygments with beautiful color schemes.
+
+### 📊 Usage Analytics
+
+Get insights into your command usage patterns:
+
+```bash
+daedelus analytics              # Quick stats
+daedelus analytics --detailed   # Detailed breakdown
+```
+
+Shows:
+- Total and unique command counts
+- Success rates
+- Most frequently used commands
+- Usage patterns over time
+
+### 💡 Tips System
+
+New to Daedelus? Get helpful tips anytime:
+
+```bash
+daedelus tips
+```
+
+Shows keyboard shortcuts, usage examples, and power-user features.
 
 ## 📖 Usage
 
@@ -263,19 +365,19 @@ privacy:
 
 Daedalus uses GGUF-format models for LLM features. You can use any GGUF model compatible with llama.cpp.
 
-#### Option 1: Download Phi-3-mini (Recommended)
+#### Option 1: Download TinyLlama (Recommended)
 
-Phi-3-mini is recommended for most users (small, fast, and capable):
+TinyLlama is recommended for most users (small, fast, 100% FOSS with Apache 2.0 license):
 
 ```bash
 # Create models directory
 mkdir -p ~/.local/share/models
 
-# Download Phi-3-mini-4k-instruct Q4 quantized model (~2.4GB)
-wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf
+# Download TinyLlama 1.1B Chat Q4 quantized model (~669MB)
+wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
 
-# Move to Daedalus models directory
-mv Phi-3-mini-4k-instruct-q4.gguf ~/.local/share/models/model.gguf
+# Move to Daedalus models directory (note: no need to rename - auto-detected)
+mv tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf ~/.local/share/models/
 
 # Restart Daedalus to load the model
 daedelus restart
@@ -344,8 +446,8 @@ Choose based on your hardware and needs:
 
 | Model | Size | RAM | Speed | Use Case |
 |-------|------|-----|-------|----------|
-| TinyLlama-1.1B | ~600MB | 2GB | ⚡⚡⚡ | Low-end systems, fast responses |
-| Phi-3-mini | ~2.4GB | 4GB | ⚡⚡ | **Recommended** - balanced |
+| TinyLlama-1.1B | ~669MB | 2GB | ⚡⚡⚡ | **Recommended** - 100% FOSS, fast |
+| Phi-3-mini | ~2.4GB | 4GB | ⚡⚡ | More capable, larger |
 | Qwen2.5-3B | ~3GB | 6GB | ⚡ | Multilingual support |
 | Mistral-7B | ~4GB | 8GB | ⚡ | More capable, slower |
 
@@ -407,7 +509,7 @@ This comprehensive guide covers:
 - **CLI**: Click
 
 **Phase 2 (Current):**
-- **LLM**: llama.cpp + Phi-3-mini (GGUF)
+- **LLM**: llama.cpp + TinyLlama (GGUF, 100% FOSS)
 - **Vector DB**: sqlite-vss
 - **Fine-Tuning**: PEFT/LoRA
 - **Framework**: transformers, accelerate
@@ -476,7 +578,7 @@ bandit -r src/daedelus
 
 ### ✅ Phase 2: LLM Enhancement (COMPLETE)
 - [x] llama.cpp integration
-- [x] Phi-3-mini model support (GGUF)
+- [x] TinyLlama model support (GGUF, 100% FOSS)
 - [x] RAG pipeline for context injection
 - [x] PEFT/LoRA fine-tuning infrastructure
 - [x] Natural language command explanations (`daedelus explain`)
