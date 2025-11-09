@@ -155,6 +155,147 @@ class ModelManager:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
+    def _find_llama_cpp(self) -> Path | None:
+        """
+        Find llama.cpp installation.
+
+        Returns:
+            Path to llama.cpp directory if found, None otherwise
+        """
+        # Try common installation paths
+        possible_paths = [
+            Path.home() / "llama.cpp",
+            Path("/usr/local/llama.cpp"),
+            Path("/opt/llama.cpp"),
+            Path.home() / "src" / "llama.cpp",
+        ]
+
+        for path in possible_paths:
+            if path.exists() and (path / "convert.py").exists():
+                logger.info(f"Found llama.cpp at: {path}")
+                return path
+
+        # Try to find in PATH
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["which", "convert-hf-to-gguf.py"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                script_path = Path(result.stdout.strip())
+                llama_cpp_path = script_path.parent
+                logger.info(f"Found llama.cpp scripts in PATH: {llama_cpp_path}")
+                return llama_cpp_path
+        except Exception:
+            pass
+
+        logger.warning("llama.cpp not found in common locations")
+        return None
+
+    def _convert_to_gguf(
+        self,
+        hf_model_path: Path,
+        output_path: Path,
+        llama_cpp_path: Path,
+        quantization: str = "q4_k_m",
+    ) -> None:
+        """
+        Convert HuggingFace model to GGUF format.
+
+        Args:
+            hf_model_path: Path to HuggingFace model directory
+            output_path: Path for output GGUF file
+            llama_cpp_path: Path to llama.cpp directory
+            quantization: Quantization level (q4_k_m, q8_0, f16, etc.)
+
+        Raises:
+            RuntimeError: If conversion fails
+        """
+        import subprocess
+
+        # Find conversion script
+        convert_script = llama_cpp_path / "convert.py"
+        if not convert_script.exists():
+            convert_script = llama_cpp_path / "convert-hf-to-gguf.py"
+
+        if not convert_script.exists():
+            raise FileNotFoundError(
+                f"Conversion script not found in {llama_cpp_path}. "
+                "Expected convert.py or convert-hf-to-gguf.py"
+            )
+
+        # Convert to f16 first
+        logger.info("Converting to GGUF (f16)...")
+        temp_f16 = output_path.parent / f"{output_path.stem}_f16.gguf"
+
+        try:
+            result = subprocess.run(
+                [
+                    "python",
+                    str(convert_script),
+                    str(hf_model_path),
+                    "--outfile",
+                    str(temp_f16),
+                    "--outtype",
+                    "f16",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=600,
+            )
+            logger.debug(f"Conversion output: {result.stdout}")
+
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"GGUF conversion failed: {e.stderr}")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Conversion timed out after 10 minutes")
+
+        # Quantize if needed
+        if quantization != "f16":
+            logger.info(f"Quantizing to {quantization}...")
+
+            quantize_binary = llama_cpp_path / "quantize"
+            if not quantize_binary.exists():
+                quantize_binary = llama_cpp_path / "build" / "bin" / "quantize"
+
+            if not quantize_binary.exists():
+                logger.warning("Quantize binary not found. Using f16 instead.")
+                shutil.copy2(temp_f16, output_path)
+                temp_f16.unlink()
+                return
+
+            try:
+                result = subprocess.run(
+                    [
+                        str(quantize_binary),
+                        str(temp_f16),
+                        str(output_path),
+                        quantization.upper(),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=600,
+                )
+                logger.debug(f"Quantization output: {result.stdout}")
+                temp_f16.unlink()  # Clean up f16 version
+
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(f"Quantization failed: {e.stderr}")
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("Quantization timed out after 10 minutes")
+        else:
+            # Just use f16 version
+            shutil.copy2(temp_f16, output_path)
+            temp_f16.unlink()
+
+        logger.info(f"✓ GGUF conversion complete: {output_path}")
+
     def download_model(
         self,
         model_name: str = "phi-3-mini",
@@ -354,18 +495,103 @@ class ModelManager:
         logger.info(f"Forging Daedelus v{next_version}...")
         logger.info(f"  Parent: {current.name}")
         logger.info(f"  Training commands: {training_commands}")
+        logger.info(f"  Adapter path: {adapter_path}")
 
-        # TODO: Actual implementation would:
-        # 1. Load current model with transformers
-        # 2. Load and merge LoRA adapter
-        # 3. Re-quantize to GGUF format
-        # 4. Save as next version
-        #
-        # For now, we create a placeholder (copy current model)
-        # The actual merging will be implemented when PEFT training is active
+        # Verify adapter exists
+        adapter_path = Path(adapter_path)
+        if not adapter_path.exists():
+            raise FileNotFoundError(f"Adapter not found: {adapter_path}")
 
-        logger.warning("Model forging not yet implemented - creating placeholder")
-        shutil.copy2(current.path, next_model_path)
+        # Import required libraries for model merging
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from peft import PeftModel
+        except ImportError:
+            logger.error(
+                "transformers and peft are required for model forging. "
+                "Install with: pip install 'daedelus[llm]'"
+            )
+            raise
+
+        # Step 1: Load base model (Phi-3-mini in HuggingFace format)
+        logger.info("Loading base model in HuggingFace format...")
+        base_model_name = "microsoft/Phi-3-mini-4k-instruct"
+
+        try:
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                device_map="cpu",  # Load to CPU for merging
+                torch_dtype="auto",
+            )
+            tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+            logger.info("✓ Base model loaded")
+
+        except Exception as e:
+            logger.error(f"Failed to load base model: {e}")
+            raise RuntimeError(f"Base model loading failed: {e}")
+
+        # Step 2: Load and merge LoRA adapter
+        logger.info(f"Loading LoRA adapter from {adapter_path}...")
+        try:
+            model_with_adapter = PeftModel.from_pretrained(
+                base_model,
+                str(adapter_path),
+            )
+            logger.info("✓ Adapter loaded")
+
+            logger.info("Merging adapter into base model...")
+            merged_model = model_with_adapter.merge_and_unload()
+            logger.info("✓ Adapter merged successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to load/merge adapter: {e}")
+            raise RuntimeError(f"Adapter merge failed: {e}")
+
+        # Step 3: Save merged model in HuggingFace format (temporary)
+        logger.info("Saving merged model in HuggingFace format...")
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_hf_path = Path(temp_dir) / "merged_hf"
+            temp_hf_path.mkdir(exist_ok=True)
+
+            try:
+                merged_model.save_pretrained(temp_hf_path)
+                tokenizer.save_pretrained(temp_hf_path)
+                logger.info(f"✓ Merged model saved to temporary directory")
+
+            except Exception as e:
+                logger.error(f"Failed to save merged model: {e}")
+                raise RuntimeError(f"Model save failed: {e}")
+
+            # Step 4: Convert to GGUF format using llama.cpp
+            logger.info("Converting merged model to GGUF format...")
+
+            # Find llama.cpp tools
+            llama_cpp_path = self._find_llama_cpp()
+
+            if llama_cpp_path is None:
+                logger.warning(
+                    "llama.cpp not found. Cannot convert to GGUF. "
+                    "Attempting fallback to copying current model..."
+                )
+                # Fallback: just copy current model as placeholder
+                shutil.copy2(current.path, next_model_path)
+                logger.warning("⚠ Using placeholder (copy of current model)")
+
+            else:
+                try:
+                    self._convert_to_gguf(
+                        hf_model_path=temp_hf_path,
+                        output_path=next_model_path,
+                        llama_cpp_path=llama_cpp_path,
+                    )
+                    logger.info("✓ Converted to GGUF successfully")
+
+                except Exception as e:
+                    logger.error(f"GGUF conversion failed: {e}")
+                    logger.warning("Falling back to copying current model...")
+                    shutil.copy2(current.path, next_model_path)
 
         # Register new version
         checksum = self._calculate_checksum(next_model_path)
