@@ -72,6 +72,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced suggestions with LLM fallback (`src/daedelus/llm/enhanced_suggestions.py`)
 - Comprehensive test suite (179+ tests, >80% coverage)
 
+### Optional Enhancements (Implemented)
+
+- **Dependency Management System** (`src/daedelus/utils/dependencies.py`)
+  - Graceful degradation when optional dependencies missing
+  - Helpful error messages with installation instructions
+  - Feature flags based on available dependencies
+  - Import guards for fasttext, annoy, llama-cpp-python
+  - Decorator-based dependency requirements
+  - CLI command for dependency status checking
+
+- **Command Safety Analysis** (`src/daedelus/core/safety.py`)
+  - Pattern-based dangerous command detection
+  - Configurable safety levels (off, warn, block)
+  - Built-in dangerous pattern database (rm -rf /, dd, mkfs, fork bombs, etc.)
+  - User whitelist support
+  - Detailed safety explanations
+  - Configuration integration (safety section in config.yaml)
+
+- **Self-Forging Model Manager** (`src/daedelus/llm/model_manager.py`)
+  - Automated Phi-3-mini download from HuggingFace
+  - Model initialization (phi-3-mini → daedelus_v1.gguf)
+  - Continuous model evolution through fine-tuning cycles
+  - Model versioning and lineage tracking (daedelus_v1 → v2 → v3 → vN)
+  - Adapter merging for personalized model creation
+  - Model verification with SHA256 checksums
+  - Rollback capability to previous versions
+  - Automatic old version cleanup
+
+- **Command Templates System** (`src/daedelus/core/templates.py`)
+  - Jinja2-style variable substitution ({{variable}})
+  - Built-in template library (git, docker, system, network commands)
+  - User template creation and management
+  - Template discovery from command history
+  - Category-based organization
+  - Template rendering with validation
+
+- **Database Backup & Restore** (`src/daedelus/utils/backup.py`)
+  - Automated backup creation with gzip compression
+  - Backup rotation (keep N most recent)
+  - Restoration with safety backups
+  - Backup verification and integrity checking
+  - Automatic scheduled backups based on interval
+  - Compression ratio reporting
+
+- **TUI Statistics Dashboard** (`src/daedelus/ui/dashboard.py`)
+  - Interactive terminal UI with Textual framework
+  - Real-time statistics display
+  - Most used commands ranking
+  - Success rate tracking
+  - Session history browser
+  - Rich fallback for environments without Textual
+  - Export functionality for statistics
+
 ## [0.1.0] - 2025-11-09
 
 ### Added - Phase 1: Embedding-Based System
