@@ -50,9 +50,10 @@ class RAGPipeline:
         max_context_commands: int = 10,
         enable_compression: bool = True,
         compression_aggressive: bool = False,
+        max_context_tokens: int = 1024,
     ) -> None:
         """
-        Initialize RAG pipeline.
+        Initialize RAG pipeline with token counting and management.
 
         Args:
             db: Command database
@@ -61,11 +62,13 @@ class RAGPipeline:
             max_context_commands: Maximum commands in context
             enable_compression: Enable token compression
             compression_aggressive: Use aggressive compression
+            max_context_tokens: Maximum tokens for context (default 1024)
         """
         self.db = db
         self.embedder = embedder
         self.vector_store = vector_store
         self.max_context_commands = max_context_commands
+        self.max_context_tokens = max_context_tokens
 
         # Initialize token compression if available
         self.compressor = None
@@ -85,7 +88,7 @@ class RAGPipeline:
                 logger.warning(f"Failed to initialize token compression: {e}")
                 self.compressor = None
 
-        logger.info("RAG pipeline initialized")
+        logger.info(f"RAG pipeline initialized (max_context_tokens={max_context_tokens})")
 
     def retrieve_context(
         self,
@@ -187,41 +190,196 @@ class RAGPipeline:
 
         return context
 
-    def format_context_for_llm(self, context: dict[str, Any]) -> str:
+    def count_tokens(self, text: str) -> int:
         """
-        Format retrieved context into a string for LLM prompt.
+        Estimate token count for text.
+
+        Uses simple heuristic: ~4 characters per token.
+        For precise counting, would need actual tokenizer.
+
+        Args:
+            text: Text to count tokens for
+
+        Returns:
+            Estimated token count
+        """
+        # Simple heuristic: average 4 chars per token
+        # This is approximate but works well for English text
+        return len(text) // 4
+
+    def score_relevance(
+        self,
+        item: dict[str, Any],
+        query: str,
+        cwd: str | None = None,
+    ) -> float:
+        """
+        Score relevance of a retrieved item.
+
+        Considers multiple factors:
+        - Similarity score (if available)
+        - Recency (timestamp)
+        - Directory match (cwd)
+        - Command success rate
+
+        Args:
+            item: Retrieved item (command, similarity, etc.)
+            query: Original query
+            cwd: Current working directory
+
+        Returns:
+            Relevance score (0.0-1.0)
+        """
+        score = 0.5  # Base score
+
+        # Factor 1: Similarity score (if available)
+        if "similarity" in item:
+            score += item["similarity"] * 0.3
+
+        # Factor 2: Recency (if timestamp available)
+        if "timestamp" in item:
+            import time
+            age_hours = (time.time() - item["timestamp"]) / 3600
+            # Decay over time: recent = higher score
+            recency_score = max(0, 1.0 - (age_hours / (24 * 30)))  # Decay over 30 days
+            score += recency_score * 0.2
+
+        # Factor 3: Directory match
+        if cwd and "cwd" in item:
+            if item["cwd"] == cwd:
+                score += 0.2  # Exact match
+            elif item["cwd"].startswith(cwd) or cwd.startswith(item["cwd"]):
+                score += 0.1  # Parent/child directory
+
+        # Factor 4: Success rate (if available)
+        if "success" in item and item["success"]:
+            score += 0.1
+
+        return min(1.0, score)
+
+    def prioritize_and_truncate(
+        self,
+        items: list[dict[str, Any]],
+        query: str,
+        cwd: str | None,
+        max_tokens: int,
+    ) -> list[dict[str, Any]]:
+        """
+        Prioritize items by relevance and truncate to fit token budget.
+
+        Args:
+            items: List of retrieved items
+            query: Original query
+            cwd: Current working directory
+            max_tokens: Maximum tokens allowed
+
+        Returns:
+            Prioritized and truncated list of items
+        """
+        if not items:
+            return []
+
+        # Score all items
+        scored_items = []
+        for item in items:
+            score = self.score_relevance(item, query, cwd)
+            scored_items.append((score, item))
+
+        # Sort by relevance (highest first)
+        scored_items.sort(key=lambda x: x[0], reverse=True)
+
+        # Truncate to fit token budget
+        result = []
+        tokens_used = 0
+
+        for score, item in scored_items:
+            # Estimate tokens for this item
+            item_str = str(item.get("command", ""))
+            item_tokens = self.count_tokens(item_str)
+
+            if tokens_used + item_tokens <= max_tokens:
+                result.append(item)
+                tokens_used += item_tokens
+            else:
+                # No more room
+                break
+
+        logger.debug(f"Prioritized {len(result)}/{len(items)} items ({tokens_used} tokens)")
+        return result
+
+    def format_context_for_llm(self, context: dict[str, Any], max_tokens: int | None = None) -> str:
+        """
+        Format retrieved context into a string for LLM prompt with token management.
 
         Args:
             context: Context dictionary from retrieve_context()
+            max_tokens: Maximum tokens for context (uses self.max_context_tokens if None)
 
         Returns:
-            Formatted context string
+            Formatted context string (truncated if needed)
+
+        Features:
+            - Token counting to prevent context overflow
+            - Relevance-based prioritization
+            - Graceful truncation with fallback
         """
+        max_tokens = max_tokens or self.max_context_tokens
         parts = []
 
-        # Add current directory
+        # Add current directory (small, always include)
         if context.get("cwd"):
             parts.append(f"Current directory: {context['cwd']}")
 
-        # Add recent history
+        # Calculate remaining token budget
+        base_tokens = self.count_tokens("\n".join(parts))
+        remaining_tokens = max(0, max_tokens - base_tokens - 50)  # Reserve 50 for safety
+
+        # Prioritize and truncate similar commands
+        if context.get("similar_commands"):
+            prioritized = self.prioritize_and_truncate(
+                context["similar_commands"],
+                context.get("query", ""),
+                context.get("cwd"),
+                remaining_tokens // 3,  # Allocate 1/3 of budget
+            )
+
+            if prioritized:
+                parts.append("\nSimilar commands used before:")
+                for item in prioritized:
+                    parts.append(f"  - {item['command']} (similarity: {item['similarity']:.2f})")
+
+        # Add recent history (fixed size for consistency)
         if context.get("recent_history"):
             parts.append("\nRecent commands:")
             for cmd in context["recent_history"][-5:]:  # Last 5
                 parts.append(f"  - {cmd}")
 
-        # Add similar commands
-        if context.get("similar_commands"):
-            parts.append("\nSimilar commands used before:")
-            for item in context["similar_commands"][:5]:  # Top 5
-                parts.append(f"  - {item['command']} (similarity: {item['similarity']:.2f})")
-
         # Add directory patterns
         if context.get("patterns"):
-            parts.append("\nCommands used in this directory:")
-            for item in context["patterns"][:3]:  # Top 3
-                parts.append(f"  - {item['command']}")
+            prioritized_patterns = self.prioritize_and_truncate(
+                context["patterns"],
+                context.get("query", ""),
+                context.get("cwd"),
+                remaining_tokens // 3,  # Allocate 1/3 of budget
+            )
 
-        return "\n".join(parts)
+            if prioritized_patterns:
+                parts.append("\nCommands used in this directory:")
+                for item in prioritized_patterns:
+                    parts.append(f"  - {item['command']}")
+
+        formatted = "\n".join(parts)
+
+        # Final token check and truncation
+        total_tokens = self.count_tokens(formatted)
+        if total_tokens > max_tokens:
+            logger.warning(f"Context exceeded budget ({total_tokens} > {max_tokens}), truncating...")
+            # Simple truncation: cut to max_tokens * 4 characters
+            formatted = formatted[: max_tokens * 4]
+            formatted += "\n[... context truncated ...]"
+
+        logger.debug(f"Formatted context: {self.count_tokens(formatted)} tokens")
+        return formatted
 
     def build_prompt(
         self,

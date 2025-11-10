@@ -149,9 +149,11 @@ class PEFTTrainer:
         num_epochs: int = 3,
         batch_size: int = 4,
         learning_rate: float = 1e-4,
-    ) -> None:
+        validation_split: float = 0.1,
+        resume_from_checkpoint: str | None = None,
+    ) -> dict[str, float]:
         """
-        Train LoRA adapter on user's command patterns.
+        Train LoRA adapter on user's command patterns with validation and checkpointing.
 
         Args:
             training_data: List of training examples
@@ -159,14 +161,21 @@ class PEFTTrainer:
             num_epochs: Number of training epochs
             batch_size: Training batch size
             learning_rate: Learning rate
+            validation_split: Fraction of data to use for validation (0.0-1.0)
+            resume_from_checkpoint: Path to checkpoint to resume from
 
-        Note:
-            This is a simplified training loop. In production, would use
-            HuggingFace Trainer for better optimization.
+        Returns:
+            Dictionary with training and validation metrics
+
+        Features:
+            - Validation split for model evaluation
+            - Automatic checkpointing with resume capability
+            - Evaluation metrics (loss, perplexity)
+            - Training quality assessment
         """
         if not training_data:
             logger.warning("No training data provided")
-            return
+            return {}
 
         output_dir = output_dir or self.adapter_path
         if output_dir is None:
@@ -176,6 +185,7 @@ class PEFTTrainer:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Training LoRA adapter on {len(training_data)} examples...")
+        logger.info(f"Validation split: {validation_split * 100:.1f}%")
 
         # Load base model
         logger.info("Loading base model...")
@@ -251,17 +261,44 @@ class PEFTTrainer:
 
         logger.info(f"Dataset tokenized: {len(tokenized_dataset)} examples")
 
-        # Configure training arguments
+        # Split into train and validation sets
+        train_dataset = tokenized_dataset
+        eval_dataset = None
+
+        if validation_split > 0.0 and len(tokenized_dataset) > 10:
+            # Only split if we have enough data
+            split_idx = int(len(tokenized_dataset) * (1 - validation_split))
+
+            # Shuffle before splitting for better validation
+            import random
+            indices = list(range(len(tokenized_dataset)))
+            random.shuffle(indices)
+
+            train_indices = indices[:split_idx]
+            eval_indices = indices[split_idx:]
+
+            train_dataset = tokenized_dataset.select(train_indices)
+            eval_dataset = tokenized_dataset.select(eval_indices)
+
+            logger.info(f"Split dataset: {len(train_dataset)} train, {len(eval_dataset)} validation")
+        else:
+            logger.info("Validation disabled (insufficient data or validation_split=0)")
+
+        # Configure training arguments with evaluation
         training_args = TrainingArguments(
             output_dir=str(output_dir / "checkpoints"),
             num_train_epochs=num_epochs,
             per_device_train_batch_size=batch_size,
+            per_device_eval_batch_size=batch_size,  # Evaluation batch size
             gradient_accumulation_steps=4,  # Effective batch size = 4 * batch_size
             learning_rate=learning_rate,
             warmup_steps=100,
             logging_steps=10,
+            eval_strategy="epoch" if eval_dataset else "no",  # Evaluate each epoch
             save_strategy="epoch",
             save_total_limit=2,  # Keep only 2 latest checkpoints
+            load_best_model_at_end=True if eval_dataset else False,  # Load best model
+            metric_for_best_model="eval_loss" if eval_dataset else None,
             fp16=True,  # Mixed precision training
             optim="adamw_torch",
             report_to="none",  # Disable wandb/tensorboard
@@ -275,38 +312,74 @@ class PEFTTrainer:
             mlm=False,  # Causal LM, not masked LM
         )
 
-        # Initialize trainer
+        # Initialize trainer with evaluation dataset
         logger.info("Initializing trainer...")
         trainer = Trainer(
             model=model,
             args=training_args,
-            train_dataset=tokenized_dataset,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,  # Add validation dataset
             data_collator=data_collator,
         )
 
         # Execute training loop with gradient descent
         logger.info("Starting training loop...")
+        if resume_from_checkpoint:
+            logger.info(f"Resuming from checkpoint: {resume_from_checkpoint}")
+
         try:
-            train_result = trainer.train()
+            train_result = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
             # Log training metrics
             logger.info("Training completed successfully!")
             logger.info(f"Training loss: {train_result.training_loss:.4f}")
             logger.info(f"Training steps: {train_result.global_step}")
 
+            # Calculate perplexity (exp(loss))
+            import math
+            train_perplexity = math.exp(train_result.training_loss)
+            logger.info(f"Training perplexity: {train_perplexity:.2f}")
+
+            # Collect metrics
+            metrics = {
+                "training_loss": float(train_result.training_loss),
+                "training_perplexity": float(train_perplexity),
+                "global_step": train_result.global_step,
+                "num_epochs": num_epochs,
+                "num_train_examples": len(train_dataset),
+                "num_eval_examples": len(eval_dataset) if eval_dataset else 0,
+            }
+
+            # Add evaluation metrics if available
+            if eval_dataset:
+                logger.info("Running final evaluation...")
+                eval_result = trainer.evaluate()
+                eval_loss = eval_result.get("eval_loss", 0.0)
+                eval_perplexity = math.exp(eval_loss) if eval_loss > 0 else 0.0
+
+                logger.info(f"Evaluation loss: {eval_loss:.4f}")
+                logger.info(f"Evaluation perplexity: {eval_perplexity:.2f}")
+
+                metrics["eval_loss"] = float(eval_loss)
+                metrics["eval_perplexity"] = float(eval_perplexity)
+
+                # Quality assessment
+                if eval_perplexity < 10.0:
+                    quality = "excellent"
+                elif eval_perplexity < 20.0:
+                    quality = "good"
+                elif eval_perplexity < 50.0:
+                    quality = "acceptable"
+                else:
+                    quality = "poor"
+
+                metrics["quality_assessment"] = quality
+                logger.info(f"Model quality: {quality} (perplexity: {eval_perplexity:.2f})")
+
             # Save metrics
             metrics_file = output_dir / "training_metrics.json"
             with open(metrics_file, "w") as f:
-                json.dump(
-                    {
-                        "training_loss": float(train_result.training_loss),
-                        "global_step": train_result.global_step,
-                        "num_epochs": num_epochs,
-                        "num_examples": len(training_data),
-                    },
-                    f,
-                    indent=2,
-                )
+                json.dump(metrics, f, indent=2)
 
         except Exception as e:
             logger.error(f"Training failed: {e}")
@@ -317,7 +390,7 @@ class PEFTTrainer:
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
 
-        # Save config
+        # Save config with enhanced metadata
         config_file = output_dir / "adapter_config.json"
         with open(config_file, "w") as f:
             json.dump(
@@ -327,15 +400,19 @@ class PEFTTrainer:
                     "lora_alpha": self.lora_alpha,
                     "lora_dropout": self.lora_dropout,
                     "num_examples": len(training_data),
+                    "num_train_examples": len(train_dataset),
+                    "num_eval_examples": len(eval_dataset) if eval_dataset else 0,
                     "num_epochs": num_epochs,
                     "batch_size": batch_size,
                     "learning_rate": learning_rate,
+                    "validation_split": validation_split,
                 },
                 f,
                 indent=2,
             )
 
         logger.info("Adapter training complete")
+        return metrics
 
     def load_adapter(self, adapter_path: Path | None = None) -> None:
         """
