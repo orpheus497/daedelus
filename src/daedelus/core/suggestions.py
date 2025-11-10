@@ -11,6 +11,7 @@ Created by: orpheus497
 
 import logging
 import math
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -19,6 +20,93 @@ from daedelus.core.embeddings import CommandEmbedder
 from daedelus.core.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class UserPreferences:
+    """
+    User preferences for personalized suggestion scoring.
+
+    Allows users to customize how suggestions are ranked based on their workflow preferences.
+    """
+
+    # Weighting factors (0.0 to 2.0, default 1.0 = neutral)
+    recency_weight: float = 1.0  # How much to weight recent commands
+    frequency_weight: float = 1.0  # How much to weight frequently-used commands
+    success_weight: float = 1.0  # How much to weight successful commands
+    directory_weight: float = 1.0  # How much to weight directory-specific commands
+
+    # Boosting preferences
+    prefer_short_commands: bool = False  # Boost commands with fewer tokens
+    prefer_fast_commands: bool = False  # Boost commands with low avg duration
+    avoid_dangerous_commands: bool = True  # Penalize commands with safety warnings
+
+    # Personalization factors
+    boost_user_favorites: list[str] = field(default_factory=list)  # Commands to always boost
+    blacklist_commands: list[str] = field(default_factory=list)  # Commands to never suggest
+
+    def apply_preferences_to_score(
+        self,
+        base_score: float,
+        recency_factor: float,
+        frequency_factor: float,
+        success_factor: float,
+        directory_boost: float,
+        command: str,
+        stats: dict[str, Any],
+    ) -> float:
+        """
+        Apply user preferences to adjust the combined score.
+
+        Args:
+            base_score: Base combined score
+            recency_factor: Recency factor
+            frequency_factor: Frequency factor
+            success_factor: Success factor
+            directory_boost: Directory boost
+            command: Command string
+            stats: Command statistics
+
+        Returns:
+            Adjusted score with preferences applied
+        """
+        score = base_score
+
+        # Apply weighting preferences
+        # Recalculate with user weights
+        adjusted_score = (
+            base_score
+            * (recency_factor ** self.recency_weight)
+            * (frequency_factor ** self.frequency_weight)
+            * (success_factor ** self.success_weight)
+            * (directory_boost ** self.directory_weight)
+        )
+
+        # Short command preference (fewer tokens = faster to type)
+        if self.prefer_short_commands:
+            token_count = len(command.split())
+            if token_count <= 3:
+                adjusted_score *= 1.2  # Boost short commands
+            elif token_count > 6:
+                adjusted_score *= 0.8  # Penalize long commands
+
+        # Fast command preference (low execution time)
+        if self.prefer_fast_commands:
+            avg_duration = stats.get("avg_duration", 0.0)
+            if avg_duration > 0 and avg_duration < 1.0:
+                adjusted_score *= 1.3  # Boost fast commands (<1s)
+            elif avg_duration > 10.0:
+                adjusted_score *= 0.7  # Penalize slow commands (>10s)
+
+        # Boost user favorites
+        if command in self.boost_user_favorites:
+            adjusted_score *= 2.0  # Strong boost for favorites
+
+        # Blacklist commands
+        if command in self.blacklist_commands:
+            adjusted_score *= 0.0  # Effectively remove from suggestions
+
+        return adjusted_score
 
 
 class SuggestionEngine:
@@ -45,9 +133,10 @@ class SuggestionEngine:
         vector_store: VectorStore,
         max_suggestions: int = 5,
         min_confidence: float = 0.3,
+        preferences: UserPreferences | None = None,
     ) -> None:
         """
-        Initialize suggestion engine with learning loop integration.
+        Initialize suggestion engine with learning loop integration and personalization.
 
         Args:
             db: Command database
@@ -55,17 +144,22 @@ class SuggestionEngine:
             vector_store: Vector similarity search
             max_suggestions: Max suggestions to return
             min_confidence: Min confidence score (0-1)
+            preferences: Optional user preferences for personalized scoring
         """
         self.db = db
         self.embedder = embedder
         self.vector_store = vector_store
         self.max_suggestions = max_suggestions
         self.min_confidence = min_confidence
+        self.preferences = preferences or UserPreferences()
 
         # Learning loop tracking
         self._suggestion_feedback: dict[str, list[bool]] = {}  # command -> [accepted, rejected, ...]
 
-        logger.info("SuggestionEngine initialized with learning loop")
+        logger.info(
+            f"SuggestionEngine initialized with learning loop "
+            f"(personalization={'custom' if preferences else 'default'})"
+        )
 
     def get_suggestions(
         self,
@@ -73,18 +167,20 @@ class SuggestionEngine:
         cwd: str | None = None,
         history: list[str] | None = None,
         context_window: int = 10,
+        use_advanced_ranking: bool = True,
     ) -> list[dict[str, Any]]:
         """
-        Get command suggestions using multi-tier cascade.
+        Get command suggestions using multi-tier cascade with advanced reranking.
 
         Args:
             partial: Partially typed command
             cwd: Current working directory
             history: Recent command history
             context_window: Number of recent commands to consider
+            use_advanced_ranking: Apply multi-factor reranking (default True)
 
         Returns:
-            List of suggestion dicts with 'command', 'confidence', 'source'
+            List of suggestion dicts with 'command', 'confidence', 'source', and scoring factors
         """
         suggestions: list[dict[str, Any]] = []
 
@@ -110,16 +206,48 @@ class SuggestionEngine:
                 seen.add(sug["command"])
                 unique_suggestions.append(sug)
 
-        # Filter by confidence
-        filtered = [s for s in unique_suggestions if s["confidence"] >= self.min_confidence]
+        # Apply advanced multi-factor reranking (integrates recency, success rate, directory, acceptance rate)
+        if use_advanced_ranking and unique_suggestions:
+            logger.debug("Applying advanced multi-factor reranking...")
+            ranked_suggestions = self.rank_suggestions(
+                unique_suggestions,
+                boost_recent=True,
+                boost_cwd=True,
+                current_cwd=cwd,
+            )
+        else:
+            # Legacy behavior: simple confidence sorting
+            ranked_suggestions = unique_suggestions
 
-        # Sort by confidence (descending)
-        filtered.sort(key=lambda x: x["confidence"], reverse=True)
+        # Filter by confidence/combined_score
+        if use_advanced_ranking:
+            # Filter by combined_score when using advanced ranking
+            filtered = [
+                s
+                for s in ranked_suggestions
+                if s.get("combined_score", s.get("confidence", 0)) >= self.min_confidence
+            ]
+        else:
+            # Filter by basic confidence
+            filtered = [
+                s for s in ranked_suggestions if s.get("confidence", 0) >= self.min_confidence
+            ]
+
+        # Sort by combined_score (if available) or confidence
+        if use_advanced_ranking:
+            filtered.sort(
+                key=lambda x: x.get("combined_score", x.get("confidence", 0)), reverse=True
+            )
+        else:
+            filtered.sort(key=lambda x: x.get("confidence", 0), reverse=True)
 
         # Limit to max suggestions
         result = filtered[: self.max_suggestions]
 
-        logger.debug(f"Generated {len(result)} suggestions for '{partial}'")
+        logger.debug(
+            f"Generated {len(result)} suggestions for '{partial}' "
+            f"(advanced_ranking={use_advanced_ranking})"
+        )
         return result
 
     def _tier1_exact_prefix(
@@ -370,15 +498,36 @@ class SuggestionEngine:
             )
             success_factor = self._calculate_success_factor(stats)
             frequency_factor = self._calculate_frequency_factor(stats)
+            acceptance_factor = self._calculate_acceptance_factor(command)
 
             # Combined score: base confidence × all factors
+            # Weighted formula balances all signals:
+            # - Base confidence (from tier matching)
+            # - Recency (decay over time)
+            # - Directory context (2x boost for same dir)
+            # - Success rate (quadratic penalty for failures)
+            # - Frequency (logarithmic diminishing returns)
+            # - Acceptance rate (user feedback learning)
             combined_score = (
                 base_confidence
                 * recency_factor
                 * directory_boost
                 * success_factor
                 * frequency_factor
+                * acceptance_factor
             )
+
+            # Apply user preferences to personalize scoring
+            if self.preferences:
+                combined_score = self.preferences.apply_preferences_to_score(
+                    base_score=combined_score,
+                    recency_factor=recency_factor,
+                    frequency_factor=frequency_factor,
+                    success_factor=success_factor,
+                    directory_boost=directory_boost,
+                    command=command,
+                    stats=stats,
+                )
 
             enriched_sug = {
                 **sug,
@@ -386,6 +535,7 @@ class SuggestionEngine:
                 "directory_boost": directory_boost,
                 "success_factor": success_factor,
                 "frequency_factor": frequency_factor,
+                "acceptance_factor": acceptance_factor,
                 "combined_score": combined_score,
                 "stats": stats,
             }
@@ -588,6 +738,40 @@ class SuggestionEngine:
         # Commands used 100 times: ~4.61
         # We keep raw log value as higher frequency should still boost significantly
         return frequency_factor
+
+    def _calculate_acceptance_factor(self, command: str) -> float:
+        """
+        Calculate acceptance rate factor from user feedback.
+
+        This integrates the learning loop by boosting commands that
+        users accept and penalizing those they reject.
+
+        Formula:
+        - acceptance_rate >= 0.7: 1.5x boost (user loves this suggestion)
+        - acceptance_rate >= 0.5: 1.0x neutral (balanced)
+        - acceptance_rate < 0.5: 0.5x penalty (user dislikes this suggestion)
+
+        Args:
+            command: Command to check
+
+        Returns:
+            Acceptance factor (0.5 to 1.5)
+        """
+        acceptance_rate = self.get_suggestion_acceptance_rate(command)
+
+        # Map acceptance rate to boost/penalty
+        if acceptance_rate >= 0.7:
+            # High acceptance: boost by 1.5x
+            return 1.5
+        elif acceptance_rate >= 0.5:
+            # Neutral acceptance: no change
+            return 1.0
+        elif acceptance_rate > 0.0:
+            # Low acceptance: penalize by 0.5x
+            return 0.5
+        else:
+            # No feedback data: neutral (assume OK)
+            return 1.0
 
     def record_suggestion_feedback(
         self,

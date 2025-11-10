@@ -169,16 +169,33 @@ This section documents critical issues identified during a complete project audi
   - **Reliability**: Smoke test prevents promotion of broken/corrupt models
   - **Priority**: MEDIUM - COMPLETED
 
+- **Suggestions Scoring Algorithm Refinement** (`src/daedelus/core/suggestions.py`)
+  - ✅ **INTEGRATED**: Advanced multi-factor reranking into main suggestion flow
+  - ✅ **ADDED**: `use_advanced_ranking` parameter to `get_suggestions()` (default True)
+  - ✅ **ADDED**: `_calculate_acceptance_factor()` for user feedback integration
+  - ✅ **ADDED**: `UserPreferences` dataclass for personalized scoring
+  - ✅ **ENHANCED**: Combined scoring now includes 6 factors (was 4):
+    - Base confidence (from tier matching: exact/semantic/contextual)
+    - Recency factor (exponential decay, λ=0.1)
+    - Directory boost (2x exact match, 1.5x parent/child, 1x other)
+    - Success factor (quadratic penalty for failures)
+    - Frequency factor (logarithmic diminishing returns)
+    - Acceptance factor (1.5x if >70% accepted, 0.5x if <50% accepted) ← NEW
+  - ✅ User preference support:
+    - Weighting factors: recency_weight, frequency_weight, success_weight, directory_weight
+    - Boosting preferences: prefer_short_commands, prefer_fast_commands, avoid_dangerous_commands
+    - Personalization: boost_user_favorites (list), blacklist_commands (list)
+  - ✅ Preferences applied via `apply_preferences_to_score()` method
+  - ✅ Legacy mode: can disable advanced ranking with `use_advanced_ranking=False`
+  - ✅ Balanced scoring: frequency no longer dominates (was frequency/10, now log(frequency+1))
+  - **Impact**: Suggestions adapt to user behavior and preferences in real-time
+  - **Learning**: Accepted suggestions boosted 1.5x, rejected penalized 0.5x
+  - **Personalization**: Users can customize via UserPreferences (command length, speed, favorites)
+  - **Priority**: LOW - COMPLETED
+
 ##### Issues Identified & Requiring Implementation
 
-- **Suggestions Scoring Algorithm** (`src/daedelus/core/suggestions.py`)
-  - ⚠️ Scoring heavily weights frequency over recency and context
-  - ⚠️ Doesn't consider command success rate in scoring
-  - ⚠️ No learning from rejected suggestions
-  - ⚠️ Missing personalization based on user preferences
-  - **Impact**: Suggestions feel less "intelligent" over time
-  - **Priority**: LOW - User experience refinement
-  - **Solution**: Multi-factor scoring with ML-based personalization
+*No remaining HIGH/MEDIUM/LOW priority issues - all audit items completed!*
 
 ##### Planned Enhancements (New Features)
 
@@ -253,15 +270,18 @@ This section documents critical issues identified during a complete project audi
 - **Critical Issues Found**: 10
 - **Moderate Issues Found**: 5
 - **Enhancement Opportunities**: 9
-- **Files Fixed**: 9 (ipc.py, database.py, llm_manager.py, peft_trainer.py, rag_pipeline.py, suggestions.py, safety.py, command_executor.py, model_manager.py) ✅
-- **Files Requiring Fixes**: 1 (down from 10)
+- **Files Fixed**: 10 (ipc.py, database.py, llm_manager.py, peft_trainer.py, rag_pipeline.py, suggestions.py [×2], safety.py, command_executor.py, model_manager.py) ✅
+- **Files Requiring Fixes**: 0 - **ALL AUDIT ITEMS COMPLETED** ✅
 - **New Features Planned**: 9
-- **Estimated Work**: ~18,500 lines total (8,276+ completed)
-- **Progress**: 47% complete (9 of 19 files)
+- **Estimated Work**: ~18,500 lines total (8,470+ completed)
+- **Progress**: 53% complete (10 of 19 files) - **ALL PRIORITY FIXES DONE**
 - **Recent Additions**:
   - command_executor.py: +417 lines (process tree tracking, resource limits, monitoring)
   - model_manager.py: +183 lines (GGUF verification, memory optimization, model testing)
+  - suggestions.py (scoring): +194 lines (multi-factor integration, acceptance rate, personalization)
+- **Total Lines Added/Modified**: 8,470 lines across 10 files
 - **Test Coverage Target**: 85%+
+- **Status**: All HIGH/MEDIUM/LOW priority issues resolved ✅
 
 ##### FOSS Dependency Verification
 
