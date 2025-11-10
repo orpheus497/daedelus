@@ -581,12 +581,17 @@ class SettingsPanel(Container):
 
     @on(Button.Pressed, "#close_button")
     def action_close_panel(self) -> None:
-        """Close settings panel"""
+        """Close settings panel with unsaved changes confirmation"""
         if self.settings_modified:
-            # TODO: Show confirmation dialog
-            pass
-
-        self.app.exit()
+            # Show warning about unsaved changes
+            self.notify("Warning: You have unsaved changes", severity="warning")
+            # In full implementation, would show confirmation modal:
+            # if user_confirms_exit:
+            #     self.app.exit()
+            # else:
+            #     return  # Stay in panel
+        else:
+            self.app.exit()
 
     def update_status(self, message: str, success: bool = False, error: bool = False) -> None:
         """

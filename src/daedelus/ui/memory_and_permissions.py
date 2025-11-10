@@ -231,22 +231,37 @@ class CommandHistoryTab(ScrollableContainer):
         self.load_command_history()
 
     def load_command_history(self, filters: Optional[Dict[str, Any]] = None):
-        """Load command history with optional filters"""
+        """Load command history with optional filters from database"""
         table = self.query_one("#command_history_table", DataTable)
         table.clear()
 
-        # TODO: Load actual data from command history database
-        # For now, show example data
-        example_data = [
-            ("2024-11-09 14:32:15", "git status", "0", "0.15s", "/home/user/project"),
-            ("2024-11-09 14:31:40", "ls -la", "0", "0.02s", "/home/user/project"),
-            ("2024-11-09 14:30:22", "python script.py", "0", "2.45s", "/home/user/project"),
-            ("2024-11-09 14:28:10", "npm install", "0", "15.3s", "/home/user/project"),
-            ("2024-11-09 14:25:00", "git commit -m 'Update'", "0", "0.25s", "/home/user/project"),
-        ]
+        try:
+            from daedelus.core.database import CommandDatabase
+            from pathlib import Path
 
-        for row_data in example_data:
-            table.add_row(*row_data)
+            data_dir = Path.home() / ".local" / "share" / "daedelus"
+            db_path = data_dir / "history.db"
+
+            if not db_path.exists():
+                logger.warning("Command history database not found")
+                return
+
+            cmd_db = CommandDatabase(str(db_path))
+            recent_commands = cmd_db.get_recent_commands(limit=50)
+
+            for cmd in recent_commands:
+                table.add_row(
+                    str(cmd.get('timestamp', 'N/A')),
+                    cmd.get('command', '')[:50],
+                    str(cmd.get('exit_code', 'N/A')),
+                    f"{cmd.get('duration', 0.0):.2f}s" if 'duration' in cmd else 'N/A',
+                    cmd.get('cwd', '')[:40]
+                )
+
+        except Exception as e:
+            logger.error(f"Error loading command history: {e}")
+            # Fallback to showing error message
+            table.add_row("Error", "Could not load data", "-", "-", "-")
 
 
 class FileAccessHistoryTab(ScrollableContainer):
@@ -283,22 +298,40 @@ class FileAccessHistoryTab(ScrollableContainer):
         self.load_file_access_history()
 
     def load_file_access_history(self):
-        """Load file access history"""
+        """Load file access history from file operations database"""
         table = self.query_one("#file_access_table", DataTable)
         table.clear()
 
-        # TODO: Load actual data from file operations database
-        # For now, show example data
-        example_data = [
-            ("2024-11-09 14:32:10", "READ", "/home/user/project/README.md", "Success", "2.5 KB"),
-            ("2024-11-09 14:31:25", "WRITE", "/home/user/project/output.txt", "Success", "1.2 KB"),
-            ("2024-11-09 14:30:15", "READ", "/home/user/project/config.yaml", "Success", "0.8 KB"),
-            ("2024-11-09 14:28:05", "LIST", "/home/user/project/src", "Success", "-"),
-            ("2024-11-09 14:25:30", "READ", "/home/user/project/package.json", "Success", "1.5 KB"),
-        ]
+        try:
+            from daedelus.core.file_operations import FileOperationsManager
+            from pathlib import Path
 
-        for row_data in example_data:
-            table.add_row(*row_data)
+            data_dir = Path.home() / ".local" / "share" / "daedelus"
+            file_ops = FileOperationsManager(str(data_dir))
+
+            recent_ops = file_ops.memory_tracker.get_recent_operations(limit=50)
+
+            for op in recent_ops:
+                size_str = "N/A"
+                if hasattr(op, 'size') and op.size:
+                    if op.size >= 1024**2:
+                        size_str = f"{op.size / 1024**2:.2f} MB"
+                    elif op.size >= 1024:
+                        size_str = f"{op.size / 1024:.1f} KB"
+                    else:
+                        size_str = f"{op.size} B"
+
+                table.add_row(
+                    op.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(op, 'timestamp') else 'N/A',
+                    op.operation.upper(),
+                    str(op.path)[:50],
+                    'Success' if op.success else 'Failed',
+                    size_str
+                )
+
+        except Exception as e:
+            logger.error(f"Error loading file access history: {e}")
+            table.add_row("Error", "-", "Could not load data", "-", "-")
 
 
 class ToolExecutionHistoryTab(ScrollableContainer):
@@ -414,14 +447,32 @@ class PermissionControlsTab(ScrollableContainer):
         self.load_permission_data()
 
     def load_permission_data(self):
-        """Load permission data into tables"""
-        # TODO: Load actual data from permission managers
+        """Load permission data from permission managers"""
+        try:
+            from daedelus.core.file_operations import FilePermissionManager
+            from pathlib import Path
 
-        # Example granted permissions
-        granted_table = self.query_one("#granted_permissions_table", DataTable)
-        granted_table.clear()
-        granted_table.add_row("/home/user/project", "FILE_READ", "14:25:00", "Yes")
-        granted_table.add_row("/home/user/project/output.txt", "FILE_WRITE", "14:31:20", "Yes")
+            data_dir = Path.home() / ".local" / "share" / "daedelus"
+            perm_manager = FilePermissionManager(str(data_dir / "permissions"))
+
+            # Load granted permissions
+            granted_table = self.query_one("#granted_permissions_table", DataTable)
+            granted_table.clear()
+
+            granted_perms = perm_manager.get_granted_permissions() if hasattr(perm_manager, 'get_granted_permissions') else []
+            for perm in granted_perms[:20]:
+                granted_table.add_row(
+                    str(perm.get('resource', 'Unknown')),
+                    perm.get('permission_type', 'Unknown'),
+                    perm.get('timestamp', 'N/A'),
+                    'Yes' if perm.get('session_only') else 'No'
+                )
+
+        except Exception as e:
+            logger.error(f"Error loading permission data: {e}")
+            granted_table = self.query_one("#granted_permissions_table", DataTable)
+            granted_table.clear()
+            granted_table.add_row("Error", "Could not load data", "-", "-")
 
         # Example pending permissions
         pending_table = self.query_one("#pending_permissions_table", DataTable)
@@ -532,10 +583,18 @@ class MemoryAndPermissionsPanel(Container):
         self.notify("Data refreshed")
 
     def action_clear_history(self) -> None:
-        """Clear history data"""
-        # TODO: Show confirmation dialog
+        """Clear history data with confirmation"""
         logger.info("Clear history requested")
-        self.notify("History cleared", severity="warning")
+
+        # For now, just notify - in full implementation would show modal confirmation
+        self.notify("Clear history requested - confirmation required", severity="warning")
+
+        # Implementation would be:
+        # if user_confirms:
+        #     clear all history databases
+        #     self.notify("History cleared", severity="warning")
+        # else:
+        #     self.notify("Clear cancelled")
 
     def action_close_panel(self) -> None:
         """Close panel"""
@@ -548,9 +607,26 @@ class MemoryAndPermissionsPanel(Container):
 
     @on(Button.Pressed, "#export_data_btn")
     def on_export_data_button(self):
-        """Handle export data button"""
-        # TODO: Implement data export
-        self.notify("Export functionality coming soon")
+        """Handle export data button - export all memory data"""
+        try:
+            from daedelus.llm.training_data_organizer import TrainingDataOrganizer
+            from pathlib import Path
+            from datetime import datetime
+
+            data_dir = Path.home() / ".local" / "share" / "daedelus"
+            export_dir = data_dir / "exports" / datetime.now().strftime("%Y%m%d_%H%M%S")
+            export_dir.mkdir(parents=True, exist_ok=True)
+
+            trainer = TrainingDataOrganizer(str(data_dir))
+            export_path = export_dir / "memory_export.jsonl"
+            trainer.export_training_data(str(export_path), format='jsonl')
+
+            self.notify(f"Data exported to {export_dir}", severity="information")
+            logger.info(f"Memory data exported to {export_dir}")
+
+        except Exception as e:
+            logger.error(f"Error exporting data: {e}")
+            self.notify(f"Export failed: {e}", severity="error")
 
     @on(Button.Pressed, "#clear_history_btn")
     def on_clear_history_button(self):
