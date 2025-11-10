@@ -141,6 +141,9 @@ class CommandDatabase:
         # Enable foreign keys
         self.conn.execute("PRAGMA foreign_keys = ON")
 
+        # Enable WAL mode for better concurrency
+        self.conn.execute("PRAGMA journal_mode = WAL")
+
         # Initialize schema
         self._init_schema()
 
@@ -677,6 +680,174 @@ class CommandDatabase:
         logger.info(f"Batch inserted {len(data)} commands")
 
         return len(data)
+
+    # ========================================
+    # Test Compatibility Methods
+    # ========================================
+
+    def log_command(
+        self,
+        command: str,
+        cwd: str,
+        exit_code: int,
+        duration: float | None = None,
+        session_id: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Compatibility wrapper for insert_command().
+        Auto-creates session if not provided.
+        """
+        if session_id is None:
+            # Get or create current session
+            cursor = self.conn.execute(
+                "SELECT id FROM sessions WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if row:
+                session_id = row[0]
+            else:
+                session_id = self.create_session()
+
+        return self.insert_command(
+            command=command,
+            cwd=cwd,
+            exit_code=exit_code,
+            session_id=session_id,
+            duration=duration,
+            **kwargs,
+        )
+
+    def cleanup_old_commands(self, days: int = 90) -> int:
+        """Alias for cleanup_old_data()."""
+        return self.cleanup_old_data(retention_days=days)
+
+    def get_commands_by_prefix(self, prefix: str, n: int = 100) -> list[dict[str, Any]]:
+        """Get commands starting with given prefix."""
+        cursor = self.conn.execute(
+            """
+            SELECT * FROM command_history
+            WHERE command LIKE ? || '%'
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (prefix, n),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_commands_by_cwd(self, cwd: str, n: int = 100) -> list[dict[str, Any]]:
+        """Get commands from a specific directory."""
+        cursor = self.conn.execute(
+            """
+            SELECT * FROM command_history
+            WHERE cwd = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (cwd, n),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_commands_by_exit_code(
+        self, exit_code: int, n: int = 100
+    ) -> list[dict[str, Any]]:
+        """Get commands with specific exit code."""
+        cursor = self.conn.execute(
+            """
+            SELECT * FROM command_history
+            WHERE exit_code = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (exit_code, n),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_command_stats(self, command: str) -> dict[str, Any] | None:
+        """Get statistics for a specific command."""
+        cursor = self.conn.execute(
+            """
+            SELECT
+                COUNT(*) as count,
+                AVG(CASE WHEN exit_code = 0 THEN 1.0 ELSE 0.0 END) as success_rate,
+                AVG(duration) as avg_duration
+            FROM command_history
+            WHERE command = ?
+            """,
+            (command,),
+        )
+        row = cursor.fetchone()
+        if row and row[0] > 0:
+            return {
+                "count": row[0],
+                "success_rate": row[1],
+                "avg_duration": row[2],
+            }
+        return None
+
+    def get_command_sequences(
+        self, min_length: int = 2, n: int = 100
+    ) -> list[list[str]]:
+        """Get command sequences from session history."""
+        cursor = self.conn.execute(
+            """
+            SELECT command FROM command_history
+            WHERE session_id IN (
+                SELECT DISTINCT session_id FROM command_history
+            )
+            ORDER BY session_id, timestamp
+            """
+        )
+
+        # Group commands by session
+        current_sequence = []
+        sequences = []
+
+        for row in cursor.fetchall():
+            current_sequence.append(row[0])
+            if len(current_sequence) >= min_length:
+                sequences.append(current_sequence[-min_length:])
+
+        return sequences[:n]
+
+    def update_pattern_stats(self) -> None:
+        """Analyze all commands and update pattern statistics."""
+        # Get all commands and update patterns based on them
+        cursor = self.conn.execute(
+            """
+            SELECT command, cwd as context, exit_code, duration
+            FROM command_history
+            """
+        )
+        for row in cursor.fetchall():
+            self.update_pattern_statistics(
+                context=row[1],  # cwd
+                command=row[0],  # command
+                success=(row[2] == 0),  # exit_code == 0
+                duration=row[3],  # duration
+            )
+
+    def vacuum(self) -> None:
+        """Alias for optimize_database()."""
+        self.optimize_database()
+
+    def backup(self, backup_path: Path) -> None:
+        """Create a backup of the database."""
+        import shutil
+        backup_path = Path(backup_path)
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        # Close connection, copy file, reopen
+        self.conn.close()
+        shutil.copy2(self.db_path, backup_path)
+        # Reopen connection
+        self.conn = sqlite3.connect(
+            self.db_path,
+            check_same_thread=False,
+            timeout=30.0,
+        )
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        logger.info(f"Database backed up to {backup_path}")
 
     def close(self) -> None:
         """Close database connection."""
