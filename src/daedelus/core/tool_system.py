@@ -15,11 +15,13 @@ License: MIT
 """
 
 import ast
+import hashlib
 import importlib.util
 import inspect
 import json
 import logging
 import os
+import signal
 import sqlite3
 import sys
 import tempfile
@@ -32,7 +34,24 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Type
 
+# RestrictedPython for secure code execution
+try:
+    from RestrictedPython import compile_restricted, safe_globals, safe_builtins
+    from RestrictedPython.Guards import guarded_inplacevar
+    RESTRICTED_PYTHON_AVAILABLE = True
+except ImportError:
+    RESTRICTED_PYTHON_AVAILABLE = False
+    logger.warning(
+        "RestrictedPython not available - tool sandboxing will use basic exec() (INSECURE). "
+        "Install with: pip install RestrictedPython>=6.2"
+    )
+
 logger = logging.getLogger(__name__)
+
+
+class SecurityError(Exception):
+    """Raised when security validation fails."""
+    pass
 
 
 class ToolPermission(Enum):
@@ -592,9 +611,99 @@ class ToolExecutor:
 
         return True
 
+    def _validate_tool_code(self, source: str, tool_name: str) -> tuple[bool, Optional[str]]:
+        """
+        Validate tool code using AST analysis.
+
+        Args:
+            source: Tool source code
+            tool_name: Tool name for logging
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        ALLOWED_IMPORTS = {'json', 'datetime', 're', 'math', 'collections', 'itertools'}
+        FORBIDDEN_NAMES = {
+            'exec', 'eval', 'compile', '__import__', 'open', 'file',
+            'input', 'raw_input', 'reload', 'breakpoint',
+            'exit', 'quit', 'help', 'license', 'copyright', 'credits'
+        }
+
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as e:
+            return False, f"Syntax error: {e}"
+
+        # Walk AST and check for forbidden operations
+        for node in ast.walk(tree):
+            # Check for forbidden names
+            if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
+                return False, f"Forbidden operation: {node.id}"
+
+            # Check for forbidden function calls
+            if isinstance(node, ast.Call):
+                if hasattr(node.func, 'id') and node.func.id in FORBIDDEN_NAMES:
+                    return False, f"Forbidden function call: {node.func.id}"
+
+            # Check imports
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name not in ALLOWED_IMPORTS:
+                        return False, f"Forbidden import: {alias.name}"
+
+            # Check from imports
+            if isinstance(node, ast.ImportFrom):
+                if node.module and node.module not in ALLOWED_IMPORTS:
+                    return False, f"Forbidden import from: {node.module}"
+
+        return True, None
+
+    def _audit_log_execution(
+        self,
+        tool_name: str,
+        source: str,
+        params: Dict[str, Any],
+        success: bool,
+        error: Optional[str] = None
+    ) -> None:
+        """
+        Log tool execution to audit log for security monitoring.
+
+        Args:
+            tool_name: Name of the tool
+            source: Tool source code
+            params: Parameters passed
+            success: Whether execution succeeded
+            error: Error message if failed
+        """
+        audit_log_path = Path.home() / '.local/share/daedelus/audit.jsonl'
+        audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'tool_execution',
+            'tool_name': tool_name,
+            'code_hash': hashlib.sha256(source.encode()).hexdigest(),
+            'param_keys': list(params.keys()),
+            'success': success,
+            'error': error,
+        }
+
+        try:
+            with open(audit_log_path, 'a') as f:
+                f.write(json.dumps(log_entry) + '\n')
+        except Exception as e:
+            logger.warning(f"Failed to write audit log: {e}")
+
     def _execute_sandboxed(self, tool: BaseTool, params: Dict[str, Any]) -> Any:
         """
-        Execute tool in sandboxed environment.
+        Execute tool in sandboxed environment using RestrictedPython.
+
+        This method provides defense-in-depth security:
+        1. AST validation to detect forbidden operations
+        2. RestrictedPython compilation for safe execution
+        3. Timeout enforcement to prevent infinite loops
+        4. Audit logging for security monitoring
 
         Args:
             tool: Tool to execute
@@ -602,58 +711,183 @@ class ToolExecutor:
 
         Returns:
             Tool output
+
+        Raises:
+            SecurityError: If code validation fails
+            TimeoutError: If execution exceeds timeout
+            RuntimeError: If execution fails
         """
-        # Create isolated namespace
+        tool_name = tool.metadata.name
+        timeout = 5.0  # 5 second timeout for tool execution
+
+        try:
+            # Get execute method code
+            source = inspect.getsource(tool.execute)
+
+            # Step 1: AST Validation
+            is_valid, error_msg = self._validate_tool_code(source, tool_name)
+            if not is_valid:
+                logger.error(f"Tool {tool_name} failed validation: {error_msg}")
+                self._audit_log_execution(tool_name, source, params, False, error_msg)
+                raise SecurityError(f"Tool code validation failed: {error_msg}")
+
+            # Step 2: Use RestrictedPython if available, otherwise fall back
+            if RESTRICTED_PYTHON_AVAILABLE:
+                return self._execute_with_restricted_python(
+                    tool, tool_name, source, params, timeout
+                )
+            else:
+                logger.warning(
+                    f"Executing tool {tool_name} with INSECURE basic sandbox. "
+                    "Install RestrictedPython for security: pip install RestrictedPython>=6.2"
+                )
+                return self._execute_with_basic_sandbox(
+                    tool, tool_name, source, params, timeout
+                )
+
+        except Exception as e:
+            self._audit_log_execution(tool_name, source if 'source' in locals() else '', params, False, str(e))
+            raise
+
+    def _execute_with_restricted_python(
+        self,
+        tool: BaseTool,
+        tool_name: str,
+        source: str,
+        params: Dict[str, Any],
+        timeout: float
+    ) -> Any:
+        """
+        Execute tool using RestrictedPython (SECURE).
+
+        Args:
+            tool: Tool instance
+            tool_name: Tool name
+            source: Tool source code
+            params: Parameters
+            timeout: Execution timeout in seconds
+
+        Returns:
+            Tool output
+        """
+        # Compile with RestrictedPython
+        byte_code = compile_restricted(
+            source,
+            filename=f'<tool:{tool_name}>',
+            mode='exec'
+        )
+
+        if byte_code.errors:
+            error_msg = f"RestrictedPython compilation errors: {byte_code.errors}"
+            logger.error(error_msg)
+            raise SecurityError(error_msg)
+
+        # Set up restricted environment
+        restricted_globals = {
+            '__builtins__': safe_builtins,
+            '_getattr_': getattr,
+            '_getitem_': lambda obj, key: obj[key],
+            '_write_': lambda obj: obj,
+            '_inplacevar_': guarded_inplacevar,
+            **safe_globals,
+            # Allowed safe modules
+            'json': __import__('json'),
+            'datetime': __import__('datetime'),
+            're': __import__('re'),
+            'math': __import__('math'),
+            'collections': __import__('collections'),
+            'itertools': __import__('itertools'),
+        }
+
+        restricted_locals = {'params': params}
+
+        # Execute with timeout using signal
+        def timeout_handler(signum, frame):
+            raise TimeoutError(f"Tool execution timeout after {timeout}s")
+
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(int(timeout))
+
+        try:
+            # Execute the compiled code
+            exec(byte_code.code, restricted_globals, restricted_locals)
+
+            # Call execute function
+            execute_func = restricted_locals.get('execute')
+            if execute_func:
+                result = execute_func(tool, **params)
+                self._audit_log_execution(tool_name, source, params, True)
+                return result
+            else:
+                raise RuntimeError("Execute method not found in sandbox")
+
+        finally:
+            signal.alarm(0)  # Cancel alarm
+            signal.signal(signal.SIGALRM, old_handler)  # Restore handler
+
+    def _execute_with_basic_sandbox(
+        self,
+        tool: BaseTool,
+        tool_name: str,
+        source: str,
+        params: Dict[str, Any],
+        timeout: float
+    ) -> Any:
+        """
+        Execute tool using basic sandbox (INSECURE - fallback only).
+
+        This is a fallback when RestrictedPython is not available.
+        It provides minimal security and should not be used in production.
+
+        Args:
+            tool: Tool instance
+            tool_name: Tool name
+            source: Tool source code
+            params: Parameters
+            timeout: Execution timeout in seconds
+
+        Returns:
+            Tool output
+        """
+        # Create isolated namespace with limited builtins
         sandbox_globals = {
             '__builtins__': {
-                # Safe built-ins only
-                'len': len,
-                'str': str,
-                'int': int,
-                'float': float,
-                'bool': bool,
-                'list': list,
-                'dict': dict,
-                'tuple': tuple,
-                'set': set,
-                'range': range,
-                'enumerate': enumerate,
-                'zip': zip,
-                'map': map,
-                'filter': filter,
-                'sum': sum,
-                'min': min,
-                'max': max,
-                'abs': abs,
-                'round': round,
-                'sorted': sorted,
-                'reversed': reversed,
-                'any': any,
-                'all': all,
-                'print': print,
+                'len': len, 'str': str, 'int': int, 'float': float,
+                'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple,
+                'set': set, 'range': range, 'enumerate': enumerate,
+                'zip': zip, 'map': map, 'filter': filter,
+                'sum': sum, 'min': min, 'max': max, 'abs': abs,
+                'round': round, 'sorted': sorted, 'reversed': reversed,
+                'any': any, 'all': all, 'print': print,
             }
         }
 
         sandbox_locals = {'params': params}
 
-        # Execute in sandbox
+        # Execute with timeout
+        def timeout_handler(signum, frame):
+            raise TimeoutError(f"Tool execution timeout after {timeout}s")
+
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(int(timeout))
+
         try:
-            # Get execute method code
-            source = inspect.getsource(tool.execute)
             # Compile and execute
-            code = compile(source, '<sandbox>', 'exec')
+            code = compile(source, f'<tool:{tool_name}>', 'exec')
             exec(code, sandbox_globals, sandbox_locals)
 
             # Call execute function
             execute_func = sandbox_locals.get('execute')
             if execute_func:
-                return execute_func(tool, **params)
+                result = execute_func(tool, **params)
+                self._audit_log_execution(tool_name, source, params, True)
+                return result
             else:
                 raise RuntimeError("Execute method not found in sandbox")
 
-        except Exception as e:
-            logger.error(f"Sandboxed execution failed: {e}")
-            raise
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
 
     def _log_execution(self, result: ToolExecutionResult):
         """Log tool execution to database"""

@@ -2,14 +2,14 @@
 Fuzzy search utilities for Daedelus.
 
 Provides fuzzy matching for command search, history search, and suggestions.
-Uses thefuzz library for fast fuzzy string matching.
+Uses rapidfuzz library for fast fuzzy string matching (MIT license, 3-10x faster than thefuzz).
 
 Created by: orpheus497
 """
 
 from typing import Any
 
-from thefuzz import fuzz, process
+from rapidfuzz import fuzz, process
 
 
 class FuzzyMatcher:
@@ -86,8 +86,9 @@ class FuzzyMatcher:
         if not query or not choices:
             return []
 
-        # Use extractBests for efficient top-k matching
-        results = process.extractBests(
+        # Use extract for efficient top-k matching
+        # rapidfuzz returns (match, score, index) tuples
+        results = process.extract(
             query.lower(),
             [c.lower() for c in choices],
             scorer=fuzz.token_sort_ratio,
@@ -95,9 +96,9 @@ class FuzzyMatcher:
             limit=limit,
         )
 
-        # Map back to original choices
+        # Map back to original choices and convert to (choice, score) tuples
         original_map = {c.lower(): c for c in choices}
-        return [(original_map[match], score) for match, score in results]
+        return [(original_map[match], int(score)) for match, score, _ in results]
 
     def search_commands(
         self, query: str, commands: list[str], limit: int = 5
