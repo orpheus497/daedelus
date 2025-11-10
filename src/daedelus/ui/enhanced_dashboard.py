@@ -550,7 +550,8 @@ class EnhancedDashboardApp(App):
                     trainer = TrainingDataOrganizer(str(self.data_dir))
                     stats = trainer.get_statistics()
                     total_training = stats.get('total_examples', 0)
-                except:
+                except Exception as e:
+                    logger.debug(f"Could not get training statistics: {e}")
                     total_training = 0
 
                 # Store in stats dict for later use
@@ -839,11 +840,13 @@ class EnhancedDashboardApp(App):
             try:
                 process = psutil.Process(os.getpid())
                 memory_mb = process.memory_info().rss / 1024**2
-            except:
+            except Exception as e:
+                logger.error(f"Error getting memory usage: {e}")
                 memory_mb = 0
 
             # Calculate uptime (from daemon if available)
             uptime_str = "N/A"
+            pid_file = None
             try:
                 pid_file = self.data_dir / "runtime" / "daemon.pid"
                 if pid_file.exists():
@@ -852,8 +855,8 @@ class EnhancedDashboardApp(App):
                     hours, remainder = divmod(int(uptime.total_seconds()), 3600)
                     minutes, seconds = divmod(remainder, 60)
                     uptime_str = f"{hours}:{minutes:02d}:{seconds:02d}"
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Error calculating uptime: {e}")
 
             # Store stats
             self.stats['system'] = {
@@ -882,8 +885,8 @@ class EnhancedDashboardApp(App):
                 from daedelus.llm.llm_manager import LLMManager
                 llm_status = "Active"
                 llm_version = "llama.cpp"
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"LLM not available: {e}")
 
             info_table.add_row("LLM Engine", llm_status, llm_version, "")
 
@@ -891,7 +894,9 @@ class EnhancedDashboardApp(App):
             daemon_table = self.query_one("#daemon_status_table", DataTable)
             daemon_table.clear()
 
-            daemon_table.add_row("Status", "Running" if pid_file.exists() if 'pid_file' in locals() else False)
+            # Determine daemon status (pid_file was defined earlier in try block)
+            daemon_status = "Running" if pid_file and pid_file.exists() else "Stopped"
+            daemon_table.add_row("Status", daemon_status)
             daemon_table.add_row("Uptime", uptime_str)
             daemon_table.add_row("Memory Usage", f"{memory_mb:.2f} MB")
             daemon_table.add_row("Database Size", f"{db_size_mb:.2f} MB")

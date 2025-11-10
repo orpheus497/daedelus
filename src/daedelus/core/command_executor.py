@@ -21,6 +21,7 @@ import select
 import signal
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .safety import SafetyAnalyzer, SafetyLevel
+from .safety import SafetyAnalyzer, SafetyLevel, SafetyReport
 
 logger = logging.getLogger(__name__)
 
@@ -599,8 +600,27 @@ class CommandExecutor:
         if safety_level in [SafetyLevel.DANGEROUS, SafetyLevel.WARNING]:
             logger.warning(f"Command has safety warnings ({safety_level.value}): {command}")
             logger.warning(f"Warnings: {warnings}")
-            # TODO: Implement user confirmation prompt
-            result.user_approved = True  # Simulated approval
+
+            # Prompt user for confirmation
+            risk_score = getattr(safety_report, 'risk_score', None)
+            if risk_score and hasattr(risk_score, 'overall_risk'):
+                overall_risk = risk_score.overall_risk
+            else:
+                # Fallback: estimate risk from safety level
+                overall_risk = 0.9 if safety_level == SafetyLevel.DANGEROUS else 0.6
+
+            user_approved = self._prompt_user_for_confirmation(
+                command, overall_risk, safety_report
+            )
+
+            if not user_approved:
+                logger.info(f"User denied execution of command: {command}")
+                result.status = ExecutionStatus.DENIED
+                result.error_message = "Command execution denied by user"
+                self.memory_tracker.log_execution(result, mode)
+                return result
+
+            result.user_approved = True
 
         # Dry run mode
         if mode == ExecutionMode.DRY_RUN:
@@ -933,6 +953,112 @@ class CommandExecutor:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         ).returncode == 0
+
+    def _prompt_user_for_confirmation(
+        self,
+        command: str,
+        risk_score: float,
+        safety_report: SafetyReport
+    ) -> bool:
+        """
+        Prompt user for confirmation before executing dangerous command.
+
+        Args:
+            command: Command to execute
+            risk_score: Risk score from safety analysis (0.0-1.0)
+            safety_report: Detailed safety report
+
+        Returns:
+            True if user confirms, False otherwise
+        """
+        try:
+            # Check if running in interactive terminal
+            if not sys.stdin.isatty() or not sys.stdout.isatty():
+                logger.warning("Non-interactive environment detected, auto-denying dangerous command")
+                return False
+
+            # Try to import click and rich for nice formatting
+            try:
+                import click
+                from rich.console import Console
+                from rich.panel import Panel
+                from rich.text import Text
+
+                console = Console()
+
+                # Display risk information
+                risk_text = Text()
+
+                # Risk level indicator
+                if risk_score >= 0.8:
+                    risk_text.append("⚠️  CRITICAL RISK\n", style="bold red")
+                elif risk_score >= 0.6:
+                    risk_text.append("⚡ HIGH RISK\n", style="bold yellow")
+                elif risk_score >= 0.4:
+                    risk_text.append("⚠️  MEDIUM RISK\n", style="bold orange")
+                else:
+                    risk_text.append("ℹ️  LOW RISK\n", style="bold blue")
+
+                risk_text.append(f"Risk Score: {risk_score:.1%}\n\n", style="bold")
+
+                # Add command being executed
+                risk_text.append("Command: ", style="bold cyan")
+                risk_text.append(f"{command}\n\n", style="white")
+
+                # Add safety warnings
+                if safety_report.warnings:
+                    risk_text.append("Warnings:\n", style="bold underline red")
+                    for warning in safety_report.warnings:
+                        risk_text.append(f"  • {warning}\n", style="yellow")
+                    risk_text.append("\n")
+
+                # Add suggestions
+                if safety_report.suggestions:
+                    risk_text.append("Suggestions:\n", style="bold underline green")
+                    for suggestion in safety_report.suggestions:
+                        risk_text.append(f"  • {suggestion}\n", style="green")
+
+                # Display panel
+                console.print(Panel(
+                    risk_text,
+                    title=f"⚠️  Safety Check",
+                    border_style="red" if risk_score >= 0.8 else "yellow",
+                    padding=(1, 2)
+                ))
+
+                # Prompt for confirmation
+                return click.confirm(
+                    "Do you want to proceed with this command?",
+                    default=False
+                )
+
+            except ImportError:
+                # Fallback to simple text prompt if rich/click not available
+                print(f"\n{'='*60}")
+                print(f"⚠️  SAFETY WARNING")
+                print(f"{'='*60}")
+                print(f"Command: {command}")
+                print(f"Risk Score: {risk_score:.1%}")
+
+                if safety_report.warnings:
+                    print(f"\nWarnings:")
+                    for warning in safety_report.warnings:
+                        print(f"  • {warning}")
+
+                if safety_report.suggestions:
+                    print(f"\nSuggestions:")
+                    for suggestion in safety_report.suggestions:
+                        print(f"  • {suggestion}")
+
+                print(f"\n{'='*60}")
+
+                response = input("Proceed with execution? (y/N): ").strip().lower()
+                return response in ['y', 'yes']
+
+        except Exception as e:
+            logger.error(f"Error in confirmation prompt: {e}")
+            # Fail safe: deny by default
+            return False
 
     def kill_process(self, process_id: str, kill_tree: bool = True) -> int:
         """
