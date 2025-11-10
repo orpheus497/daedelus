@@ -295,7 +295,7 @@ class DaedelusDaemon:
 
                     self.stats["requests_handled"] += 1
 
-                except TimeoutError:
+                except socket.timeout:
                     # Normal timeout, check if we should continue
                     continue
 
