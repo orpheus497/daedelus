@@ -535,7 +535,7 @@ class CommandExecutor:
 
             time.sleep(interval)
 
-    def _check_safety(self, command: str) -> Tuple[SafetyLevel, List[str]]:
+    def _check_safety(self, command: str) -> SafetyReport:
         """
         Check command safety.
 
@@ -543,11 +543,11 @@ class CommandExecutor:
             command: Command to check
 
         Returns:
-            Tuple of (safety_level, warnings)
+            SafetyReport object containing safety analysis
         """
-        # Fixed: Use analyze() instead of analyze_command()
+        # Use analyze() to get full safety report
         report = self.safety_analyzer.analyze(command)
-        return report.level, report.warnings
+        return report
 
     def execute(
         self,
@@ -587,27 +587,27 @@ class CommandExecutor:
         )
 
         # Safety check
-        safety_level, warnings = self._check_safety(command)
-        result.safety_level = safety_level
+        safety_report = self._check_safety(command)
+        result.safety_level = safety_report.level
 
-        if safety_level == SafetyLevel.BLOCKED:
+        if safety_report.level == SafetyLevel.BLOCKED:
             logger.error(f"Command blocked by safety analyzer: {command}")
             result.status = ExecutionStatus.DENIED
-            result.error_message = "Command blocked due to safety concerns: " + "; ".join(warnings)
+            result.error_message = "Command blocked due to safety concerns: " + "; ".join(safety_report.warnings)
             self.memory_tracker.log_execution(result, mode)
             return result
 
-        if safety_level in [SafetyLevel.DANGEROUS, SafetyLevel.WARNING]:
-            logger.warning(f"Command has safety warnings ({safety_level.value}): {command}")
-            logger.warning(f"Warnings: {warnings}")
+        if safety_report.level in [SafetyLevel.DANGEROUS, SafetyLevel.WARNING]:
+            logger.warning(f"Command has safety warnings ({safety_report.level.value}): {command}")
+            logger.warning(f"Warnings: {safety_report.warnings}")
 
             # Prompt user for confirmation
-            risk_score = getattr(safety_report, 'risk_score', None)
-            if risk_score and hasattr(risk_score, 'overall_risk'):
-                overall_risk = risk_score.overall_risk
+            # Get overall risk score from safety report
+            if safety_report.risk_score and hasattr(safety_report.risk_score, 'overall_risk'):
+                overall_risk = safety_report.risk_score.overall_risk
             else:
                 # Fallback: estimate risk from safety level
-                overall_risk = 0.9 if safety_level == SafetyLevel.DANGEROUS else 0.6
+                overall_risk = 0.9 if safety_report.level == SafetyLevel.DANGEROUS else 0.6
 
             user_approved = self._prompt_user_for_confirmation(
                 command, overall_risk, safety_report
