@@ -539,9 +539,13 @@ def dashboard_command(ctx: click.Context, enhanced: bool):
             run_enhanced_dashboard(data_dir, config)
         else:
             from ..ui.dashboard import run_dashboard
+            from ..core.database import CommandDatabase
+            import os
 
             # Get stats from database
-            # TODO: Implement actual stats gathering
+            db_path = config.get("database.path")
+
+            # Initialize stats with defaults
             stats = {
                 "total_commands": 0,
                 "successful_commands": 0,
@@ -549,6 +553,29 @@ def dashboard_command(ctx: click.Context, enhanced: bool):
                 "total_sessions": 0,
                 "database_size_bytes": 0
             }
+
+            # Try to get actual stats from database
+            try:
+                if Path(db_path).exists():
+                    # Get database file size
+                    stats["database_size_bytes"] = os.path.getsize(db_path)
+
+                    # Get command statistics
+                    db = CommandDatabase(db_path)
+                    db_stats = db.get_statistics()
+
+                    stats["total_commands"] = db_stats.get("total_commands", 0)
+                    stats["successful_commands"] = db_stats.get("successful_commands", 0)
+                    stats["success_rate"] = db_stats.get("success_rate", 0.0)
+
+                    # Get session count
+                    sessions = db.get_all_sessions()
+                    stats["total_sessions"] = len(sessions)
+
+                    db.close()
+            except Exception as e:
+                logger.warning(f"Could not load database stats: {e}")
+                # Continue with default stats
 
             run_dashboard(stats)
 

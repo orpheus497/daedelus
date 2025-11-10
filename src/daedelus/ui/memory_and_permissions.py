@@ -108,18 +108,78 @@ class MemoryOverviewTab(ScrollableContainer):
         table = self.query_one("#recent_activity_table", DataTable)
         table.clear()
 
-        # TODO: Load actual data from memory trackers
-        # For now, show example data
-        example_data = [
-            ("14:32:15", "Command", "git status", "Success"),
-            ("14:32:10", "File Read", "/home/user/project/README.md", "Success"),
-            ("14:31:55", "Tool", "syntax_highlighter", "Success"),
-            ("14:31:40", "Command", "ls -la", "Success"),
-            ("14:31:25", "File Write", "/home/user/project/output.txt", "Success"),
-        ]
+        # Load actual data from databases
+        try:
+            from pathlib import Path
+            from ..core.database import CommandDatabase
+            from ..core.file_operations import FileMemoryTracker
+            from datetime import datetime
 
-        for row_data in example_data:
-            table.add_row(*row_data)
+            # Try to load from command database
+            data_dir = Path.home() / ".local/share/daedelus"
+            db_path = data_dir / "history.db"
+            file_ops_db = data_dir / "file_operations.db"
+
+            activity_data = []
+
+            # Load command history
+            if db_path.exists():
+                try:
+                    db = CommandDatabase(db_path)
+                    recent_commands = db.get_recent_commands(n=10)
+                    for cmd in recent_commands:
+                        timestamp = datetime.fromtimestamp(cmd.get('timestamp', 0))
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        status = "Success" if cmd.get('exit_code', 1) == 0 else "Failed"
+                        activity_data.append((
+                            time_str,
+                            "Command",
+                            cmd.get('command', 'Unknown'),
+                            status
+                        ))
+                    db.close()
+                except Exception as e:
+                    logger.warning(f"Could not load command history: {e}")
+
+            # Load file operations
+            if file_ops_db.exists():
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(file_ops_db)
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT timestamp, operation, file_path, success
+                        FROM file_access
+                        ORDER BY timestamp DESC
+                        LIMIT 5
+                    """)
+                    for row in cursor.fetchall():
+                        timestamp = datetime.fromtimestamp(row[0])
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        status = "Success" if row[3] else "Failed"
+                        activity_data.append((
+                            time_str,
+                            f"File {row[1].title()}",
+                            row[2],
+                            status
+                        ))
+                    conn.close()
+                except Exception as e:
+                    logger.warning(f"Could not load file operations: {e}")
+
+            # Sort by time and add to table
+            activity_data.sort(reverse=True)
+            for row_data in activity_data[:15]:  # Show max 15 items
+                table.add_row(*row_data)
+
+            if not activity_data:
+                # Show placeholder if no data
+                table.add_row("--:--:--", "No data", "No recent activity", "N/A")
+
+        except Exception as e:
+            logger.error(f"Error loading activity data: {e}")
+            # Fallback to example data
+            table.add_row("--:--:--", "Error", f"Could not load data: {e}", "Failed")
 
     @on(Button.Pressed, "#refresh_memory")
     def refresh_data(self):

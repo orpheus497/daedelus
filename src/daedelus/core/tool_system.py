@@ -566,13 +566,29 @@ class ToolExecutor:
 
         # Check if approval required
         if self.require_permission_approval:
-            # TODO: Implement user permission prompt
-            logger.warning(f"Tool {tool_name} requires permissions: {[p.value for p in required_perms]}")
-            # For now, auto-grant (simulated approval)
-            if tool_name not in self.granted_permissions:
-                self.granted_permissions[tool_name] = set()
-            self.granted_permissions[tool_name].update(required_perms)
-            return True
+            logger.info(f"Tool {tool_name} requires permissions: {[p.value for p in required_perms]}")
+
+            # Prompt user for permission
+            try:
+                import click
+                perms_str = ", ".join([p.value for p in required_perms])
+                message = f"Tool '{tool_name}' requires these permissions: {perms_str}. Grant access?"
+
+                if click.confirm(message, default=False):
+                    # User approved - grant permissions
+                    if tool_name not in self.granted_permissions:
+                        self.granted_permissions[tool_name] = set()
+                    self.granted_permissions[tool_name].update(required_perms)
+                    logger.info(f"Permissions granted to tool {tool_name}")
+                    return True
+                else:
+                    # User denied
+                    logger.info(f"Permissions denied for tool {tool_name}")
+                    return False
+            except Exception as e:
+                # If we can't prompt (non-interactive), default to deny for security
+                logger.warning(f"Could not prompt for permissions (non-interactive?): {e}")
+                return False
 
         return True
 

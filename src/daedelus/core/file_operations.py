@@ -259,8 +259,11 @@ class FilePermissionManager:
         logger.info(f"Granted {access_type.value} permission to {file_path}")
 
         if not session_only:
-            # TODO: Persist to config file
-            pass
+            # Persist to config file
+            try:
+                self._persist_permission_grant(file_str, access_type)
+            except Exception as e:
+                logger.warning(f"Could not persist permission grant: {e}")
 
     def deny_permission(self, file_path: Path, access_type: AccessType, session_only: bool = True):
         """
@@ -276,8 +279,95 @@ class FilePermissionManager:
         logger.info(f"Denied {access_type.value} permission to {file_path}")
 
         if not session_only:
-            # TODO: Persist to config file
-            pass
+            # Persist to config file
+            try:
+                self._persist_permission_denial(file_str, access_type)
+            except Exception as e:
+                logger.warning(f"Could not persist permission denial: {e}")
+
+    def _persist_permission_grant(self, file_path: str, access_type: AccessType):
+        """
+        Persist permission grant to config file.
+
+        Args:
+            file_path: Path to file
+            access_type: Type of access granted
+        """
+        if not self.config_path:
+            logger.warning("No config path set, cannot persist permissions")
+            return
+
+        # Load existing config or create new
+        config = {}
+        if self.config_path.exists():
+            try:
+                with open(self.config_path, 'r') as f:
+                    config = json.load(f)
+            except Exception as e:
+                logger.error(f"Could not load config: {e}")
+                return
+
+        # Add permission grant
+        if 'permissions' not in config:
+            config['permissions'] = {}
+        if 'grants' not in config['permissions']:
+            config['permissions']['grants'] = {}
+
+        if file_path not in config['permissions']['grants']:
+            config['permissions']['grants'][file_path] = []
+
+        if access_type.value not in config['permissions']['grants'][file_path]:
+            config['permissions']['grants'][file_path].append(access_type.value)
+
+        # Save config
+        try:
+            with open(self.config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"Persisted permission grant to config: {file_path} - {access_type.value}")
+        except Exception as e:
+            logger.error(f"Could not save config: {e}")
+
+    def _persist_permission_denial(self, file_path: str, access_type: AccessType):
+        """
+        Persist permission denial to config file.
+
+        Args:
+            file_path: Path to file
+            access_type: Type of access denied
+        """
+        if not self.config_path:
+            logger.warning("No config path set, cannot persist permissions")
+            return
+
+        # Load existing config or create new
+        config = {}
+        if self.config_path.exists():
+            try:
+                with open(self.config_path, 'r') as f:
+                    config = json.load(f)
+            except Exception as e:
+                logger.error(f"Could not load config: {e}")
+                return
+
+        # Add permission denial
+        if 'permissions' not in config:
+            config['permissions'] = {}
+        if 'denials' not in config['permissions']:
+            config['permissions']['denials'] = {}
+
+        if file_path not in config['permissions']['denials']:
+            config['permissions']['denials'][file_path] = []
+
+        if access_type.value not in config['permissions']['denials'][file_path]:
+            config['permissions']['denials'][file_path].append(access_type.value)
+
+        # Save config
+        try:
+            with open(self.config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"Persisted permission denial to config: {file_path} - {access_type.value}")
+        except Exception as e:
+            logger.error(f"Could not save config: {e}")
 
 
 class FileMemoryTracker:
@@ -584,9 +674,31 @@ class FileOperationsManager:
             return None
 
         elif permission == PermissionLevel.PROMPT:
-            # TODO: Implement user prompt (for now, allow)
+            # Prompt user for approval
             logger.info(f"Read access requires approval: {file_path}")
-            user_approved = True  # Simulated approval
+            try:
+                import click
+                message = f"Allow read access to file: {file_path}?"
+                user_approved = click.confirm(message, default=False)
+
+                if not user_approved:
+                    logger.info(f"User denied read access to: {file_path}")
+                    record = FileAccessRecord(
+                        timestamp=datetime.now().timestamp(),
+                        operation=AccessType.READ,
+                        file_path=str(file_path),
+                        success=False,
+                        user_approved=False,
+                        error_message="User denied access",
+                        session_id=self.session_id
+                    )
+                    self.memory_tracker.log_access(record)
+                    return None
+            except Exception as e:
+                # Non-interactive mode - deny for safety
+                logger.warning(f"Could not prompt user (non-interactive?): {e}")
+                user_approved = False
+                return None
 
         # Perform read operation
         try:
@@ -684,9 +796,31 @@ class FileOperationsManager:
             return False
 
         elif permission == PermissionLevel.PROMPT:
-            # TODO: Implement user prompt (for now, deny for safety)
+            # Prompt user for approval
             logger.warning(f"Write access requires approval: {file_path}")
-            user_approved = True  # Simulated approval
+            try:
+                import click
+                message = f"Allow write access to file: {file_path}?"
+                user_approved = click.confirm(message, default=False)
+
+                if not user_approved:
+                    logger.info(f"User denied write access to: {file_path}")
+                    record = FileAccessRecord(
+                        timestamp=datetime.now().timestamp(),
+                        operation=AccessType.WRITE,
+                        file_path=str(file_path),
+                        success=False,
+                        user_approved=False,
+                        error_message="User denied access",
+                        session_id=self.session_id
+                    )
+                    self.memory_tracker.log_access(record)
+                    return False
+            except Exception as e:
+                # Non-interactive mode - deny for safety
+                logger.warning(f"Could not prompt user (non-interactive?): {e}")
+                user_approved = False
+                return False
 
         # Perform write operation
         try:
