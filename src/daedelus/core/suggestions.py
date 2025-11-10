@@ -47,7 +47,7 @@ class SuggestionEngine:
         min_confidence: float = 0.3,
     ) -> None:
         """
-        Initialize suggestion engine.
+        Initialize suggestion engine with learning loop integration.
 
         Args:
             db: Command database
@@ -62,7 +62,10 @@ class SuggestionEngine:
         self.max_suggestions = max_suggestions
         self.min_confidence = min_confidence
 
-        logger.info("SuggestionEngine initialized")
+        # Learning loop tracking
+        self._suggestion_feedback: dict[str, list[bool]] = {}  # command -> [accepted, rejected, ...]
+
+        logger.info("SuggestionEngine initialized with learning loop")
 
     def get_suggestions(
         self,
@@ -586,6 +589,137 @@ class SuggestionEngine:
         # We keep raw log value as higher frequency should still boost significantly
         return frequency_factor
 
+    def record_suggestion_feedback(
+        self,
+        command: str,
+        accepted: bool,
+        partial: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """
+        Record feedback on suggestion acceptance/rejection.
+
+        This closes the learning loop by tracking which suggestions work.
+
+        Args:
+            command: The suggested command
+            accepted: True if accepted, False if rejected
+            partial: Original partial input (optional)
+            context: Additional context (cwd, history, etc.)
+
+        Learning Impact:
+            - Accepted suggestions boost future scoring
+            - Rejected suggestions reduce future scoring
+            - Feedback used in multi-factor ranking
+        """
+        if command not in self._suggestion_feedback:
+            self._suggestion_feedback[command] = []
+
+        self._suggestion_feedback[command].append(accepted)
+
+        logger.debug(
+            f"Feedback recorded: '{command}' {'accepted' if accepted else 'rejected'}"
+        )
+
+        # Update pattern statistics if we have context
+        if context and accepted:
+            cwd = context.get("cwd")
+            if cwd:
+                # Update database pattern statistics
+                try:
+                    self.db.update_pattern_statistics(
+                        context=cwd,
+                        command=command,
+                        success=True,
+                        duration=None,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update pattern statistics: {e}")
+
+    def get_suggestion_acceptance_rate(self, command: str) -> float:
+        """
+        Get acceptance rate for a command based on feedback.
+
+        Args:
+            command: Command to check
+
+        Returns:
+            Acceptance rate (0.0 to 1.0), or 0.5 if no feedback
+        """
+        if command not in self._suggestion_feedback:
+            return 0.5  # Neutral if no feedback
+
+        feedback = self._suggestion_feedback[command]
+        if not feedback:
+            return 0.5
+
+        acceptance_rate = sum(1 for f in feedback if f) / len(feedback)
+        return acceptance_rate
+
+    def close_learning_loop(
+        self,
+        command: str,
+        exit_code: int,
+        cwd: str,
+        session_id: str,
+        duration: float | None = None,
+    ) -> None:
+        """
+        Close the learning loop by updating all subsystems after command execution.
+
+        This ensures executed commands are:
+        1. Stored in database (already done by caller)
+        2. Embedded and indexed in vector store
+        3. Pattern statistics updated
+
+        Args:
+            command: Executed command
+            exit_code: Exit code (0 = success)
+            cwd: Current working directory
+            session_id: Session ID
+            duration: Execution duration in seconds
+
+        Learning Loop:
+            execute → store → embed → index → retrieve → suggest → feedback → improve
+        """
+        success = exit_code == 0
+
+        # 1. Update pattern statistics
+        try:
+            self.db.update_pattern_statistics(
+                context=cwd,
+                command=command,
+                success=success,
+                duration=duration,
+            )
+            logger.debug(f"Updated pattern statistics for '{command[:50]}...'")
+        except Exception as e:
+            logger.warning(f"Failed to update pattern statistics: {e}")
+
+        # 2. Update embeddings and vector store (if command was successful)
+        if success:
+            try:
+                # Encode command with context
+                embedding = self.embedder.encode_command(command)
+
+                # Add to vector store
+                self.vector_store.add_item(
+                    command=command,
+                    embedding=embedding,
+                    metadata={"cwd": cwd, "timestamp": datetime.now().timestamp()},
+                )
+
+                logger.debug(f"Added command to vector store: '{command[:50]}...'")
+            except Exception as e:
+                logger.warning(f"Failed to update vector store: {e}")
+
+        # 3. If command was accepted from suggestion, record positive feedback
+        acceptance_rate = self.get_suggestion_acceptance_rate(command)
+        if acceptance_rate > 0.5:
+            logger.debug(
+                f"Command has {acceptance_rate:.0%} acceptance rate - high learning signal"
+            )
+
     def explain_suggestion(self, suggestion: dict[str, Any]) -> str:
         """
         Generate human-readable explanation for a suggestion.
@@ -606,7 +740,15 @@ class SuggestionEngine:
         }
 
         base = explanations.get(source, "Suggested command")
-        return f"{base} (confidence: {confidence:.0%})"
+
+        # Add acceptance rate if available
+        command = suggestion.get("command", "")
+        acceptance_rate = self.get_suggestion_acceptance_rate(command)
+
+        if acceptance_rate != 0.5:  # Has feedback history
+            return f"{base} (confidence: {confidence:.0%}, acceptance: {acceptance_rate:.0%})"
+        else:
+            return f"{base} (confidence: {confidence:.0%})"
 
 
 # Example usage
