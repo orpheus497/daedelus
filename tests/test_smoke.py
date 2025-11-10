@@ -122,7 +122,7 @@ def test_required_dependencies_available():
         "click",
         "numpy",
         "platformdirs",
-        "pyyaml",
+        "yaml",  # pyyaml package, but imported as 'yaml'
     ]
 
     for package in required:
