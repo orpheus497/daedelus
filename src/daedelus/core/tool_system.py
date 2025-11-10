@@ -745,16 +745,37 @@ class ToolDeveloper:
                     """
                     Execute the tool.
 
+                    This method must be overridden to implement the actual tool functionality.
+                    The example below shows the expected structure of the return value.
+
                     Args:
-                        **kwargs: Tool parameters
+                        **kwargs: Tool parameters (specific to your tool implementation)
 
                     Returns:
-                        Tool output
+                        Tool output (typically Dict containing status, message, and data)
+
+                    Example Implementation:
+                        def execute(self, input_file: str, output_format: str = 'json') -> Dict[str, Any]:
+                            try:
+                                # Your tool logic here
+                                data = self.process_file(input_file, output_format)
+                                return {{
+                                    'status': 'success',
+                                    'message': f'Processed {{input_file}} successfully',
+                                    'data': data
+                                }}
+                            except Exception as e:
+                                self.logger.error(f"Tool execution failed: {{e}}")
+                                return {{
+                                    'status': 'error',
+                                    'message': str(e),
+                                    'data': None
+                                }}
                     """
-                    # TODO: Implement tool logic here
+                    # TEMPLATE: Replace this with your actual tool implementation
                     self.logger.info(f"Executing {name} with params: {{kwargs}}")
 
-                    # Example implementation
+                    # Example structure - modify as needed
                     result = {{
                         'status': 'success',
                         'message': 'Tool executed successfully',
@@ -765,15 +786,38 @@ class ToolDeveloper:
 
                 def validate_inputs(self, **kwargs) -> bool:
                     """
-                    Validate input parameters.
+                    Validate input parameters before execution.
+
+                    Override this method to implement custom validation logic for your tool.
+                    This is called automatically before execute() to ensure inputs are safe.
 
                     Args:
-                        **kwargs: Parameters to validate
+                        **kwargs: Parameters to validate (specific to your tool)
 
                     Returns:
-                        True if valid
+                        True if all inputs are valid, False otherwise
+
+                    Example Implementation:
+                        def validate_inputs(self, input_file: str, output_format: str = 'json') -> bool:
+                            # Check file exists and is readable
+                            if not Path(input_file).exists():
+                                self.logger.error(f"Input file not found: {{input_file}}")
+                                return False
+
+                            if not os.access(input_file, os.R_OK):
+                                self.logger.error(f"Cannot read input file: {{input_file}}")
+                                return False
+
+                            # Validate output format
+                            valid_formats = ['json', 'xml', 'csv']
+                            if output_format not in valid_formats:
+                                self.logger.error(f"Invalid format: {{output_format}}")
+                                return False
+
+                            return True
                     """
-                    # TODO: Add input validation logic
+                    # TEMPLATE: Add your validation logic here
+                    # Default: accept all inputs (override for custom validation)
                     return True
 
                 def get_help(self) -> str:
