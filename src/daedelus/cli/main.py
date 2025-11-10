@@ -24,6 +24,14 @@ from daedelus.utils.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
+# Import extended commands registration function
+try:
+    from daedelus.cli.extended_commands import register_extended_commands
+    _EXTENDED_COMMANDS_AVAILABLE = True
+except ImportError:
+    _EXTENDED_COMMANDS_AVAILABLE = False
+    logger.warning("Extended commands not available")
+
 
 @click.group()
 @click.version_option(version=__version__)
@@ -77,6 +85,11 @@ def cli(ctx: click.Context, config: Path | None, verbose: int) -> None:
     # Load configuration
     ctx.ensure_object(dict)
     ctx.obj["config"] = Config(config) if config else Config()
+
+
+# Register extended commands (files, tools, ingest, training, dashboard, settings, memory)
+if _EXTENDED_COMMANDS_AVAILABLE:
+    register_extended_commands(cli)
 
 
 @cli.command()

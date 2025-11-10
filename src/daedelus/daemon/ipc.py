@@ -398,6 +398,54 @@ class IPCClient:
 
         return response.data
 
+    def send_request(self, request_type: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+        """
+        Generic request helper method.
+
+        This is a convenience method that wraps common request patterns.
+        Maps string request types to appropriate MessageType and handles responses.
+
+        Args:
+            request_type: Type of request (string name)
+            data: Request data payload
+
+        Returns:
+            Response data dictionary
+
+        Raises:
+            RuntimeError: If request fails or daemon returns error
+        """
+        # Map request type strings to MessageType enums
+        type_map = {
+            "suggest": MessageType.SUGGEST,
+            "get_recent_commands": MessageType.SEARCH,  # SEARCH handles recent commands
+            "get_stats": MessageType.STATUS,  # STATUS includes stats
+            "explain_command": MessageType.COMPLETE,  # Use COMPLETE for explanations
+            "generate_command": MessageType.COMPLETE,  # Use COMPLETE for generation
+            "ping": MessageType.PING,
+            "status": MessageType.STATUS,
+        }
+
+        msg_type = type_map.get(request_type)
+        if not msg_type:
+            # For unknown types, try to use them directly if they match MessageType values
+            try:
+                msg_type = MessageType(request_type)
+            except ValueError:
+                raise ValueError(f"Unknown request type: {request_type}")
+
+        msg = IPCMessage(msg_type, data or {})
+        response = self.send_message(msg)
+
+        if response.type == MessageType.ERROR:
+            error_msg = response.data.get("error", "Unknown error")
+            return {"status": "error", "error": error_msg}
+
+        # Return response data with status indicator
+        result = response.data.copy()
+        result["status"] = "ok"
+        return result
+
 
 # Example usage
 if __name__ == "__main__":

@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **IPC Communication** (`src/daedelus/daemon/ipc.py`)
+  - Added missing `send_request()` helper method to IPCClient class
+  - Maps string request types to MessageType enums for convenience
+  - Handles get_recent_commands, get_stats, explain_command, generate_command requests
+  - Returns response data with status indicator for error handling
+  - Fixes AttributeError in REPL and CLI commands that were calling non-existent method
+
+- **Extended Commands Registration** (`src/daedelus/cli/main.py`)
+  - Registered all extended command groups with main CLI
+  - Extended commands now accessible: files, tools, ingest, training, dashboard, settings, memory
+  - Added import with graceful degradation for missing dependencies
+  - Commands like `daedelus files`, `daedelus dashboard`, etc. now functional
+
+- **Dashboard Statistics** (`src/daedelus/cli/extended_commands.py`)
+  - Implemented actual database stats gathering for dashboard command
+  - Loads total commands, successful commands, success rate from CommandDatabase
+  - Retrieves session count and database file size
+  - Falls back gracefully to default values if database unavailable
+  - Dashboard now displays real data instead of zeros
+
+- **Tool Permission Prompts** (`src/daedelus/core/tool_system.py`)
+  - Implemented interactive user permission prompts using click.confirm()
+  - Asks user for confirmation before granting tool permissions
+  - Lists required permissions (read, write, execute, etc.) in prompt
+  - Falls back to deny for security in non-interactive environments
+  - Replaces auto-grant placeholder with proper user interaction
+
+- **File Operation Confirmations** (`src/daedelus/core/file_operations.py`)
+  - Implemented interactive user prompts for file read/write access
+  - Prompts user for approval when PermissionLevel.PROMPT is set
+  - Defaults to deny in non-interactive mode for security
+  - Logs user approval/denial decisions to access records
+  - Replaces simulated approval with actual user interaction
+
+- **Permission Config Persistence** (`src/daedelus/core/file_operations.py`)
+  - Added `_persist_permission_grant()` method to save grants to config file
+  - Added `_persist_permission_denial()` method to save denials to config file
+  - Persists permissions as JSON in config file when session_only=False
+  - Loads and updates existing config without overwriting other settings
+  - Permission grants and denials now survive daemon restarts
+
+- **Memory Panel Data Loading** (`src/daedelus/ui/memory_and_permissions.py`)
+  - Implemented actual data loading from CommandDatabase and file operations database
+  - Loads recent 10 commands with timestamps, status, and exit codes
+  - Loads recent 5 file operations with timestamps and success status
+  - Combines and sorts activity data by time
+  - Shows meaningful data instead of placeholder examples
+
+### Added
+
+- **Module Exports** (`src/daedelus/daemon/__init__.py`)
+  - Added proper module exports for daemon package
+  - Exports DaedelusDaemon, IPCClient, IPCServer, IPCMessage, MessageType
+  - Enables `from daedelus.daemon import IPCClient` style imports
+  - Improves package API and developer experience
+
+- **Utility Module Exports** (`src/daedelus/utils/__init__.py`)
+  - Added proper module exports for utils package
+  - Exports Config, setup_logging, dependency checkers, fuzzy matcher, highlighter, BackupManager
+  - Enables cleaner imports throughout codebase
+  - Follows Python best practices for package structure
+
 ### Added
 
 - **Comprehensive Test Suite** (`tests/`)
