@@ -115,6 +115,21 @@ def setup_logging(
         file_formatter = logging.Formatter(file_format, datefmt="%Y-%m-%d %H:%M:%S")
         file_handler.setFormatter(file_formatter)
 
+        # Force immediate flush to prevent buffering issues in daemon mode
+        class FlushingRotatingFileHandler(logging.handlers.RotatingFileHandler):
+            def emit(self, record):
+                super().emit(record)
+                self.flush()
+
+        # Replace handler with flushing version
+        file_handler = FlushingRotatingFileHandler(
+            log_path,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+        )
+        file_handler.setLevel(level)
+        file_handler.setFormatter(file_formatter)
+
         logger.addHandler(file_handler)
 
     # Prevent propagation to root logger

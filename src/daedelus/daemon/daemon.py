@@ -540,10 +540,15 @@ class DaedelusDaemon:
 # Entry point for daemon script
 def main() -> int:
     """Main entry point for daemon."""
+    # Ensure unbuffered output for daemon mode
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     # Set up logging
     config = Config()
     log_path = Path(config.get("daemon.log_path"))
-    setup_logging(log_path, level=logging.INFO)
+    # Disable console logging for daemon mode (stdout/stderr are redirected)
+    setup_logging(log_path, level=logging.INFO, console=False)
 
     logger.info("=" * 60)
     logger.info("Daedalus Daemon Starting")
