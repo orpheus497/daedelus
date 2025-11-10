@@ -410,20 +410,30 @@ class IPCClient:
             data: Request data payload
 
         Returns:
-            Response data dictionary
+            Response data dictionary with "status" field ("ok" or "error")
 
         Raises:
             RuntimeError: If request fails or daemon returns error
         """
         # Map request type strings to MessageType enums
+        # This ensures compatibility with both old and new calling patterns
         type_map = {
+            # Core operations
             "suggest": MessageType.SUGGEST,
-            "get_recent_commands": MessageType.SEARCH,  # SEARCH handles recent commands
-            "get_stats": MessageType.STATUS,  # STATUS includes stats
-            "explain_command": MessageType.COMPLETE,  # Use COMPLETE for explanations
-            "generate_command": MessageType.COMPLETE,  # Use COMPLETE for generation
+            "log_command": MessageType.LOG_COMMAND,
+            "complete": MessageType.COMPLETE,
+            "search": MessageType.SEARCH,
+
+            # Convenience aliases for REPL
+            "get_recent_commands": MessageType.SEARCH,
+            "get_stats": MessageType.STATUS,
+            "explain_command": MessageType.COMPLETE,
+            "generate_command": MessageType.COMPLETE,
+
+            # Control
             "ping": MessageType.PING,
             "status": MessageType.STATUS,
+            "shutdown": MessageType.SHUTDOWN,
         }
 
         msg_type = type_map.get(request_type)
@@ -432,19 +442,35 @@ class IPCClient:
             try:
                 msg_type = MessageType(request_type)
             except ValueError:
-                raise ValueError(f"Unknown request type: {request_type}")
+                return {
+                    "status": "error",
+                    "error": f"Unknown request type: {request_type}"
+                }
 
-        msg = IPCMessage(msg_type, data or {})
-        response = self.send_message(msg)
+        try:
+            msg = IPCMessage(msg_type, data or {})
+            response = self.send_message(msg)
 
-        if response.type == MessageType.ERROR:
-            error_msg = response.data.get("error", "Unknown error")
-            return {"status": "error", "error": error_msg}
+            if response.type == MessageType.ERROR:
+                error_msg = response.data.get("error", "Unknown error")
+                return {"status": "error", "error": error_msg}
 
-        # Return response data with status indicator
-        result = response.data.copy()
-        result["status"] = "ok"
-        return result
+            # Return response data with status indicator
+            result = response.data.copy() if response.data else {}
+            result["status"] = "ok"
+            return result
+
+        except (ConnectionError, TimeoutError) as e:
+            return {
+                "status": "error",
+                "error": f"Communication error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Request error: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "error": f"Internal error: {str(e)}"
+            }
 
 
 # Example usage

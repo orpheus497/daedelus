@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import pty
+import resource
 import select
 import signal
 import sqlite3
@@ -31,6 +32,52 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .safety import SafetyAnalyzer, SafetyLevel
 
 logger = logging.getLogger(__name__)
+
+
+class ProcessTreeNode:
+    """Represents a process and its children in the process tree."""
+
+    def __init__(self, pid: int, pgid: int, parent_pid: Optional[int] = None):
+        self.pid = pid
+        self.pgid = pgid
+        self.parent_pid = parent_pid
+        self.children: List['ProcessTreeNode'] = []
+        self.start_time = time.time()
+        self.cpu_usage = 0.0
+        self.memory_usage = 0  # bytes
+
+    def add_child(self, child: 'ProcessTreeNode') -> None:
+        """Add a child process node."""
+        self.children.append(child)
+
+    def get_all_pids(self) -> List[int]:
+        """Get all PIDs in this subtree."""
+        pids = [self.pid]
+        for child in self.children:
+            pids.extend(child.get_all_pids())
+        return pids
+
+    def update_resource_usage(self) -> None:
+        """Update CPU and memory usage from /proc."""
+        try:
+            # Read CPU usage from /proc/[pid]/stat
+            with open(f"/proc/{self.pid}/stat", "r") as f:
+                stat_data = f.read().split()
+                # Fields 13-16 are CPU time
+                utime = int(stat_data[13])  # User mode time
+                stime = int(stat_data[14])  # Kernel mode time
+                self.cpu_usage = (utime + stime) / os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+
+            # Read memory usage from /proc/[pid]/status
+            with open(f"/proc/{self.pid}/status", "r") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        # Resident Set Size in KB
+                        self.memory_usage = int(line.split()[1]) * 1024
+                        break
+        except (FileNotFoundError, IOError, IndexError):
+            # Process may have terminated
+            pass
 
 
 class ExecutionMode(Enum):
@@ -52,6 +99,20 @@ class ExecutionStatus(Enum):
 
 
 @dataclass
+class ResourceUsage:
+    """Resource usage statistics for a command."""
+
+    cpu_time: float = 0.0  # Total CPU time in seconds
+    max_memory: int = 0  # Peak memory usage in bytes
+    child_processes: int = 0  # Number of child processes spawned
+
+    def __str__(self) -> str:
+        """Human-readable resource usage."""
+        mem_mb = self.max_memory / (1024 * 1024)
+        return f"CPU: {self.cpu_time:.2f}s, Mem: {mem_mb:.1f}MB, Children: {self.child_processes}"
+
+
+@dataclass
 class CommandResult:
     """Result of a command execution"""
     command: str
@@ -67,10 +128,14 @@ class CommandResult:
     user_approved: bool = False
     safety_level: Optional[SafetyLevel] = None
     error_message: Optional[str] = None
+    resource_usage: Optional[ResourceUsage] = None
+    process_tree_size: int = 0  # Number of processes in tree
 
     def __post_init__(self):
         if self.environment is None:
             self.environment = {}
+        if self.resource_usage is None:
+            self.resource_usage = ResourceUsage()
 
 
 class CommandExecutionMemory:
@@ -258,6 +323,12 @@ class CommandExecutionMemory:
 class CommandExecutor:
     """
     Main interface for command execution with safety and memory tracking.
+
+    Enhanced with:
+    - Process tree tracking and management
+    - Resource limits (CPU, memory, file descriptors)
+    - Process group cleanup
+    - Resource usage monitoring
     """
 
     def __init__(
@@ -265,7 +336,10 @@ class CommandExecutor:
         safety_analyzer: SafetyAnalyzer,
         memory_tracker: CommandExecutionMemory,
         session_id: Optional[str] = None,
-        default_timeout: int = 300
+        default_timeout: int = 300,
+        max_memory_mb: Optional[int] = None,
+        max_cpu_time: Optional[int] = None,
+        max_file_descriptors: Optional[int] = None,
     ):
         """
         Initialize command executor.
@@ -275,15 +349,190 @@ class CommandExecutor:
             memory_tracker: Memory tracker instance
             session_id: Optional session ID
             default_timeout: Default timeout in seconds
+            max_memory_mb: Maximum memory in MB (None = no limit)
+            max_cpu_time: Maximum CPU time in seconds (None = no limit)
+            max_file_descriptors: Maximum file descriptors (None = no limit)
         """
         self.safety_analyzer = safety_analyzer
         self.memory_tracker = memory_tracker
         self.session_id = session_id or f"exec_{os.getpid()}_{int(datetime.now().timestamp())}"
         self.default_timeout = default_timeout
 
-        # Track active processes
+        # Resource limits
+        self.max_memory_mb = max_memory_mb
+        self.max_cpu_time = max_cpu_time
+        self.max_file_descriptors = max_file_descriptors
+
+        # Track active processes with process trees
         self.active_processes: Dict[str, subprocess.Popen] = {}
+        self.process_trees: Dict[str, ProcessTreeNode] = {}
         self.process_lock = threading.Lock()
+
+    def _set_resource_limits(self) -> None:
+        """
+        Set resource limits for child process (called in preexec_fn).
+
+        Uses ulimit to constrain CPU, memory, and file descriptors.
+        """
+        if self.max_cpu_time:
+            # CPU time limit in seconds
+            resource.setrlimit(resource.RLIMIT_CPU, (self.max_cpu_time, self.max_cpu_time))
+
+        if self.max_memory_mb:
+            # Memory limit in bytes
+            max_memory_bytes = self.max_memory_mb * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (max_memory_bytes, max_memory_bytes))
+
+        if self.max_file_descriptors:
+            # File descriptor limit
+            resource.setrlimit(resource.RLIMIT_NOFILE, (self.max_file_descriptors, self.max_file_descriptors))
+
+        # Create new process group for easier cleanup
+        os.setpgrp()
+
+    def _build_process_tree(self, root_pid: int) -> ProcessTreeNode:
+        """
+        Build process tree from /proc filesystem.
+
+        Args:
+            root_pid: Root process PID
+
+        Returns:
+            ProcessTreeNode representing the tree
+        """
+        try:
+            # Get process group ID
+            pgid = os.getpgid(root_pid)
+            root = ProcessTreeNode(root_pid, pgid)
+
+            # Recursively find children
+            self._find_children(root)
+
+            return root
+        except (ProcessLookupError, PermissionError):
+            # Process may have terminated
+            return ProcessTreeNode(root_pid, root_pid)
+
+    def _find_children(self, node: ProcessTreeNode) -> None:
+        """
+        Recursively find child processes using /proc.
+
+        Args:
+            node: Parent node to populate with children
+        """
+        try:
+            # Scan /proc for child processes
+            for entry in os.listdir("/proc"):
+                if not entry.isdigit():
+                    continue
+
+                try:
+                    pid = int(entry)
+                    with open(f"/proc/{pid}/stat", "r") as f:
+                        stat_data = f.read()
+                        # Extract parent PID (4th field)
+                        parent_pid = int(stat_data.split(")")[1].split()[1])
+
+                        if parent_pid == node.pid:
+                            # Found a child
+                            pgid = os.getpgid(pid)
+                            child = ProcessTreeNode(pid, pgid, node.pid)
+                            child.update_resource_usage()
+                            node.add_child(child)
+                            # Recursively find grandchildren
+                            self._find_children(child)
+                except (FileNotFoundError, ValueError, IndexError, PermissionError):
+                    continue
+        except OSError:
+            pass
+
+    def _kill_process_tree(self, process_id: str) -> int:
+        """
+        Kill entire process tree (parent and all children).
+
+        Args:
+            process_id: Process ID to kill
+
+        Returns:
+            Number of processes killed
+        """
+        killed_count = 0
+
+        with self.process_lock:
+            process = self.active_processes.get(process_id)
+            if not process:
+                return 0
+
+            try:
+                # Build current process tree
+                tree = self._build_process_tree(process.pid)
+                all_pids = tree.get_all_pids()
+
+                logger.info(f"Killing process tree for {process_id}: {len(all_pids)} processes")
+
+                # Kill all processes in tree
+                for pid in all_pids:
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                        killed_count += 1
+                        logger.debug(f"Killed PID {pid}")
+                    except ProcessLookupError:
+                        # Already dead
+                        pass
+                    except PermissionError:
+                        logger.warning(f"Permission denied killing PID {pid}")
+
+                # Also try to kill the entire process group
+                try:
+                    pgid = os.getpgid(process.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                    logger.debug(f"Killed process group {pgid}")
+                except (ProcessLookupError, PermissionError):
+                    pass
+
+            except Exception as e:
+                logger.error(f"Error killing process tree: {e}")
+
+            finally:
+                # Clean up tracking
+                self.active_processes.pop(process_id, None)
+                self.process_trees.pop(process_id, None)
+
+        return killed_count
+
+    def _monitor_resources(self, process_id: str, interval: float = 1.0) -> None:
+        """
+        Monitor process tree resource usage in background thread.
+
+        Args:
+            process_id: Process ID to monitor
+            interval: Check interval in seconds
+        """
+        while True:
+            with self.process_lock:
+                process = self.active_processes.get(process_id)
+                if not process:
+                    break
+
+                # Check if process still running
+                if process.poll() is not None:
+                    break
+
+                try:
+                    # Build and update process tree
+                    tree = self._build_process_tree(process.pid)
+                    tree.update_resource_usage()
+                    self.process_trees[process_id] = tree
+
+                    # Update resource usage for all children
+                    for child in tree.children:
+                        child.update_resource_usage()
+
+                except Exception as e:
+                    logger.debug(f"Error monitoring resources: {e}")
+                    break
+
+            time.sleep(interval)
 
     def _check_safety(self, command: str) -> Tuple[SafetyLevel, List[str]]:
         """
@@ -295,8 +544,9 @@ class CommandExecutor:
         Returns:
             Tuple of (safety_level, warnings)
         """
-        analysis = self.safety_analyzer.analyze_command(command)
-        return analysis.safety_level, analysis.warnings
+        # Fixed: Use analyze() instead of analyze_command()
+        report = self.safety_analyzer.analyze(command)
+        return report.level, report.warnings
 
     def execute(
         self,
@@ -378,7 +628,15 @@ class CommandExecutor:
         capture_output: bool,
         stream_callback: Optional[Callable[[str], None]]
     ) -> CommandResult:
-        """Execute command directly in shell"""
+        """
+        Execute command directly in shell with process tree tracking and resource limits.
+
+        Enhanced with:
+        - Process group creation for clean termination
+        - Resource limits (CPU, memory, file descriptors)
+        - Process tree tracking and monitoring
+        - Resource usage collection
+        """
         try:
             result.status = ExecutionStatus.RUNNING
             start_time = time.time()
@@ -396,7 +654,12 @@ class CommandExecutor:
                 stdout_data = ""
                 stderr_data = ""
             else:
-                # Use subprocess for captured output
+                # Use subprocess for captured output with resource limits
+                # preexec_fn will set resource limits and create process group
+                preexec = self._set_resource_limits if any([
+                    self.max_memory_mb, self.max_cpu_time, self.max_file_descriptors
+                ]) else os.setpgrp
+
                 process = subprocess.Popen(
                     command,
                     shell=True,
@@ -404,7 +667,8 @@ class CommandExecutor:
                     stderr=subprocess.PIPE if capture_output else None,
                     cwd=cwd,
                     env=exec_env,
-                    text=True
+                    text=True,
+                    preexec_fn=preexec  # Set resource limits and create process group
                 )
 
                 # Track process
@@ -412,18 +676,51 @@ class CommandExecutor:
                 with self.process_lock:
                     self.active_processes[process_id] = process
 
+                # Start resource monitoring in background
+                monitor_thread = threading.Thread(
+                    target=self._monitor_resources,
+                    args=(process_id,),
+                    daemon=True
+                )
+                monitor_thread.start()
+
                 try:
                     stdout_data, stderr_data = process.communicate(timeout=timeout or self.default_timeout)
                     exit_code = process.returncode
                 except subprocess.TimeoutExpired:
-                    process.kill()
+                    # Kill entire process tree, not just parent
+                    logger.warning(f"Command timed out, killing process tree: {command}")
+                    killed = self._kill_process_tree(process_id)
                     stdout_data, stderr_data = process.communicate()
                     result.status = ExecutionStatus.TIMEOUT
-                    result.error_message = f"Command timed out after {timeout or self.default_timeout} seconds"
+                    result.error_message = f"Command timed out after {timeout or self.default_timeout} seconds (killed {killed} processes)"
                     exit_code = -1
                 finally:
+                    # Collect final resource usage
+                    tree = self.process_trees.get(process_id)
+                    if tree:
+                        tree.update_resource_usage()
+                        # Calculate total resource usage
+                        total_cpu = tree.cpu_usage
+                        max_memory = tree.memory_usage
+                        child_count = len(tree.get_all_pids()) - 1  # Exclude root
+
+                        for child in tree.children:
+                            child.update_resource_usage()
+                            total_cpu += child.cpu_usage
+                            max_memory = max(max_memory, child.memory_usage)
+
+                        result.resource_usage = ResourceUsage(
+                            cpu_time=total_cpu,
+                            max_memory=max_memory,
+                            child_processes=child_count
+                        )
+                        result.process_tree_size = len(tree.get_all_pids())
+
+                    # Clean up
                     with self.process_lock:
                         self.active_processes.pop(process_id, None)
+                        self.process_trees.pop(process_id, None)
 
             # Record results
             result.exit_code = exit_code
@@ -434,7 +731,11 @@ class CommandExecutor:
             if result.status != ExecutionStatus.TIMEOUT:
                 result.status = ExecutionStatus.COMPLETED if exit_code == 0 else ExecutionStatus.FAILED
 
-            logger.info(f"Command executed: {command} (exit={exit_code}, duration={result.duration:.2f}s)")
+            logger.info(
+                f"Command executed: {command} "
+                f"(exit={exit_code}, duration={result.duration:.2f}s, "
+                f"processes={result.process_tree_size}, resources={result.resource_usage})"
+            )
 
         except Exception as e:
             logger.error(f"Command execution failed: {command} - {e}")
@@ -550,6 +851,8 @@ class CommandExecutor:
         """
         Execute command with PTY for real-time output streaming.
 
+        Enhanced with resource limits and proper cleanup.
+
         Args:
             command: Command to execute
             cwd: Working directory
@@ -561,40 +864,67 @@ class CommandExecutor:
         """
         master, slave = pty.openpty()
 
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            stdin=slave,
-            stdout=slave,
-            stderr=slave,
-            cwd=cwd,
-            env=env,
-            preexec_fn=os.setsid
-        )
+        try:
+            # preexec_fn will set resource limits and create process group
+            preexec = self._set_resource_limits if any([
+                self.max_memory_mb, self.max_cpu_time, self.max_file_descriptors
+            ]) else os.setsid
 
-        os.close(slave)
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                cwd=cwd,
+                env=env,
+                preexec_fn=preexec
+            )
 
-        # Stream output
-        def stream_output():
-            while True:
+            os.close(slave)
+
+            # Stream output with proper exception handling
+            def stream_output():
                 try:
-                    ready, _, _ = select.select([master], [], [], 0.1)
-                    if ready:
-                        data = os.read(master, 1024).decode('utf-8', errors='replace')
-                        if data:
-                            stream_callback(data)
-                        else:
+                    while True:
+                        try:
+                            ready, _, _ = select.select([master], [], [], 0.1)
+                            if ready:
+                                data = os.read(master, 1024).decode('utf-8', errors='replace')
+                                if data:
+                                    stream_callback(data)
+                                else:
+                                    break
+                            if process.poll() is not None:
+                                break
+                        except OSError as e:
+                            logger.debug(f"PTY read error (process may have terminated): {e}")
                             break
-                    if process.poll() is not None:
-                        break
                 except Exception as e:
                     logger.error(f"Error streaming output: {e}")
-                    break
+                finally:
+                    # Clean up master fd
+                    try:
+                        os.close(master)
+                    except OSError:
+                        pass
 
-        stream_thread = threading.Thread(target=stream_output, daemon=True)
-        stream_thread.start()
+            stream_thread = threading.Thread(target=stream_output, daemon=True)
+            stream_thread.start()
 
-        return process
+            return process
+
+        except Exception:
+            # Clean up on error
+            try:
+                os.close(slave)
+            except OSError:
+                pass
+            try:
+                os.close(master)
+            except OSError:
+                pass
+            raise
 
     def _check_command_exists(self, command: str) -> bool:
         """Check if a command exists in PATH"""
@@ -604,32 +934,69 @@ class CommandExecutor:
             stderr=subprocess.DEVNULL
         ).returncode == 0
 
-    def kill_process(self, process_id: str) -> bool:
+    def kill_process(self, process_id: str, kill_tree: bool = True) -> int:
         """
-        Kill an active process.
+        Kill an active process (and optionally its entire process tree).
 
         Args:
             process_id: Process ID to kill
+            kill_tree: If True, kill entire process tree (default: True)
 
         Returns:
-            True if killed, False if not found
+            Number of processes killed (0 if not found)
         """
-        with self.process_lock:
-            process = self.active_processes.get(process_id)
-            if process:
-                try:
-                    process.kill()
-                    logger.info(f"Killed process: {process_id}")
-                    return True
-                except Exception as e:
-                    logger.error(f"Failed to kill process {process_id}: {e}")
-                    return False
-            return False
+        if kill_tree:
+            # Kill entire process tree
+            return self._kill_process_tree(process_id)
+        else:
+            # Kill only the parent process
+            with self.process_lock:
+                process = self.active_processes.get(process_id)
+                if process:
+                    try:
+                        process.kill()
+                        self.active_processes.pop(process_id, None)
+                        logger.info(f"Killed process: {process_id}")
+                        return 1
+                    except Exception as e:
+                        logger.error(f"Failed to kill process {process_id}: {e}")
+                        return 0
+                return 0
 
     def get_active_processes(self) -> List[str]:
         """Get list of active process IDs"""
         with self.process_lock:
             return list(self.active_processes.keys())
+
+    def get_process_tree_info(self, process_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed process tree information.
+
+        Args:
+            process_id: Process ID to query
+
+        Returns:
+            Dictionary with process tree information, or None if not found
+        """
+        with self.process_lock:
+            tree = self.process_trees.get(process_id)
+            if not tree:
+                return None
+
+            tree.update_resource_usage()
+
+            def node_to_dict(node: ProcessTreeNode) -> Dict[str, Any]:
+                return {
+                    "pid": node.pid,
+                    "pgid": node.pgid,
+                    "parent_pid": node.parent_pid,
+                    "cpu_usage": node.cpu_usage,
+                    "memory_usage": node.memory_usage,
+                    "uptime": time.time() - node.start_time,
+                    "children": [node_to_dict(child) for child in node.children]
+                }
+
+            return node_to_dict(tree)
 
 
 class InteractiveShell:

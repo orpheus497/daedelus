@@ -162,13 +162,17 @@ class ModelManager:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def _find_llama_cpp(self) -> Path | None:
+    def _find_llama_cpp(self) -> tuple[Path | None, bool]:
         """
-        Find llama.cpp installation.
+        Find llama.cpp installation and verify it works.
 
         Returns:
-            Path to llama.cpp directory if found, None otherwise
+            Tuple of (path, verified) where:
+            - path: Path to llama.cpp directory if found, None otherwise
+            - verified: True if conversion tools were tested and work
         """
+        import subprocess
+
         # Try common installation paths
         possible_paths = [
             Path.home() / "llama.cpp",
@@ -178,30 +182,60 @@ class ModelManager:
         ]
 
         for path in possible_paths:
-            if path.exists() and (path / "convert.py").exists():
-                logger.info(f"Found llama.cpp at: {path}")
-                return path
+            if path.exists():
+                # Check for conversion script
+                convert_script = path / "convert.py"
+                if not convert_script.exists():
+                    convert_script = path / "convert-hf-to-gguf.py"
+
+                if convert_script.exists():
+                    # Verify script actually runs
+                    try:
+                        result = subprocess.run(
+                            ["python", str(convert_script), "--help"],
+                            capture_output=True,
+                            timeout=5,
+                            check=False,
+                        )
+                        if result.returncode == 0 or "usage:" in result.stdout.decode().lower():
+                            logger.info(f"Found and verified llama.cpp at: {path}")
+                            return path, True
+                    except (subprocess.TimeoutExpired, Exception) as e:
+                        logger.debug(f"Could not verify llama.cpp at {path}: {e}")
+                        continue
 
         # Try to find in PATH
         try:
-            import subprocess
-
             result = subprocess.run(
                 ["which", "convert-hf-to-gguf.py"],
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=2,
             )
             if result.returncode == 0:
                 script_path = Path(result.stdout.strip())
                 llama_cpp_path = script_path.parent
-                logger.info(f"Found llama.cpp scripts in PATH: {llama_cpp_path}")
-                return llama_cpp_path
+
+                # Verify it runs
+                try:
+                    result = subprocess.run(
+                        [str(script_path), "--help"],
+                        capture_output=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    if result.returncode == 0 or "usage:" in result.stdout.decode().lower():
+                        logger.info(f"Found and verified llama.cpp scripts in PATH: {llama_cpp_path}")
+                        return llama_cpp_path, True
+                except Exception:
+                    pass
         except Exception:
             pass
 
-        logger.warning("llama.cpp not found in common locations")
-        return None
+        logger.warning("llama.cpp not found or not working in common locations")
+        logger.warning("Install llama.cpp from: https://github.com/ggerganov/llama.cpp")
+        return None, False
 
     def _convert_to_gguf(
         self,
@@ -475,6 +509,9 @@ class ModelManager:
         adapter_path: Path,
         training_commands: int,
         notes: str | None = None,
+        base_model_name: str | None = None,
+        skip_verification: bool = False,
+        low_memory_mode: bool = False,
     ) -> Path:
         """
         Forge the next version of Daedelus by merging adapter.
@@ -485,9 +522,15 @@ class ModelManager:
             adapter_path: Path to LoRA adapter weights
             training_commands: Number of commands used for training
             notes: Optional notes about this version
+            base_model_name: HuggingFace model name (default: microsoft/Phi-3-mini-4k-instruct)
+            skip_verification: Skip model inference test (faster but riskier)
+            low_memory_mode: Use 8-bit loading for memory efficiency (slower but uses less RAM)
 
         Returns:
             Path to new model version
+
+        Raises:
+            RuntimeError: If merging or conversion fails
         """
         current = self.get_current_model()
         if not current:
@@ -517,21 +560,46 @@ class ModelManager:
             )
             raise
 
-        # Step 1: Load base model (Phi-3-mini in HuggingFace format)
+        # Determine base model name (from metadata or parameter)
+        if base_model_name is None:
+            # Try to get from current model metadata
+            base_model_name = current.metadata.get("base_model_hf", "microsoft/Phi-3-mini-4k-instruct")
+            logger.info(f"Using base model from metadata: {base_model_name}")
+        else:
+            logger.info(f"Using custom base model: {base_model_name}")
+
+        # Step 1: Load base model (HuggingFace format) with optional memory optimization
         logger.info("Loading base model in HuggingFace format...")
-        base_model_name = "microsoft/Phi-3-mini-4k-instruct"
 
         try:
-            base_model = AutoModelForCausalLM.from_pretrained(
-                base_model_name,
-                device_map="cpu",  # Load to CPU for merging
-                torch_dtype="auto",
-            )
+            if low_memory_mode:
+                # Use 8-bit loading for memory efficiency
+                logger.info("Using low memory mode (8-bit loading)...")
+                try:
+                    base_model = AutoModelForCausalLM.from_pretrained(
+                        base_model_name,
+                        device_map="auto",  # Auto device mapping
+                        load_in_8bit=True,  # 8-bit quantization
+                    )
+                    logger.info("✓ Base model loaded in 8-bit mode (memory efficient)")
+                except Exception as e:
+                    logger.warning(f"8-bit loading failed, falling back to standard: {e}")
+                    low_memory_mode = False
+
+            if not low_memory_mode:
+                # Standard loading
+                base_model = AutoModelForCausalLM.from_pretrained(
+                    base_model_name,
+                    device_map="cpu",  # Load to CPU for merging
+                    torch_dtype="auto",
+                    low_cpu_mem_usage=True,  # Enable memory-efficient loading
+                )
+                logger.info("✓ Base model loaded")
+
             tokenizer = AutoTokenizer.from_pretrained(base_model_name)
-            logger.info("✓ Base model loaded")
 
         except Exception as e:
-            logger.error(f"Failed to load base model: {e}")
+            logger.error(f"Failed to load base model '{base_model_name}': {e}")
             raise RuntimeError(f"Base model loading failed: {e}") from e
 
         # Step 2: Load and merge LoRA adapter
@@ -571,17 +639,23 @@ class ModelManager:
             # Step 4: Convert to GGUF format using llama.cpp
             logger.info("Converting merged model to GGUF format...")
 
-            # Find llama.cpp tools
-            llama_cpp_path = self._find_llama_cpp()
+            # Find and verify llama.cpp tools
+            llama_cpp_path, verified = self._find_llama_cpp()
 
-            if llama_cpp_path is None:
-                logger.warning(
-                    "llama.cpp not found. Cannot convert to GGUF. "
-                    "Attempting fallback to copying current model..."
+            if llama_cpp_path is None or not verified:
+                logger.error(
+                    "llama.cpp not found or not working. Cannot convert to GGUF."
                 )
-                # Fallback: just copy current model as placeholder
-                shutil.copy2(current.path, next_model_path)
-                logger.warning("⚠ Using placeholder (copy of current model)")
+                logger.error(
+                    "Install llama.cpp from: https://github.com/ggerganov/llama.cpp"
+                )
+                logger.error(
+                    "Without llama.cpp, model forging cannot proceed."
+                )
+                raise RuntimeError(
+                    "llama.cpp is required for GGUF conversion but was not found. "
+                    "Install it and ensure convert.py or convert-hf-to-gguf.py is in PATH."
+                )
 
             else:
                 try:
@@ -594,8 +668,27 @@ class ModelManager:
 
                 except Exception as e:
                     logger.error(f"GGUF conversion failed: {e}")
-                    logger.warning("Falling back to copying current model...")
-                    shutil.copy2(current.path, next_model_path)
+                    raise RuntimeError(f"GGUF conversion failed: {e}") from e
+
+        # Step 5: Verify model works before promoting
+        if not skip_verification:
+            logger.info("Verifying model inference (smoke test)...")
+            if not self.test_model_inference(next_model_path):
+                logger.error("✗ Model verification failed!")
+                logger.error("The generated model does not work correctly.")
+                logger.error("Rolling back to previous version...")
+
+                # Clean up broken model
+                if next_model_path.exists():
+                    next_model_path.unlink()
+
+                raise RuntimeError(
+                    "Model verification failed - generated model cannot perform inference. "
+                    "The model was not promoted and has been deleted."
+                )
+            logger.info("✓ Model verification passed")
+        else:
+            logger.warning("⚠ Skipping model verification (skip_verification=True)")
 
         # Register new version
         checksum = self._calculate_checksum(next_model_path)
@@ -612,6 +705,9 @@ class ModelManager:
                 "notes": notes or "",
                 "adapter_path": str(adapter_path),
                 "session_commands": training_commands,
+                "base_model_hf": base_model_name,
+                "low_memory_mode": low_memory_mode,
+                "verified": not skip_verification,
             },
         )
         self._save_metadata()
@@ -681,6 +777,61 @@ class ModelManager:
             logger.error("✗ Checksum mismatch!")
             logger.error(f"  Expected: {info.checksum[:16]}...")
             logger.error(f"  Actual:   {actual_checksum[:16]}...")
+            return False
+
+    def test_model_inference(self, model_path: Path, timeout: int = 30) -> bool:
+        """
+        Test if a model can perform inference (smoke test).
+
+        Args:
+            model_path: Path to GGUF model file
+            timeout: Timeout in seconds
+
+        Returns:
+            True if model generates output successfully, False otherwise
+        """
+        if not model_path.exists():
+            logger.error(f"Model file not found: {model_path}")
+            return False
+
+        try:
+            from llama_cpp import Llama
+
+            logger.info("Testing model inference...")
+
+            # Load model with minimal context
+            llm = Llama(
+                model_path=str(model_path),
+                n_ctx=512,  # Minimal context
+                n_threads=2,  # Minimal threads
+                n_gpu_layers=0,  # CPU only for testing
+                verbose=False,
+            )
+
+            # Try simple generation
+            test_prompt = "Say 'test'"
+            output = llm(
+                test_prompt,
+                max_tokens=10,
+                temperature=0.1,
+                stop=["test"],
+                echo=False,
+            )
+
+            # Check if we got any output
+            if output and "choices" in output and len(output["choices"]) > 0:
+                generated_text = output["choices"][0].get("text", "").strip()
+                logger.info(f"✓ Model inference successful: '{generated_text[:50]}'")
+                return True
+            else:
+                logger.error("✗ Model inference produced no output")
+                return False
+
+        except ImportError:
+            logger.warning("llama-cpp-python not available - skipping inference test")
+            return True  # Can't test, assume OK
+        except Exception as e:
+            logger.error(f"✗ Model inference failed: {e}")
             return False
 
     def get_lineage(self, model_name: str) -> list[str]:

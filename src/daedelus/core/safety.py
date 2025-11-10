@@ -37,8 +37,18 @@ class DangerousPattern:
 
 
 @dataclass
+class RiskScore:
+    """Multi-factor risk score for a command."""
+
+    destructiveness: float  # How destructive (0.0-1.0)
+    reversibility: float  # How reversible (0.0=irreversible, 1.0=fully reversible)
+    scope: float  # How wide the impact (0.0-1.0)
+    overall_risk: float  # Combined risk score (0.0-1.0)
+
+
+@dataclass
 class SafetyReport:
-    """Result of command safety analysis."""
+    """Result of command safety analysis with multi-factor risk scoring."""
 
     command: str  # Original command
     level: SafetyLevel  # Safety level
@@ -46,6 +56,7 @@ class SafetyReport:
     matched_patterns: list[DangerousPattern]  # Patterns that matched
     safe_to_execute: bool  # Whether command can be executed
     explanation: str  # Human-readable explanation
+    risk_score: RiskScore | None = None  # Multi-factor risk assessment
 
 
 class SafetyAnalyzer:
@@ -273,6 +284,9 @@ class SafetyAnalyzer:
         # Generate explanation
         explanation = self._generate_explanation(command, matched_patterns, max_level)
 
+        # Calculate multi-factor risk score
+        risk_score = self._calculate_risk_score(command, matched_patterns, max_level)
+
         return SafetyReport(
             command=command,
             level=max_level,
@@ -280,6 +294,7 @@ class SafetyAnalyzer:
             matched_patterns=matched_patterns,
             safe_to_execute=safe_to_execute,
             explanation=explanation,
+            risk_score=risk_score,
         )
 
     def _is_whitelisted(self, command: str) -> bool:
@@ -288,6 +303,88 @@ class SafetyAnalyzer:
             if pattern.search(command):
                 return True
         return False
+
+    def _calculate_risk_score(
+        self,
+        command: str,
+        matched_patterns: list[DangerousPattern],
+        level: SafetyLevel,
+    ) -> RiskScore:
+        """
+        Calculate multi-factor risk score for command.
+
+        Factors:
+        - Destructiveness: How much damage can be done
+        - Reversibility: Can the action be undone
+        - Scope: How wide the impact is
+
+        Args:
+            command: Command string
+            matched_patterns: Matched dangerous patterns
+            level: Determined safety level
+
+        Returns:
+            RiskScore with multi-factor assessment
+        """
+        # Base scores
+        destructiveness = 0.0
+        reversibility = 1.0  # Default: fully reversible
+        scope = 0.0
+
+        # Analyze command for destructiveness indicators
+        if any(cmd in command.lower() for cmd in ["rm", "shred", "wipe", "format", "mkfs"]):
+            destructiveness += 0.6
+            reversibility = min(reversibility, 0.1)  # Deletion is hard to undo
+
+        if "dd" in command and "of=" in command:
+            destructiveness += 0.8
+            reversibility = 0.0  # Direct disk writes are irreversible
+
+        if "chmod" in command and "777" in command:
+            destructiveness += 0.3
+            reversibility = 0.7  # Can be fixed but security risk
+
+        # Analyze scope
+        if re.search(r"(/|/usr|/etc|/var|/home)", command):
+            scope += 0.7  # System-wide impact
+
+        if "-r" in command.lower() or "-rf" in command.lower():
+            scope += 0.3  # Recursive operations
+
+        if "sudo" in command:
+            scope += 0.2  # Elevated privileges increase scope
+            destructiveness += 0.2
+
+        # Pattern-based adjustments
+        for pattern in matched_patterns:
+            if pattern.level == SafetyLevel.DANGEROUS:
+                destructiveness = max(destructiveness, 0.8)
+                reversibility = min(reversibility, 0.2)
+                scope = max(scope, 0.6)
+            elif pattern.level == SafetyLevel.WARNING:
+                destructiveness = max(destructiveness, 0.4)
+                reversibility = min(reversibility, 0.5)
+                scope = max(scope, 0.3)
+
+        # Normalize scores to 0-1 range
+        destructiveness = min(1.0, destructiveness)
+        reversibility = max(0.0, min(1.0, reversibility))
+        scope = min(1.0, scope)
+
+        # Calculate overall risk (weighted average)
+        # Destructiveness: 40%, Reversibility (inverted): 35%, Scope: 25%
+        overall_risk = (
+            destructiveness * 0.40 +
+            (1.0 - reversibility) * 0.35 +  # Invert reversibility
+            scope * 0.25
+        )
+
+        return RiskScore(
+            destructiveness=destructiveness,
+            reversibility=reversibility,
+            scope=scope,
+            overall_risk=overall_risk,
+        )
 
     def _generate_explanation(
         self,
