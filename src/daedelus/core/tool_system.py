@@ -32,7 +32,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Type
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type
+
+# Initialize logger first
+logger = logging.getLogger(__name__)
 
 # RestrictedPython for secure code execution
 try:
@@ -41,12 +44,15 @@ try:
     RESTRICTED_PYTHON_AVAILABLE = True
 except ImportError:
     RESTRICTED_PYTHON_AVAILABLE = False
-    logger.warning(
-        "RestrictedPython not available - tool sandboxing will use basic exec() (INSECURE). "
-        "Install with: pip install RestrictedPython>=6.2"
-    )
-
-logger = logging.getLogger(__name__)
+    try:
+        from RestrictedPython import compile_restricted, safe_globals, safe_builtins
+        RESTRICTED_PYTHON_AVAILABLE = True
+        logger.info("RestrictedPython loaded (guarded_inplacevar not available in this version)")
+    except ImportError:
+        logger.warning(
+            "RestrictedPython not available - tool sandboxing will use basic exec() (INSECURE). "
+            "Install with: pip install RestrictedPython>=6.2"
+        )
 
 
 class SecurityError(Exception):
