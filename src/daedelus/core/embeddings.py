@@ -76,9 +76,10 @@ class CommandEmbedder:
         min_count: int = 2,
         word_ngrams: int = 3,
         epoch: int = 5,
+        max_corpus_size: int = 10000,
     ) -> None:
         """
-        Initialize command embedder.
+        Initialize command embedder with persistent corpus management.
 
         Args:
             model_path: Path to save/load model
@@ -87,6 +88,7 @@ class CommandEmbedder:
             min_count: Minimum word frequency to include
             word_ngrams: Max length of character ngrams (for subwords)
             epoch: Number of training epochs
+            max_corpus_size: Maximum commands to keep in persistent corpus
         """
         self.model_path = Path(model_path).expanduser()
         self.embedding_dim = embedding_dim
@@ -94,6 +96,10 @@ class CommandEmbedder:
         self.min_count = min_count
         self.word_ngrams = word_ngrams
         self.epoch = epoch
+        self.max_corpus_size = max_corpus_size
+
+        # Persistent corpus file for incremental learning
+        self.corpus_path = self.model_path.parent / f"{self.model_path.stem}_corpus.txt"
 
         self.model: fasttext.FastText._FastText | None = None
 
@@ -110,12 +116,13 @@ class CommandEmbedder:
         """
         return _MODEL_IDENTITY.copy()
 
-    def train_from_corpus(self, commands: list[str]) -> None:
+    def train_from_corpus(self, commands: list[str], save_corpus: bool = True) -> None:
         """
-        Train FastText model from command corpus.
+        Train FastText model from command corpus with persistent corpus management.
 
         Args:
             commands: List of command strings
+            save_corpus: Whether to save corpus for future incremental training
 
         Raises:
             ValueError: If corpus is too small (<10 commands)
@@ -125,21 +132,28 @@ class CommandEmbedder:
 
         logger.info(f"Training embedder on {len(commands)} commands...")
 
-        # Create temporary training file
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".txt",
-            delete=False,
-        ) as f:
-            train_file = Path(f.name)
+        # Create training file (persistent if save_corpus=True, temp otherwise)
+        if save_corpus:
+            train_file = self.corpus_path
+            self.corpus_path.parent.mkdir(parents=True, exist_ok=True)
+            f = open(train_file, "w")
+        else:
+            temp_f = tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".txt",
+                delete=False,
+            )
+            train_file = Path(temp_f.name)
+            f = temp_f
 
+        try:
             # Tokenize and write commands
             for cmd in commands:
                 tokens = self.tokenize(cmd)
                 if tokens:  # Skip empty commands
                     f.write(" ".join(tokens) + "\n")
+            f.close()
 
-        try:
             # Train unsupervised FastText model
             if fasttext is None:
                 raise ImportError(
@@ -163,17 +177,20 @@ class CommandEmbedder:
             # Save model
             self.save()
 
+            if save_corpus:
+                logger.info(f"Training corpus saved to {self.corpus_path}")
+
             logger.info(f"Model trained successfully. " f"Vocabulary size: {len(self.model.words)}")
 
         except Exception as e:
             logger.error(f"FastText training failed: {e}", exc_info=True)
-            if train_file.exists():
+            if not save_corpus and train_file.exists():
                 train_file.unlink(missing_ok=True)
             raise RuntimeError(f"Failed to train FastText model: {e}") from e
 
         finally:
-            # Clean up temp file
-            if train_file.exists():
+            # Clean up temp file if not saving corpus
+            if not save_corpus and train_file.exists():
                 train_file.unlink()
 
     def load(self) -> None:
@@ -415,10 +432,18 @@ class CommandEmbedder:
         min_new_commands: int = 100,
     ) -> bool:
         """
-        Incrementally train the model with new commands.
+        Incrementally train the model with new commands using proper corpus merging.
 
-        This enables continuous learning - the model learns from new
-        commands without full retraining.
+        This enables continuous learning by combining the existing training corpus
+        with new commands and retraining. The model maintains learned vocabulary
+        while adapting to new patterns.
+
+        Implementation:
+            1. Load existing training corpus (if available)
+            2. Merge with new commands
+            3. Apply corpus size management (keep most recent commands)
+            4. Retrain model on combined corpus
+            5. Save updated model and corpus
 
         Args:
             new_commands: List of new command strings to learn from
@@ -428,9 +453,9 @@ class CommandEmbedder:
             True if training occurred, False if skipped
 
         Note:
-            FastText doesn't support true incremental training, so we
-            append new commands and retrain. For production, consider
-            using a model that supports online learning.
+            FastText doesn't support true incremental training, so we maintain
+            a persistent corpus and retrain on the combined dataset. This ensures
+            the model retains old knowledge while learning new patterns.
         """
         if not new_commands:
             logger.debug("No new commands for incremental training")
@@ -445,69 +470,133 @@ class CommandEmbedder:
 
         logger.info(f"Incremental training with {len(new_commands)} new commands...")
 
-        # For FastText, we need to retrain with the combined corpus
-        # In a production system, you'd want to:
-        # 1. Load existing vocabulary
-        # 2. Append new commands
-        # 3. Retrain (or use a model that supports online updates)
-
         try:
-            # Create temporary training file with new commands
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                suffix=".txt",
-                delete=False,
-            ) as f:
-                train_file = Path(f.name)
+            # Step 1: Load existing corpus if available
+            existing_commands = []
+            if self.corpus_path.exists():
+                logger.info(f"Loading existing corpus from {self.corpus_path}")
+                try:
+                    with open(self.corpus_path) as f:
+                        # Read tokenized commands from corpus file
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                # Reconstruct command from tokens (approximate)
+                                # This preserves the tokenized format
+                                existing_commands.append(line)
+                    logger.info(f"Loaded {len(existing_commands)} commands from existing corpus")
+                except Exception as e:
+                    logger.warning(f"Failed to load existing corpus: {e}")
+                    existing_commands = []
 
-                # Tokenize and write new commands
-                for cmd in new_commands:
-                    tokens = self.tokenize(cmd)
-                    if tokens:
-                        f.write(" ".join(tokens) + "\n")
+            # Step 2: Tokenize new commands
+            new_tokenized = []
+            for cmd in new_commands:
+                tokens = self.tokenize(cmd)
+                if tokens:
+                    new_tokenized.append(" ".join(tokens))
 
-            # If we have an existing model, we need to append to it
-            # For now, we'll just retrain on new data
-            # TODO: Implement proper model merging for continuous learning
+            # Step 3: Combine old and new, maintaining corpus size limit
+            combined = existing_commands + new_tokenized
 
-            if self.model is not None:
-                logger.info("Updating existing model with new data...")
-                # Note: This is a simplified approach
-                # For production, implement proper incremental learning
+            # Apply size management - keep most recent commands
+            if len(combined) > self.max_corpus_size:
+                logger.info(
+                    f"Corpus size ({len(combined)}) exceeds max ({self.max_corpus_size}), "
+                    "keeping most recent commands"
+                )
+                combined = combined[-self.max_corpus_size:]
 
-            # Train on new data
+            logger.info(f"Combined corpus size: {len(combined)} commands")
+
+            # Step 4: Create training file with combined corpus
+            train_file = self.corpus_path
+            train_file.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(train_file, "w") as f:
+                for tokenized_cmd in combined:
+                    f.write(tokenized_cmd + "\n")
+
+            # Step 5: Retrain model on combined corpus
             if fasttext is None:
                 raise ImportError(
                     "fasttext is not installed. Install it with: pip install fasttext==0.9.2"
                 )
 
-            # For continuous learning, we use fewer epochs
+            logger.info("Retraining model on combined corpus...")
             self.model = fasttext.train_unsupervised(
                 str(train_file),
                 model="skipgram",
                 dim=self.embedding_dim,
-                epoch=2,  # Fewer epochs for incremental updates
-                minCount=1,  # Lower threshold for new commands
+                epoch=self.epoch,  # Use full epochs for proper convergence
+                minCount=self.min_count,
                 wordNgrams=self.word_ngrams,
                 verbose=1,
             )
 
-            # Save updated model
+            # Step 6: Save updated model
             self.save()
 
-            logger.info("Incremental training complete")
-
-            # Clean up temp file
-            if train_file.exists():
-                train_file.unlink()
+            logger.info(
+                f"Incremental training complete. "
+                f"Vocabulary size: {len(self.model.words)}, "
+                f"Corpus size: {len(combined)}"
+            )
 
             return True
 
         except Exception as e:
             logger.error(f"Incremental training failed: {e}", exc_info=True)
-            if train_file.exists():
-                train_file.unlink(missing_ok=True)
             return False
+
+    def get_corpus_stats(self) -> dict[str, Any]:
+        """
+        Get statistics about the persistent training corpus.
+
+        Returns:
+            Dictionary with corpus statistics including size, path, and existence
+        """
+        stats = {
+            "corpus_exists": self.corpus_path.exists(),
+            "corpus_path": str(self.corpus_path),
+            "corpus_size": 0,
+            "max_corpus_size": self.max_corpus_size,
+        }
+
+        if self.corpus_path.exists():
+            try:
+                with open(self.corpus_path) as f:
+                    stats["corpus_size"] = sum(1 for line in f if line.strip())
+
+                # Get file size in KB
+                file_size = self.corpus_path.stat().st_size
+                stats["file_size_kb"] = round(file_size / 1024, 2)
+
+            except Exception as e:
+                logger.warning(f"Failed to get corpus stats: {e}")
+
+        return stats
+
+    def clear_corpus(self) -> bool:
+        """
+        Clear the persistent training corpus.
+
+        Returns:
+            True if corpus was cleared, False otherwise
+
+        Note:
+            This removes the persistent corpus file. The model will remain
+            intact, but future incremental training will start fresh.
+        """
+        if self.corpus_path.exists():
+            try:
+                self.corpus_path.unlink()
+                logger.info(f"Cleared training corpus at {self.corpus_path}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to clear corpus: {e}")
+                return False
+        return False
 
     def get_training_stats(self) -> dict[str, int]:
         """
