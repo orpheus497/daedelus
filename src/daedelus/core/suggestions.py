@@ -886,10 +886,10 @@ class SuggestionEngine:
                 # Encode command with context
                 embedding = self.embedder.encode_command(command)
 
-                # Add to vector store
-                self.vector_store.add_item(
-                    command=command,
+                # Add to vector store (note: vector_store.add() takes embedding, command, metadata)
+                self.vector_store.add(
                     embedding=embedding,
+                    command=command,
                     metadata={"cwd": cwd, "timestamp": datetime.now().timestamp()},
                 )
 
