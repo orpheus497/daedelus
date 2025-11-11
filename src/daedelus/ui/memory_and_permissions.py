@@ -198,7 +198,7 @@ class MemoryOverviewTab(ScrollableContainer):
                 stat_cards = stats_grid.query("StatCard")
                 if len(stat_cards) >= 4:
                     # Update with current counts (simplified - real implementation would query databases)
-                    self.notify("Stats updated", severity="information")
+                    self.app.notify("Stats updated", severity="information")
         except Exception as e:
             logger.error(f"Error updating stat cards: {e}")
 
@@ -649,25 +649,25 @@ class MemoryAndPermissionsPanel(Container):
             except Exception as e:
                 logger.debug(f"Could not refresh permissions tab: {e}")
 
-            self.notify("All tabs refreshed", severity="information")
+            self.app.notify("All tabs refreshed", severity="information")
 
         except Exception as e:
             logger.error(f"Error refreshing tabs: {e}")
-            self.notify(f"Refresh failed: {str(e)}", severity="error")
+            self.app.notify(f"Refresh failed: {str(e)}", severity="error")
 
     def action_clear_history(self) -> None:
         """Clear history data with confirmation"""
         logger.info("Clear history requested")
 
         # For now, just notify - in full implementation would show modal confirmation
-        self.notify("Clear history requested - confirmation required", severity="warning")
+        self.app.notify("Clear history requested - confirmation required", severity="warning")
 
         # Implementation would be:
         # if user_confirms:
         #     clear all history databases
-        #     self.notify("History cleared", severity="warning")
+        #     self.app.notify("History cleared", severity="warning")
         # else:
-        #     self.notify("Clear cancelled")
+        #     self.app.notify("Clear cancelled")
 
     def action_close_panel(self) -> None:
         """Close panel"""
@@ -694,12 +694,12 @@ class MemoryAndPermissionsPanel(Container):
             export_path = export_dir / "memory_export.jsonl"
             trainer.export_training_data(str(export_path), format='jsonl')
 
-            self.notify(f"Data exported to {export_dir}", severity="information")
+            self.app.notify(f"Data exported to {export_dir}", severity="information")
             logger.info(f"Memory data exported to {export_dir}")
 
         except Exception as e:
             logger.error(f"Error exporting data: {e}")
-            self.notify(f"Export failed: {e}", severity="error")
+            self.app.notify(f"Export failed: {e}", severity="error")
 
     @on(Button.Pressed, "#clear_history_btn")
     def on_clear_history_button(self):
@@ -722,7 +722,7 @@ class MemoryAndPermissionsPanel(Container):
 
             # Check if a row is selected (cursor position)
             if table.cursor_row is None or table.row_count == 0:
-                self.notify("No permission selected", severity="warning")
+                self.app.notify("No permission selected", severity="warning")
                 return
 
             # Get the selected row data
@@ -741,18 +741,18 @@ class MemoryAndPermissionsPanel(Container):
                     # Reload permissions to reflect changes
                     self.load_permissions()
 
-                    self.notify(f"Permission revoked: {permission_type} on {path}", severity="warning")
+                    self.app.notify(f"Permission revoked: {permission_type} on {path}", severity="warning")
                     logger.info(f"Permission revoked: {permission_type} on {path}")
                 else:
-                    self.notify("Invalid permission data", severity="error")
+                    self.app.notify("Invalid permission data", severity="error")
 
             except Exception as row_error:
                 logger.error(f"Error accessing row data: {row_error}")
-                self.notify(f"Could not read permission data: {str(row_error)}", severity="error")
+                self.app.notify(f"Could not read permission data: {str(row_error)}", severity="error")
 
         except Exception as e:
             logger.error(f"Error revoking permission: {e}")
-            self.notify(f"Failed to revoke permission: {str(e)}", severity="error")
+            self.app.notify(f"Failed to revoke permission: {str(e)}", severity="error")
 
     @on(Button.Pressed, "#approve_permission")
     def on_approve_permission(self):
@@ -765,7 +765,7 @@ class MemoryAndPermissionsPanel(Container):
 
             # Check if a row is selected
             if table.cursor_row is None or table.row_count == 0:
-                self.notify("No pending permission selected", severity="warning")
+                self.app.notify("No pending permission selected", severity="warning")
                 return
 
             # Get the selected row data
@@ -790,18 +790,18 @@ class MemoryAndPermissionsPanel(Container):
                     # Reload permissions to reflect changes
                     self.load_permissions()
 
-                    self.notify(f"Permission approved: {permission_type} on {path}", severity="success")
+                    self.app.notify(f"Permission approved: {permission_type} on {path}", severity="success")
                     logger.info(f"Permission approved: {permission_type} on {path}")
                 else:
-                    self.notify("Invalid permission data", severity="error")
+                    self.app.notify("Invalid permission data", severity="error")
 
             except Exception as row_error:
                 logger.error(f"Error accessing row data: {row_error}")
-                self.notify(f"Could not read permission data: {str(row_error)}", severity="error")
+                self.app.notify(f"Could not read permission data: {str(row_error)}", severity="error")
 
         except Exception as e:
             logger.error(f"Error approving permission: {e}")
-            self.notify(f"Failed to approve permission: {str(e)}", severity="error")
+            self.app.notify(f"Failed to approve permission: {str(e)}", severity="error")
 
     @on(Button.Pressed, "#deny_permission")
     def on_deny_permission(self):
@@ -814,7 +814,7 @@ class MemoryAndPermissionsPanel(Container):
 
             # Check if a row is selected
             if table.cursor_row is None or table.row_count == 0:
-                self.notify("No pending permission selected", severity="warning")
+                self.app.notify("No pending permission selected", severity="warning")
                 return
 
             # Get the selected row data
@@ -838,15 +838,15 @@ class MemoryAndPermissionsPanel(Container):
                     # Reload permissions to reflect changes
                     self.load_permissions()
 
-                    self.notify(f"Permission denied: {permission_type} on {path}", severity="warning")
+                    self.app.notify(f"Permission denied: {permission_type} on {path}", severity="warning")
                     logger.info(f"Permission denied: {permission_type} on {path}")
                 else:
-                    self.notify("Invalid permission data", severity="error")
+                    self.app.notify("Invalid permission data", severity="error")
 
             except Exception as row_error:
                 logger.error(f"Error accessing row data: {row_error}")
-                self.notify(f"Could not read permission data: {str(row_error)}", severity="error")
+                self.app.notify(f"Could not read permission data: {str(row_error)}", severity="error")
 
         except Exception as e:
             logger.error(f"Error denying permission: {e}")
-            self.notify(f"Failed to deny permission: {str(e)}", severity="error")
+            self.app.notify(f"Failed to deny permission: {str(e)}", severity="error")
