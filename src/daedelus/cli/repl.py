@@ -62,9 +62,9 @@ class DaedelusCompleter(Completer):
         if not text:
             # Show recent commands when no input
             try:
-                response = self.ipc_client.send_request("get_recent_commands", {"n": 10})
+                response = self.ipc_client.send_request("search", {"query": "", "limit": 10})
                 if response.get("status") == "ok":
-                    commands = response.get("commands", [])
+                    commands = response.get("results", [])
                     for cmd in commands:
                         yield Completion(
                             cmd,
@@ -76,9 +76,9 @@ class DaedelusCompleter(Completer):
         else:
             # Use fuzzy matching for suggestions
             try:
-                response = self.ipc_client.send_request("get_recent_commands", {"n": 100})
+                response = self.ipc_client.send_request("search", {"query": "", "limit": 100})
                 if response.get("status") == "ok":
-                    all_commands = response.get("commands", [])
+                    all_commands = response.get("results", [])
                     matches = self.fuzzy.best_match(text, all_commands, limit=10)
 
                     for cmd, score in matches:
@@ -222,7 +222,8 @@ Welcome to Daedelus - your intelligent terminal assistant!
         try:
             response = self.ipc_client.send_request("get_stats", {})
             if response.get("status") == "ok":
-                stats = response.get("stats", {})
+                # Stats are at top level of response
+                stats = response
 
                 table = Table(title="Daedelus Statistics", show_header=False)
                 table.add_column("Metric", style="cyan")
@@ -240,9 +241,9 @@ Welcome to Daedelus - your intelligent terminal assistant!
     def _show_recent(self) -> None:
         """Show recent commands."""
         try:
-            response = self.ipc_client.send_request("get_recent_commands", {"n": 20})
+            response = self.ipc_client.send_request("search", {"query": "", "limit": 20})
             if response.get("status") == "ok":
-                commands = response.get("commands", [])
+                commands = response.get("results", [])
 
                 if commands:
                     self.console.print("\n[cyan]Recent Commands:[/cyan]")
@@ -262,9 +263,9 @@ Welcome to Daedelus - your intelligent terminal assistant!
             query: Search query
         """
         try:
-            response = self.ipc_client.send_request("get_recent_commands", {"n": 500})
+            response = self.ipc_client.send_request("search", {"query": "", "limit": 500})
             if response.get("status") == "ok":
-                commands = response.get("commands", [])
+                commands = response.get("results", [])
                 matches = self.fuzzy.best_match(query, commands, limit=10)
 
                 if matches:

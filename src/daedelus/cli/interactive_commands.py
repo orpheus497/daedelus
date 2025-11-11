@@ -93,13 +93,13 @@ def search(ctx: click.Context, query: tuple[str, ...], limit: int) -> None:
         from daedelus.utils.highlighting import get_highlighter
 
         client = IPCClient(config.get("daemon.socket_path"))
-        response = client.send_request("get_recent_commands", {"n": 500})
+        response = client.send_request("search", {"query": "", "limit": 500})
 
         if response.get("status") != "ok":
             click.echo(f"❌ Error: {response.get('error', 'Unknown error')}")
             return
 
-        commands = response.get("commands", [])
+        commands = response.get("results", [])
         matcher = get_matcher(threshold=40)
         matches = matcher.best_match(query_str, commands, limit=limit)
 
@@ -182,7 +182,8 @@ def analytics(ctx: click.Context, detailed: bool) -> None:
             click.echo(f"❌ Error: {response.get('error', 'Unknown error')}")
             return
 
-        stats = response.get("stats", {})
+        # Stats are at top level of response
+        stats = response
         console = Console()
 
         # Create statistics table

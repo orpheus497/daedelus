@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Pattern, Set
+from typing import Any, Dict, List, Optional, Pattern, Set
 
 logger = logging.getLogger(__name__)
 
@@ -541,7 +541,7 @@ class PrivacyManager:
         except Exception as e:
             logger.error(f"Failed to log privacy violation: {e}")
 
-    def get_privacy_report(self) -> Dict[str, any]:
+    def get_privacy_report(self) -> Dict[str, Any]:
         """
         Generate privacy report with statistics.
 

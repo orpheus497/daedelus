@@ -44,6 +44,7 @@ try:
     RESTRICTED_PYTHON_AVAILABLE = True
 except ImportError:
     RESTRICTED_PYTHON_AVAILABLE = False
+    guarded_inplacevar = None
     try:
         from RestrictedPython import compile_restricted, safe_globals, safe_builtins
         RESTRICTED_PYTHON_AVAILABLE = True
@@ -794,7 +795,6 @@ class ToolExecutor:
             '_getattr_': getattr,
             '_getitem_': lambda obj, key: obj[key],
             '_write_': lambda obj: obj,
-            '_inplacevar_': guarded_inplacevar,
             **safe_globals,
             # Allowed safe modules
             'json': __import__('json'),
@@ -804,6 +804,10 @@ class ToolExecutor:
             'collections': __import__('collections'),
             'itertools': __import__('itertools'),
         }
+
+        # Add _inplacevar_ if available
+        if guarded_inplacevar is not None:
+            restricted_globals['_inplacevar_'] = guarded_inplacevar
 
         restricted_locals = {'params': params}
 

@@ -228,19 +228,21 @@ class EnhancedDashboardApp(App):
         ]
 
         for title, value, desc in stat_cards_data:
-            with Vertical(classes="stat-card"):
-                grid.compose_add_child(Static(title, classes="stat-title"))
-                grid.compose_add_child(Static(value, classes="stat-value"))
-                grid.compose_add_child(Static(desc, classes="stat-description"))
+            # Fixed: Create vertical container
+            vertical_card = Vertical(classes="stat-card")
+            vertical_card.mount(Static(title, classes="stat-title"))
+            vertical_card.mount(Static(value, classes="stat-value"))
+            vertical_card.mount(Static(desc, classes="stat-description"))
+            grid.mount(vertical_card)
 
-        container.compose_add_child(grid)
+        container.mount(grid)
 
         # Recent activity
-        container.compose_add_child(Static("\n## Recent Activity", classes="section-header"))
+        container.mount(Static("\n## Recent Activity", classes="section-header"))
 
         activity_table = DataTable(id="overview_activity_table", zebra_stripes=True)
         activity_table.add_columns("Time", "Type", "Operation", "Status")
-        container.compose_add_child(activity_table)
+        container.mount(activity_table)
 
         return container
 
@@ -248,7 +250,7 @@ class EnhancedDashboardApp(App):
         """Compose commands tab"""
         container = Container()
 
-        container.compose_add_child(Static("# Command History & Analytics", classes="tab-header"))
+        container.mount(Static("# Command History & Analytics", classes="tab-header"))
 
         # Statistics
         from textual.containers import Grid
@@ -262,25 +264,27 @@ class EnhancedDashboardApp(App):
         ]
 
         for title, value in stats_cards:
-            with Vertical(classes="stat-card"):
-                stats_grid.compose_add_child(Static(title, classes="stat-title"))
-                stats_grid.compose_add_child(Static(value, classes="stat-value"))
+            # Fixed: Create vertical container
+            vertical_card = Vertical(classes="stat-card")
+            vertical_card.mount(Static(title, classes="stat-title"))
+            vertical_card.mount(Static(value, classes="stat-value"))
+            stats_grid.mount(vertical_card)
 
-        container.compose_add_child(stats_grid)
+        container.mount(stats_grid)
 
         # Command history table
-        container.compose_add_child(Static("\n## Command History", classes="section-header"))
+        container.mount(Static("\n## Command History", classes="section-header"))
 
         cmd_table = DataTable(id="commands_table", zebra_stripes=True)
         cmd_table.add_columns("Timestamp", "Command", "Exit Code", "Duration", "CWD")
-        container.compose_add_child(cmd_table)
+        container.mount(cmd_table)
 
         # Most used commands
-        container.compose_add_child(Static("\n## Most Used Commands", classes="section-header"))
+        container.mount(Static("\n## Most Used Commands", classes="section-header"))
 
         most_used_table = DataTable(id="most_used_table", zebra_stripes=True)
         most_used_table.add_columns("Rank", "Command", "Count", "Success %")
-        container.compose_add_child(most_used_table)
+        container.mount(most_used_table)
 
         return container
 
@@ -288,7 +292,7 @@ class EnhancedDashboardApp(App):
         """Compose files tab"""
         container = Container()
 
-        container.compose_add_child(Static("# File Operations Monitor", classes="tab-header"))
+        container.mount(Static("# File Operations Monitor", classes="tab-header"))
 
         # Statistics
         from textual.containers import Grid
@@ -302,18 +306,20 @@ class EnhancedDashboardApp(App):
         ]
 
         for title, value in stats_cards:
-            with Vertical(classes="stat-card"):
-                stats_grid.compose_add_child(Static(title, classes="stat-title"))
-                stats_grid.compose_add_child(Static(value, classes="stat-value"))
+            # Fixed: Create vertical container
+            vertical_card = Vertical(classes="stat-card")
+            vertical_card.mount(Static(title, classes="stat-title"))
+            vertical_card.mount(Static(value, classes="stat-value"))
+            stats_grid.mount(vertical_card)
 
-        container.compose_add_child(stats_grid)
+        container.mount(stats_grid)
 
         # File access history
-        container.compose_add_child(Static("\n## File Access History", classes="section-header"))
+        container.mount(Static("\n## File Access History", classes="section-header"))
 
         files_table = DataTable(id="files_table", zebra_stripes=True)
         files_table.add_columns("Timestamp", "Operation", "File Path", "Status", "Size")
-        container.compose_add_child(files_table)
+        container.mount(files_table)
 
         return container
 
@@ -321,7 +327,7 @@ class EnhancedDashboardApp(App):
         """Compose tools tab"""
         container = Container()
 
-        container.compose_add_child(Static("# Tool & Plugin Management", classes="tab-header"))
+        container.mount(Static("# Tool & Plugin Management", classes="tab-header"))
 
         # Statistics
         from textual.containers import Grid
@@ -335,31 +341,33 @@ class EnhancedDashboardApp(App):
         ]
 
         for title, value in stats_cards:
-            with Vertical(classes="stat-card"):
-                stats_grid.compose_add_child(Static(title, classes="stat-title"))
-                stats_grid.compose_add_child(Static(value, classes="stat-value"))
+            # Fixed: Create vertical container
+            vertical_card = Vertical(classes="stat-card")
+            vertical_card.mount(Static(title, classes="stat-title"))
+            vertical_card.mount(Static(value, classes="stat-value"))
+            stats_grid.mount(vertical_card)
 
-        container.compose_add_child(stats_grid)
+        container.mount(stats_grid)
 
         # Installed tools
-        container.compose_add_child(Static("\n## Installed Tools", classes="section-header"))
+        container.mount(Static("\n## Installed Tools", classes="section-header"))
 
         tools_table = DataTable(id="tools_table", zebra_stripes=True)
         tools_table.add_columns("Tool Name", "Version", "Category", "Status", "Usage Count")
-        container.compose_add_child(tools_table)
+        container.mount(tools_table)
 
         # Execution history
-        container.compose_add_child(Static("\n## Execution History", classes="section-header"))
+        container.mount(Static("\n## Execution History", classes="section-header"))
 
         exec_table = DataTable(id="tool_exec_table", zebra_stripes=True)
         exec_table.add_columns("Timestamp", "Tool", "Status", "Duration", "Permissions")
-        container.compose_add_child(exec_table)
+        container.mount(exec_table)
 
         # Tool management buttons
         with Horizontal(classes="button-row"):
-            container.compose_add_child(Button("Refresh Tools", id="refresh_tools", variant="primary"))
-            container.compose_add_child(Button("Install Tool", id="install_tool", variant="success"))
-            container.compose_add_child(Button("Create Tool", id="create_tool", variant="default"))
+            container.mount(Button("Refresh Tools", id="refresh_tools", variant="primary"))
+            container.mount(Button("Install Tool", id="install_tool", variant="success"))
+            container.mount(Button("Create Tool", id="create_tool", variant="default"))
 
         return container
 
@@ -367,7 +375,7 @@ class EnhancedDashboardApp(App):
         """Compose training tab"""
         container = Container()
 
-        container.compose_add_child(Static("# Training Data & Model Management", classes="tab-header"))
+        container.mount(Static("# Training Data & Model Management", classes="tab-header"))
 
         # Training statistics
         from textual.containers import Grid
@@ -381,32 +389,34 @@ class EnhancedDashboardApp(App):
         ]
 
         for title, value in stats_cards:
-            with Vertical(classes="stat-card"):
-                stats_grid.compose_add_child(Static(title, classes="stat-title"))
-                stats_grid.compose_add_child(Static(value, classes="stat-value"))
+            # Fixed: Create vertical container
+            vertical_card = Vertical(classes="stat-card")
+            vertical_card.mount(Static(title, classes="stat-title"))
+            vertical_card.mount(Static(value, classes="stat-value"))
+            stats_grid.mount(vertical_card)
 
-        container.compose_add_child(stats_grid)
+        container.mount(stats_grid)
 
         # Training data sources
-        container.compose_add_child(Static("\n## Training Data Sources", classes="section-header"))
+        container.mount(Static("\n## Training Data Sources", classes="section-header"))
 
         sources_table = DataTable(id="training_sources_table", zebra_stripes=True)
         sources_table.add_columns("Source", "Examples", "Quality", "Last Updated")
-        container.compose_add_child(sources_table)
+        container.mount(sources_table)
 
         # Document ingestion
-        container.compose_add_child(Static("\n## Document Ingestion", classes="section-header"))
+        container.mount(Static("\n## Document Ingestion", classes="section-header"))
 
         docs_table = DataTable(id="ingested_docs_table", zebra_stripes=True)
         docs_table.add_columns("Document", "Type", "Size", "Status", "Ingested")
-        container.compose_add_child(docs_table)
+        container.mount(docs_table)
 
         # Training controls
         with Horizontal(classes="button-row"):
-            container.compose_add_child(Button("Collect Training Data", id="collect_training", variant="primary"))
-            container.compose_add_child(Button("Ingest Document", id="ingest_doc", variant="default"))
-            container.compose_add_child(Button("Export Training Data", id="export_training", variant="default"))
-            container.compose_add_child(Button("Train Model", id="train_model", variant="success"))
+            container.mount(Button("Collect Training Data", id="collect_training", variant="primary"))
+            container.mount(Button("Ingest Document", id="ingest_doc", variant="default"))
+            container.mount(Button("Export Training Data", id="export_training", variant="default"))
+            container.mount(Button("Train Model", id="train_model", variant="success"))
 
         return container
 
@@ -414,7 +424,7 @@ class EnhancedDashboardApp(App):
         """Compose system tab"""
         container = Container()
 
-        container.compose_add_child(Static("# System Information & Health", classes="tab-header"))
+        container.mount(Static("# System Information & Health", classes="tab-header"))
 
         # System statistics
         from textual.containers import Grid
@@ -428,32 +438,34 @@ class EnhancedDashboardApp(App):
         ]
 
         for title, value in stats_cards:
-            with Vertical(classes="stat-card"):
-                stats_grid.compose_add_child(Static(title, classes="stat-title"))
-                stats_grid.compose_add_child(Static(value, classes="stat-value"))
+            # Fixed: Create vertical container
+            vertical_card = Vertical(classes="stat-card")
+            vertical_card.mount(Static(title, classes="stat-title"))
+            vertical_card.mount(Static(value, classes="stat-value"))
+            stats_grid.mount(vertical_card)
 
-        container.compose_add_child(stats_grid)
+        container.mount(stats_grid)
 
         # System information
-        container.compose_add_child(Static("\n## System Information", classes="section-header"))
+        container.mount(Static("\n## System Information", classes="section-header"))
 
         info_table = DataTable(id="system_info_table", zebra_stripes=True)
         info_table.add_columns("Component", "Status", "Version", "Details")
-        container.compose_add_child(info_table)
+        container.mount(info_table)
 
         # Daemon status
-        container.compose_add_child(Static("\n## Daemon Status", classes="section-header"))
+        container.mount(Static("\n## Daemon Status", classes="section-header"))
 
         daemon_table = DataTable(id="daemon_status_table", zebra_stripes=True)
         daemon_table.add_columns("Metric", "Value")
-        container.compose_add_child(daemon_table)
+        container.mount(daemon_table)
 
         # System controls
         with Horizontal(classes="button-row"):
-            container.compose_add_child(Button("Restart Daemon", id="restart_daemon", variant="warning"))
-            container.compose_add_child(Button("Clear Cache", id="clear_cache", variant="warning"))
-            container.compose_add_child(Button("Run Backup", id="run_backup", variant="primary"))
-            container.compose_add_child(Button("System Health Check", id="health_check", variant="default"))
+            container.mount(Button("Restart Daemon", id="restart_daemon", variant="warning"))
+            container.mount(Button("Clear Cache", id="clear_cache", variant="warning"))
+            container.mount(Button("Run Backup", id="run_backup", variant="primary"))
+            container.mount(Button("System Health Check", id="health_check", variant="default"))
 
         return container
 

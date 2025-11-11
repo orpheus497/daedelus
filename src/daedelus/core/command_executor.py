@@ -1012,12 +1012,6 @@ class CommandExecutor:
                         risk_text.append(f"  • {warning}\n", style="yellow")
                     risk_text.append("\n")
 
-                # Add suggestions
-                if safety_report.suggestions:
-                    risk_text.append("Suggestions:\n", style="bold underline green")
-                    for suggestion in safety_report.suggestions:
-                        risk_text.append(f"  • {suggestion}\n", style="green")
-
                 # Display panel
                 console.print(Panel(
                     risk_text,

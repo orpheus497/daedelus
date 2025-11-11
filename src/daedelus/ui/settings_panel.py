@@ -584,7 +584,7 @@ class SettingsPanel(Container):
         """Close settings panel with unsaved changes confirmation"""
         if self.settings_modified:
             # Show warning about unsaved changes
-            self.notify("Warning: You have unsaved changes", severity="warning")
+            self.app.notify("Warning: You have unsaved changes", severity="warning")
             # In full implementation, would show confirmation modal:
             # if user_confirms_exit:
             #     self.app.exit()
