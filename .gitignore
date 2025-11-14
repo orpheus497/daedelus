@@ -63,6 +63,31 @@ dmypy.json
 .DS_Store
 
 # ===========================
+# Security & Secrets (NEVER UPLOAD)
+# ===========================
+# Private keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa*
+*.gpg
+
+# Environment files
+.env
+.env.*
+!.env.example
+secrets.*
+credentials.*
+auth.*
+
+# API keys and tokens
+*.token
+*.apikey
+
+# ===========================
 # Daedalus Runtime Data (NEVER UPLOAD)
 # ===========================
 # User data directories - contains personal command history
