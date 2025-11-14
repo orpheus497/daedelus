@@ -1,5 +1,9 @@
 # Daedelus Privacy Configuration
 # ==============================
+# Version: 0.5.0
+# Last Updated: 2025-11-14
+# Created by: orpheus497
+#
 # This file defines what data should NEVER be logged, uploaded, or shared
 # All patterns are applied automatically to protect your privacy
 
@@ -12,6 +16,7 @@ excluded_paths:
   # Personal & sensitive directories
   - ~/.ssh
   - ~/.gnupg
+  - ~/.gpg
   - ~/.password-store
   - ~/Documents/Private
   - ~/Documents/Personal
@@ -19,11 +24,20 @@ excluded_paths:
   - ~/.config/secrets
   - ~/.aws
   - ~/.kube
+  - ~/.docker
+  - ~/.config/gcloud
+  - ~/.azure
   
   # Development credentials
   - ~/.*credentials
   - ~/.*secrets
   - ~/.env
+  - ~/.npmrc
+  - ~/.pypirc
+  
+  # Version control
+  - .git/config
+  - .git/credentials
 
 # Excluded Patterns (regex patterns to filter commands)
 # Commands matching these patterns will NOT be logged
@@ -41,37 +55,55 @@ excluded_patterns:
   - ".*ssh.*private.*"
   - ".*id_rsa.*"
   - ".*id_ed25519.*"
+  - ".*id_ecdsa.*"
   - ".*\.pem"
   - ".*\.key"
+  - ".*BEGIN.*PRIVATE.*KEY.*"
   
   # Environment variables with sensitive data
   - "export.*PASSWORD.*"
   - "export.*SECRET.*"
   - "export.*TOKEN.*"
   - "export.*KEY.*"
+  - "export.*API.*"
   
-  # Package manager with passwords
+  # Package manager with passwords (sudo commands)
   - ".*sudo.*apt.*"
   - ".*sudo.*dnf.*"
   - ".*sudo.*yum.*"
+  - ".*sudo.*pacman.*"
   
   # Database connections
   - ".*mysql.*-p.*"
   - ".*psql.*password.*"
   - ".*mongo.*password.*"
+  - ".*redis-cli.*--pass.*"
   
   # Git with credentials in URL
   - "git.*https://.*:.*@.*"
   - "git.*http://.*:.*@.*"
+  - "git.*clone.*token.*"
+  
+  # Docker/Kubernetes secrets
+  - ".*docker.*login.*"
+  - ".*kubectl.*create.*secret.*"
+  - ".*kubectl.*get.*secret.*"
+  
+  # Cloud provider credentials
+  - ".*aws.*configure.*"
+  - ".*gcloud.*auth.*"
+  - ".*az.*login.*"
   
   # Private/personal file indicators
   - ".*[Pp]rivate.*"
   - ".*[Pp]ersonal.*"
   - ".*[Cc]onfidential.*"
+  - ".*[Ss]ecret.*"
 
 # File Extensions to Never Ingest
-# These files will be excluded from document ingestion
+# These files will be excluded from document ingestion for training
 excluded_file_types:
+  # Private keys and certificates
   - ".key"
   - ".pem"
   - ".p12"
@@ -81,32 +113,100 @@ excluded_file_types:
   - ".crt"
   - ".cer"
   - ".der"
+  
+  # Encryption and signing
   - ".gpg"
   - ".asc"
   - ".enc"
+  - ".sig"
+  
+  # SSH keys
+  - "id_rsa"
+  - "id_ed25519"
+  - "id_ecdsa"
+  - "known_hosts"
+  - "authorized_keys"
+  
+  # Environment and secrets
+  - ".env"
+  - ".env.local"
+  - ".env.production"
+  - "secrets.yaml"
+  - "secrets.yml"
 
-# Privacy Policy
-# --------------
-# 1. ALL data stays local - nothing is ever uploaded
-# 2. No telemetry, no tracking, no external calls
-# 3. Models are trained 100% offline
-# 4. Command history is encrypted at rest (optional)
+# Privacy Policy (v0.5.0)
+# -----------------------
+# 1. ALL data stays local - nothing is ever uploaded to any server
+# 2. No telemetry, no tracking, no external API calls
+# 3. Models are trained 100% offline on your machine
+# 4. Command history encrypted at rest (optional, see below)
 # 5. You can clear all data at any time with: daedelus clear --all
+# 6. Privacy patterns automatically filter sensitive data
+# 7. Built-in privacy manager redacts credentials before logging
+# 8. 100% FOSS - auditable, transparent, trustworthy
 
 # Data Storage Locations
 # ----------------------
 # All data is stored locally in:
 # - ~/.local/share/daedelus/    (or $XDG_DATA_HOME/daedelus/)
-# - Command history: history.db
-# - Models: models/
-# - Logs: daemon.log
+#   - history.db           (command history - filterable)
+#   - embeddings.ann       (vector search index)
+#   - models/              (LLM models - optional)
+#   - adapters/            (LoRA fine-tuned adapters)
+#   - daemon.log           (daemon logs)
+#   - daemon.pid           (process ID)
+#   - daemon.sock          (IPC socket)
 # 
 # To completely remove all data:
 # rm -rf ~/.local/share/daedelus
+# rm -rf ~/.config/daedelus
 
-# Additional Security
+# Additional Security Options
+# ---------------------------
+# Consider setting these environment variables for enhanced privacy:
+#
+# export DAEDELUS_ENCRYPTION=1        # Enable command history encryption (AES-256)
+# export DAEDELUS_NO_NETWORK=1        # Disable all network features (already off by default)
+# export DAEDELUS_PARANOID_MODE=1     # Maximum privacy (logs nothing, no history)
+# export DAEDELUS_FILTER_ALL=1        # Filter all commands through privacy manager
+# export DAEDELUS_REDACT_PATHS=1      # Redact all file paths in logs
+
+# New Features (v0.5.0)
+# ---------------------
+# - Real-time syntax highlighting (no data sent anywhere)
+# - Multi-language script generation (all processed locally)
+# - File operations with automatic backup (local only)
+# - AI intent classification (processed on-device)
+# - Template library (pre-built, no external calls)
+
+# Privacy Manager Features
+# ------------------------
+# Built-in automatic detection and redaction of:
+# - AWS Access Keys (AKIA*)
+# - API Tokens (various formats)
+# - Email addresses (optional)
+# - Credit card numbers
+# - Social Security Numbers
+# - Phone numbers
+# - IP addresses (optional)
+# - File paths (optional)
+
+# Trust & Transparency
 # -------------------
-# Consider setting these environment variables:
-# export DAEDELUS_ENCRYPTION=1        # Enable command history encryption
-# export DAEDELUS_NO_NETWORK=1        # Disable all network features
-# export DAEDELUS_PARANOID_MODE=1     # Maximum privacy (logs nothing)
+# - 100% Open Source (MIT License)
+# - No dependencies on proprietary services
+# - All processing happens on your machine
+# - Code is auditable (github.com/orpheus497/daedelus)
+# - No hidden network calls
+# - No tracking or analytics
+# - Your data is YOUR data, always
+
+# Questions or Concerns?
+# ---------------------
+# - Review the source code: github.com/orpheus497/daedelus
+# - Check .gitignore to see what's never uploaded
+# - Run `daedelus doctor` to verify privacy settings
+# - File issues for privacy concerns
+#
+# Created by orpheus497 with privacy as the top priority.
+
