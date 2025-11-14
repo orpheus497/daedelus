@@ -1,8 +1,11 @@
 """
 Interactive REPL mode for Daedelus.
 
-Provides a ptpython-like REPL for exploring command history,
-getting suggestions, and interacting with the AI assistant.
+Provides an enhanced REPL with:
+- Real-time syntax highlighting
+- AI-powered intent classification
+- Command suggestions and history
+- Natural language understanding
 
 Created by: orpheus497
 """
@@ -20,19 +23,66 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
+from pygments.lexer import RegexLexer, bygroups, include
+from pygments.lexers.shell import BashLexer
+from pygments.token import Comment, Keyword, Name, Number, Operator, String, Text
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
+from daedelus.core.intent_classifier import Intent, IntentClassifier, IntentResult
 from daedelus.daemon.ipc import IPCClient
 from daedelus.utils.fuzzy import get_matcher
 from daedelus.utils.os_detection import get_os_detector
 
 logger = logging.getLogger(__name__)
+
+
+class DaedelusLexer(RegexLexer):
+    """
+    Custom lexer for Daedelus REPL with syntax highlighting for:
+    - REPL commands (/help, /search, etc.)
+    - Shell commands (bash/zsh/fish)
+    - Natural language (detected)
+    - File paths
+    """
+
+    name = "Daedelus"
+    aliases = ["daedelus"]
+
+    tokens = {
+        "root": [
+            # REPL commands (/, followed by command name)
+            (
+                r"^(/)(help|search|explain|generate|write-script|read|write|stats|recent|quit|exit|q)\b",
+                bygroups(Operator, Keyword.Namespace),
+            ),
+            # Common shell commands
+            (
+                r"\b(ls|cd|pwd|cat|grep|find|git|docker|kubectl|npm|pip|python|cargo|make|ssh|scp|rsync|tar|curl|wget)\b",
+                Keyword,
+            ),
+            # Pipes and redirects
+            (r"[|><&;]", Operator),
+            # Options/flags
+            (r"--?[\w-]+", Name.Attribute),
+            # Paths (starting with / or ./ or ~/)
+            (r"(/|\.{1,2}/)[\w/.-]+", String),
+            # Quoted strings
+            (r'"[^"]*"', String.Double),
+            (r"'[^']*'", String.Single),
+            # Numbers
+            (r"\b\d+\b", Number),
+            # Everything else
+            (r"\s+", Text),
+            (r".", Text),
+        ],
+    }
 
 
 class DaedelusCompleter(Completer):
@@ -113,6 +163,7 @@ class DaedelusREPL:
         self.session_id = str(uuid.uuid4())
         self.current_dir = os.getcwd()  # Track current directory
         self.os_detector = get_os_detector()  # OS detection for system-specific commands
+        self.intent_classifier = IntentClassifier()  # AI intent classification
 
         # Create custom key bindings
         self.kb = KeyBindings()
@@ -126,20 +177,31 @@ class DaedelusREPL:
         def _(event: Any) -> None:
             event.current_buffer.reset()
 
-        # Create prompt session with auto-suggestions
+        # Create prompt session with auto-suggestions and real-time syntax highlighting
         self.session: PromptSession[str] = PromptSession(
             history=InMemoryHistory(),
             auto_suggest=AutoSuggestFromHistory(),
             completer=DaedelusCompleter(ipc_client),
             complete_style=CompleteStyle.MULTI_COLUMN,
             key_bindings=self.kb,
+            lexer=PygmentsLexer(DaedelusLexer),  # Real-time syntax highlighting
             style=Style.from_dict(
                 {
                     "prompt": "ansicyan bold",
+                    # Syntax highlighting colors (Pygments tokens)
+                    "pygments.keyword": "ansibrightgreen bold",  # Shell commands
+                    "pygments.keyword.namespace": "ansibrightmagenta bold",  # REPL commands
+                    "pygments.operator": "ansibrightcyan",  # Pipes, redirects
+                    "pygments.name.attribute": "ansiyellow",  # Flags/options
+                    "pygments.string": "ansibrightblue",  # Paths and strings
+                    "pygments.number": "ansimagenta",  # Numbers
+                    "pygments.comment": "ansibrightblack italic",  # Comments
+                    # Completion menu
                     "completion-menu.completion": "bg:#008888 #ffffff",
                     "completion-menu.completion.current": "bg:#00aaaa #000000",
                     "scrollbar.background": "bg:#88aaaa",
                     "scrollbar.button": "bg:#222222",
+                    # Auto-suggestions
                     "auto-suggestion": "#666666",
                 }
             ),
@@ -151,15 +213,21 @@ class DaedelusREPL:
 # 🧠 Daedelus Interactive Shell
 
 **Welcome to Daedelus** - Your self-learning AI terminal assistant
-*Alias: `deus` | 100% offline & privacy-first*
+*Type `daedelus` or `deus` to start | 100% offline & privacy-first*
 
-## 🎯 Quick Start
-Type any shell command to execute it. The AI learns from your usage patterns.
-Use `/help` anytime for this message.
+## 🎨 Features Always Active
+- ✅ **Real-time syntax highlighting** - Commands colored as you type
+- ✅ **Auto-completion** - Tab to complete from history
+- ✅ **Fuzzy search** - Find commands with partial matches
+- ✅ **AI suggestions** - Intelligent command recommendations
+- ✅ **History navigation** - ↑/↓ arrows through your history
+- ✅ **The Redbook** - Complete terminal mastery guide built-in
 
 ## 📋 REPL Commands
 - `/help` - Show this help message
 - `/search <query>` - Fuzzy search command history
+- `/redbook <query>` - Search The Redbook knowledge base
+- `/redbook` - Show Redbook information
 - `/explain <command>` - AI explanation of any command
 - `/generate <description>` - Generate command from natural language
 - `/write-script <description>` - Create executable script from description
@@ -169,20 +237,33 @@ Use `/help` anytime for this message.
 - `/recent [n]` - Show recent commands (default: 20)
 - `/quit`, `/exit`, `/q` - Exit REPL
 
+## 📖 The Redbook Integration
+Daedelus includes **The Redbook** - a comprehensive terminal mastery guide by orpheus497
+covering Linux commands, system administration, security, and more.
+
+**Search examples:**
+```bash
+/redbook package management      # Find package management chapters
+/redbook how to configure SSH    # Search for SSH configuration
+/redbook systemd services        # Learn about service management
+```
+
 ## 🤖 AI Capabilities
 The AI can interpret natural language and:
 - **Generate commands** from plain English descriptions
-- **Write scripts** (bash, python, etc.) based on your requirements
+- **Write scripts** (7 languages: bash, python, js, perl, ruby, go, php)
 - **Read/analyze documents** and provide insights
 - **Execute complex workflows** by chaining commands
-- **Build tools** dynamically as needed
+- **Build tools** dynamically as needed (8 templates available)
 - **Learn continuously** from your usage patterns
+- **Access The Redbook** for authoritative Linux guidance
 
 **Examples:**
 ```bash
 /generate find all python files larger than 1MB
 /write-script backup my home directory to external drive
 /explain tar -xzf archive.tar.gz
+/redbook how to set up firewall
 Tell me what's in the config file  # Natural language
 Create a script to monitor CPU usage  # Natural language
 ```
@@ -212,7 +293,7 @@ Run from your regular terminal:
 
     def handle_command(self, text: str | None) -> bool:
         """
-        Handle REPL command.
+        Handle REPL command with AI-powered intent classification.
 
         Args:
             text: Command text (can be None if prompt was interrupted)
@@ -228,6 +309,78 @@ Run from your regular terminal:
         if not text:
             return True
 
+        # Classify intent using AI
+        intent_result = self.intent_classifier.classify(
+            text, context={"cwd": self.current_dir}
+        )
+
+        # Handle based on classified intent
+        if intent_result.intent == Intent.REPL_COMMAND:
+            # REPL commands always get priority
+            return self._handle_repl_command(text)
+
+        elif intent_result.intent == Intent.EXECUTE:
+            # High confidence - execute as shell command
+            if intent_result.confidence >= 0.7:
+                self._execute_command(text)
+            else:
+                # Low confidence - ask for confirmation
+                prompt = self.intent_classifier.get_prompt_for_ambiguous(intent_result)
+                if prompt:
+                    self.console.print(prompt)
+                    self.console.print(
+                        f"\n[dim]Press Enter to execute, or type a different command:[/dim]"
+                    )
+                self._execute_command(text)
+
+        elif intent_result.intent == Intent.GENERATE:
+            # Generate command from natural language
+            self._generate_command(text)
+
+        elif intent_result.intent == Intent.WRITE_SCRIPT:
+            # Create executable script
+            self._write_script(text)
+
+        elif intent_result.intent == Intent.READ_FILE:
+            # Extract file path and read
+            file_path = text.split()[-1]  # Simplistic - get last word
+            self._read_file(file_path)
+
+        elif intent_result.intent == Intent.WRITE_FILE:
+            # Extract file path and write
+            file_path = text.split()[-1]
+            self._write_file(file_path)
+
+        elif intent_result.intent == Intent.QUESTION:
+            # Answer as Q&A
+            self._handle_natural_language(text)
+
+        elif intent_result.intent == Intent.UNKNOWN:
+            # Low confidence - show options and default to execute
+            prompt = self.intent_classifier.get_prompt_for_ambiguous(intent_result)
+            if prompt:
+                self.console.print(f"[yellow]{prompt}[/yellow]")
+                self.console.print(
+                    f"\n[dim]Defaulting to execution. Type /help for REPL commands.[/dim]"
+                )
+            self._execute_command(text)
+
+        else:
+            # Fallback - execute as command
+            self._execute_command(text)
+
+        return True
+
+    def _handle_repl_command(self, text: str) -> bool:
+        """
+        Handle REPL-specific commands.
+
+        Args:
+            text: REPL command text
+
+        Returns:
+            True to continue, False to exit
+        """
         # Handle special commands
         if text in ["/quit", "/exit", "/q"]:
             self.console.print("[cyan]Goodbye! 👋[/cyan]")
@@ -245,6 +398,13 @@ Run from your regular terminal:
         elif text.startswith("/search "):
             query = text[8:].strip()
             self._fuzzy_search(query)
+
+        elif text.startswith("/redbook "):
+            query = text[9:].strip()
+            self._search_redbook(query)
+
+        elif text == "/redbook":
+            self._show_redbook_info()
 
         elif text.startswith("/explain "):
             command = text[9:].strip()
@@ -267,12 +427,8 @@ Run from your regular terminal:
             self._write_file(file_path)
 
         else:
-            # Check if it's natural language (no shell command structure)
-            if self._is_natural_language(text):
-                self._handle_natural_language(text)
-            else:
-                # Execute shell command
-                self._execute_command(text)
+            self.console.print(f"[yellow]Unknown REPL command: {text}[/yellow]")
+            self.console.print("[dim]Type /help for available commands[/dim]")
 
         return True
 
@@ -783,14 +939,57 @@ Run from your regular terminal:
             self.console.print(f"  Install package: [green]{self.os_detector.get_install_command('<package>')}[/green]")
             self.console.print(f"  Search packages: [green]{self.os_detector.get_search_command('<query>')}[/green]")
 
+    def get_status_bar(self) -> str:
+        """Get status bar text with system info."""
+        try:
+            # Get daemon status
+            response = self.ipc_client.call_with_timeout("daemon_status", timeout=1.0)
+            if response and response.get("success"):
+                status = response.get("status", {})
+                commands_logged = status.get("total_commands", 0)
+                uptime_seconds = status.get("uptime_seconds", 0)
+                uptime_str = self._format_uptime(uptime_seconds)
+                
+                return f"✓ Daemon: UP | Uptime: {uptime_str} | Commands: {commands_logged}"
+            else:
+                return "✗ Daemon: DOWN"
+        except Exception:
+            return "✗ Daemon: UNREACHABLE"
+
+    def _format_uptime(self, seconds: int) -> str:
+        """Format uptime in human-readable format."""
+        if seconds < 60:
+            return f"{seconds}s"
+        elif seconds < 3600:
+            minutes = seconds // 60
+            return f"{minutes}m"
+        elif seconds < 86400:
+            hours = seconds // 3600
+            minutes = (seconds % 3600) // 60
+            return f"{hours}h {minutes}m"
+        else:
+            days = seconds // 86400
+            hours = (seconds % 86400) // 3600
+            return f"{days}d {hours}h"
+
+    def print_status_bar(self) -> None:
+        """Print status bar at top of terminal."""
+        status = self.get_status_bar()
+        self.console.print(f"[dim]{status}[/dim]")
+
     def run(self) -> None:
         """Run the REPL loop."""
         self.print_welcome()
+        
+        # Print initial status bar
+        self.print_status_bar()
+        self.console.print()  # Empty line
 
         while True:
             try:
-                # Show prompt with current directory
-                prompt_text = HTML(f"<ansicyan><b>daedelus</b></ansicyan>:<ansigreen>{self.current_dir}</ansigreen>$ ")
+                # Enhanced prompt with current directory and emoji
+                cwd_short = self._shorten_path(self.current_dir)
+                prompt_text = HTML(f"<ansicyan><b>💡 deus</b></ansicyan>:<ansigreen>{cwd_short}</ansigreen>❯ ")
                 text = self.session.prompt(prompt_text)
 
                 # Handle command
@@ -805,6 +1004,65 @@ Run from your regular terminal:
             except Exception as e:
                 logger.error(f"REPL error: {e}", exc_info=True)
                 self.console.print(f"[red]Error: {e}[/red]")
+
+    def _shorten_path(self, path: str, max_len: int = 40) -> str:
+        """Shorten path for display."""
+        if len(path) <= max_len:
+            return path
+        
+        # Replace home with ~
+        home = os.path.expanduser("~")
+        if path.startswith(home):
+            path = "~" + path[len(home):]
+        
+        # If still too long, show ...
+        if len(path) > max_len:
+            parts = path.split(os.sep)
+            if len(parts) > 3:
+                return os.sep.join([parts[0], "...", parts[-1]])
+        
+        return path
+
+    def _search_redbook(self, query: str) -> None:
+        """
+        Search The Redbook knowledge base.
+        
+        Args:
+            query: Search query
+        """
+        try:
+            response = self.ipc_client.call("search_knowledge_base", {"query": query})
+            
+            if response and response.get("success"):
+                result = response.get("result", {})
+                explanation = result.get("explanation", "No results found")
+                self.console.print(f"\n[cyan]The Redbook Search Results:[/cyan]\n")
+                self.console.print(Markdown(explanation))
+            else:
+                self.console.print(
+                    f"[yellow]Unable to search knowledge base[/yellow]"
+                )
+        except Exception as e:
+            logger.error(f"Error searching redbook: {e}")
+            self.console.print(f"[red]Error: {e}[/red]")
+
+    def _show_redbook_info(self) -> None:
+        """Show information about The Redbook knowledge base."""
+        try:
+            response = self.ipc_client.call("knowledge_summary", {})
+            
+            if response and response.get("success"):
+                result = response.get("result", {})
+                explanation = result.get("explanation", "Knowledge base info not available")
+                self.console.print(f"\n[cyan]The Redbook Knowledge Base:[/cyan]\n")
+                self.console.print(Markdown(explanation))
+            else:
+                self.console.print(
+                    f"[yellow]Unable to get knowledge base info[/yellow]"
+                )
+        except Exception as e:
+            logger.error(f"Error getting redbook info: {e}")
+            self.console.print(f"[red]Error: {e}[/red]")
 
 
 def start_repl(ipc_client: IPCClient) -> None:

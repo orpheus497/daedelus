@@ -2,6 +2,7 @@
 # Daedelus Installation Script
 # Handles installation of all dependencies
 # Compatible with Python 3.10+ on Linux, macOS, BSD
+# Created by: orpheus497
 
 set -e  # Exit on error
 

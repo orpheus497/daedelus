@@ -39,60 +39,59 @@ def cli(ctx: click.Context, config: str | None, verbose: int) -> None:
     and builds its own intelligence locally.
 
     \b
-    🧠 COMMAND STRUCTURE:
-      • daedelus [command]  - Full command (primary)
-      • deus [command]      - Quick alias (same functionality)
+    🧠 DEFAULT MODE - INTERACTIVE REPL:
+      Just run 'daedelus' or 'deus' with no arguments to start the
+      interactive shell with all features always active:
+      • Real-time syntax highlighting
+      • Auto-completion from history
+      • AI-powered suggestions
+      • Natural language understanding
+      • Script creation and file operations
     
     \b
     🚀 QUICK START:
-      daedelus              # Start interactive REPL (default mode)
-      deus                  # Same as above (using alias)
-      daedelus setup        # Configuration wizard
-      daedelus start        # Start background daemon
-      daedelus status       # Check system status
+      daedelus              # Start interactive REPL (default)
+      deus                  # Same as above (short alias)
+      
+      # Inside REPL, just type naturally:
+      > ls -la
+      > /generate find all large files
+      > /write-script backup my documents
+      > Tell me what's in this directory
     
     \b
-    📚 MAIN FEATURES:
-      • Interactive REPL shell with AI assistance
+    🔧 TRADITIONAL CLI COMMANDS (Optional):
+      daedelus setup        # Configuration wizard
+      daedelus start        # Start background daemon
+      daedelus stop         # Stop daemon
+      daedelus status       # Check system status
+      daedelus dashboard    # Launch TUI dashboard
+    
+    \b
+    📚 KEY FEATURES:
+      • Interactive REPL shell (default interface)
+      • Real-time syntax highlighting (always on)
       • Natural language command generation
-      • Script writing from descriptions
+      • Script writing from descriptions  
       • Document ingestion for training
       • File operations with AI analysis
       • Self-learning from usage patterns
       • 100% offline, privacy-first
     
     \b
-    💡 EXAMPLES:
-      # Start REPL and use natural language
-      daedelus
-      > Tell me what's in this directory
-      > Create a backup script for my documents
-      > /generate find all large files
-    
-      # Ingest documents for AI training
-      deus ingest document ./docs/tutorial.md
-      
-      # View statistics and analytics
-      deus dashboard
-      deus training stats
-    
-    \b
-    🔧 COMMAND CATEGORIES:
-      • daemon     - Daemon management (start, stop, status)
-      • model      - AI model management
-      • llm        - LLM-powered features
-      • ingest     - Document ingestion for training
-      • training   - Training data management
-      • files      - File operations tracking
-      • tools      - Plugin/tool management
-      • dashboard  - Launch TUI dashboard
-      • settings   - Configuration panel
+    💡 WHY REPL MODE?
+      Daedelus is designed as an AI assistant, not just a CLI tool.
+      The REPL provides the best experience for:
+      • Interactive exploration
+      • Natural language interaction
+      • Immediate feedback
+      • Learning as you work
     
     \b
     📖 MORE HELP:
       daedelus --help            # This message
       daedelus <command> --help  # Command-specific help
-      daedelus repl              # Start interactive mode
+      /help (in REPL)            # Interactive help
     
     Created by: orpheus497
     License: MIT | 100% FOSS | Privacy-First

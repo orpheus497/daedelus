@@ -28,7 +28,7 @@ Features:
     - ✅ Cross-platform compatible (Linux primary, macOS/Windows secondary)
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __author__ = "orpheus497"
 __license__ = "MIT"
 __formal_name__ = "Daedelus"

@@ -42,6 +42,9 @@ Requires internet  →      Works 100% offline
 - 🎨 **Shell Integration** - ZSH, Bash, Fish support
 - 🔌 **Plugin System** - Extensible architecture with permission-based security (v0.3.0)
 - 🎨 **GUI Dashboard** - Beautiful TUI for monitoring and configuration (v0.3.0)
+- ✨ **Interactive REPL** - Smart default interface with syntax highlighting (v0.5.0)
+- 📝 **Script Generation** - Multi-language support with templates (v0.5.0)
+- 📁 **File Operations** - AI-assisted batch operations and analysis (v0.5.0)
 
 ## 🏗️ Architecture
 
@@ -72,6 +75,17 @@ Plugin System + GUI Dashboard + Permission Manager
 ├── CLI command registration from plugins
 ├── TUI dashboard with live metrics
 └── Config editing and command explanations
+```
+
+### Phase 4: Enhanced REPL & UX ✅ (v0.5.0)
+```
+Interactive REPL + Script Generation + File Operations
+├── Real-time syntax highlighting (always on)
+├── Multi-language script generation (7 languages)
+├── Template library (8 pre-built scripts)
+├── Batch file operations with AI analysis
+├── Live status bar with daemon metrics
+└── Natural language intent classification
 ```
 
 ## 🚀 Quick Start
@@ -206,12 +220,14 @@ daedelus repl   # Explicit command (same result)
 ```
 
 When you start the REPL, **everything is automatically integrated**:
-- **Syntax Highlighting** - All commands beautifully colored (always on)
+- **Real-Time Syntax Highlighting** - Commands colored as you type (v0.5.0 ✨)
 - **Auto-Completion** - Tab completion from your command history (always on)
 - **Fuzzy Search** - Find commands with partial matches (always on)
 - **AI Suggestions** - Intelligent suggestions as you type (always on)
 - **History Navigation** - Use ↑/↓ arrows through your history (always on)
 - **Command Analytics** - Usage patterns and insights (always on)
+- **Live Status Bar** - Daemon uptime and stats displayed (v0.5.0 ✨)
+- **Enhanced Prompt** - Modern `💡 deus:~/path❯` prompt (v0.5.0 ✨)
 
 **No configuration needed** - all quality-of-life features are active by default
 
@@ -223,12 +239,90 @@ REPL Commands:
 /search <query>       - Fuzzy search command history
 /explain <command>    - Explain what a command does
 /generate <desc>      - Generate command from description
+/write-script <desc>  - Create script from description (v0.5.0 ✨)
+/read <file>          - Read and analyze file with AI (v0.5.0 ✨)
+/write <file>         - Write file with AI assistance (v0.5.0 ✨)
 /recent [n]           - Show recent commands
 /stats                - Usage statistics
 /quit                 - Exit (or Ctrl+D)
 
 Plus all regular shell commands work directly!
 ```
+
+### 📝 Script Generation (v0.5.0 ✨ NEW)
+
+Create scripts in multiple languages from natural language descriptions:
+
+```bash
+# In REPL
+/write-script backup my home directory to /backup daily
+
+# Daedelus will:
+# 1. Detect language (Bash in this case)
+# 2. Check template library (finds 'backup' template)
+# 3. Generate script with proper shebang
+# 4. Add chmod +x permissions
+# 5. Save to file
+# 6. Show how to run it
+```
+
+**Supported Languages** (7 total):
+- **Bash** - System administration, automation
+- **Python** - Data processing, APIs, utilities
+- **JavaScript** - Node.js apps, automation
+- **Perl** - Text processing, legacy systems
+- **Ruby** - Scripts, Rails tasks
+- **Go** - Performance-critical scripts
+- **PHP** - Web utilities, cron jobs
+
+**Built-in Templates** (8 total):
+- `backup` - File/directory backup with rotation
+- `monitor` - System resource monitoring
+- `deploy` - Git pull + service restart
+- `api_server` - REST API (Python Flask or Node Express)
+- `data_processor` - CSV/JSON processing
+- `cron_job` - Scheduled task template
+- `log_analyzer` - Log file analysis
+- `system_check` - Health check with alerts
+
+**Features**:
+- Automatic language detection from description
+- Template matching for common tasks (instant generation)
+- LLM fallback for custom scripts
+- Syntax validation before saving
+- Auto chmod +x for executables
+
+### 📁 File Operations (v0.5.0 ✨ NEW)
+
+AI-assisted file operations with intelligent analysis:
+
+```bash
+# Read and analyze files
+/read config.yaml
+# AI will summarize contents, detect format, suggest improvements
+
+# Batch operations
+/batch-read *.md
+# Read multiple files at once
+
+# Write with AI assistance
+/write report.md
+# AI helps structure content
+
+# Automatic backups
+# All write operations create timestamped backups
+
+# File analysis
+/analyze data.csv
+# AI detects type, size, structure, suggests operations
+```
+
+**Features**:
+- **Batch Operations** - Process multiple files efficiently
+- **AI Summarization** - Understand file contents quickly
+- **Type Detection** - MIME type + metadata analysis
+- **Automatic Backups** - Safety before overwrites
+- **Smart Suggestions** - AI recommends operations based on content
 
 ### 🔍 Fuzzy Command Search
 
@@ -765,11 +859,33 @@ bandit -r src/daedelus
   - [x] Plugin CLI registration
   - [x] Permission auto-approval
 
-### 🔮 Phase 4: Polish & Community (Future)
+### ✅ Phase 4: Enhanced REPL & UX (COMPLETE - v0.5.0)
+- [x] Interactive REPL as default interface
+  - [x] Real-time syntax highlighting (always on)
+  - [x] Custom DaedelusLexer for intelligent tokenization
+  - [x] Live status bar with daemon metrics
+  - [x] Enhanced prompt with emoji and path shortening
+- [x] Multi-language script generation
+  - [x] 7 languages supported (Python, Bash, JS, Perl, Ruby, Go, PHP)
+  - [x] Automatic language detection
+  - [x] Template library (8 pre-built scripts)
+  - [x] Syntax validation per language
+- [x] AI-assisted file operations
+  - [x] Batch read/write operations
+  - [x] File summarization and analysis
+  - [x] Automatic backup before overwrite
+  - [x] MIME type detection
+- [x] Comprehensive documentation
+  - [x] Updated README with all features
+  - [x] Architectural decision records (ADRs)
+  - [x] Complete CHANGELOG for v0.5.0
+  
+### 🔮 Phase 5: Polish & Community (Future)
+- [ ] Additional script templates based on user feedback
 - [ ] Additional plugin examples (vscode, analytics_charts, tmux)
 - [ ] GUI plugin manager
 - [ ] Streaming log viewer
-- [ ] Multi-language support
+- [ ] Multi-language support for UI
 - [ ] Community plugin repository
 - [ ] Cloud sync (optional, encrypted)
 - [ ] Vim/Neovim deep integration
@@ -856,12 +972,26 @@ All dependencies are FOSS (Free and Open Source Software) with permissive licens
 - Annoy by Spotify
 - llama.cpp by Georgi Gerganov (Phase 2)
 
-## 📧 Contact
+## 📧 Contact & Credits
 
-Created by **orpheus497**
+**Created, Designed, Architected, and Developed by:** **orpheus497**
 
+Daedelus is a solo project created from scratch by orpheus497, encompassing:
+- **System Architecture** - Hybrid embedding + LLM design
+- **Core Engineering** - All Python implementation (~30,000 lines)
+- **AI Integration** - Local LLM, RAG pipeline, LoRA fine-tuning
+- **UX Design** - Interactive REPL, syntax highlighting, intelligent UI
+- **Documentation** - Comprehensive guides and technical documentation
+
+**Project Links:**
 - GitHub: [@orpheus497](https://github.com/orpheus497)
+- Repository: [github.com/orpheus497/daedelus](https://github.com/orpheus497/daedelus)
 - Issues: [GitHub Issues](https://github.com/orpheus497/daedelus/issues)
+
+**Technology Stack (100% FOSS):**
+- All dependencies: MIT, Apache 2.0, or BSD licensed
+- No proprietary code or services
+- Complete local processing (privacy-first design)
 
 ---
 
