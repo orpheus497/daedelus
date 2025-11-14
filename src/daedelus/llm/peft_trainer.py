@@ -16,6 +16,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 try:
+    import torch
     from datasets import Dataset
     from peft import LoraConfig, PeftModel, get_peft_model
     from transformers import (
@@ -25,7 +26,10 @@ try:
         Trainer,
         TrainingArguments,
     )
-except ImportError:
+
+    PEFT_AVAILABLE = True
+except ImportError as e:
+    torch = None  # type: ignore
     LoraConfig = None  # type: ignore
     get_peft_model = None  # type: ignore
     PeftModel = None  # type: ignore
@@ -35,6 +39,8 @@ except ImportError:
     Trainer = None  # type: ignore
     TrainingArguments = None  # type: ignore
     Dataset = None  # type: ignore
+    PEFT_AVAILABLE = False
+    PEFT_IMPORT_ERROR = str(e)
 
 
 class PEFTTrainer:
@@ -70,10 +76,10 @@ class PEFTTrainer:
             lora_alpha: LoRA alpha (scaling factor)
             lora_dropout: Dropout probability
         """
-        if LoraConfig is None:
+        if not PEFT_AVAILABLE:
             raise ImportError(
-                "PEFT dependencies not installed. "
-                "Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus"
+                f"PEFT dependencies not fully installed: {PEFT_IMPORT_ERROR}\n"
+                "Install with: pip install datasets peft transformers accelerate torch"
             )
 
         self.model_name = model_name
@@ -187,13 +193,48 @@ class PEFTTrainer:
         logger.info(f"Training LoRA adapter on {len(training_data)} examples...")
         logger.info(f"Validation split: {validation_split * 100:.1f}%")
 
+        # Check if CUDA is available
+        use_cuda = False
+        try:
+            use_cuda = torch.cuda.is_available()
+            if use_cuda:
+                logger.info(f"✅ CUDA available: {torch.cuda.device_count()} GPU(s) detected")
+                logger.info(f"   GPU: {torch.cuda.get_device_name(0)}")
+                logger.info(f"   CUDA Version: {torch.version.cuda}")
+            else:
+                logger.info("ℹ️  CUDA not available - training will use CPU (slower)")
+                logger.info("   For GPU acceleration, run: scripts/fix_cuda_pytorch.sh")
+        except Exception as e:
+            str(e)
+            logger.warning(f"⚠️  CUDA check failed: {e}")
+            logger.warning("   Falling back to CPU mode")
+            use_cuda = False
+
         # Load base model
         logger.info("Loading base model...")
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            load_in_8bit=True,  # Use 8-bit quantization for efficiency
-            device_map="auto",
-        )
+        if use_cuda:
+            try:
+                # Try 8-bit quantization on CUDA
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    load_in_8bit=True,
+                    device_map="auto",
+                )
+                logger.info("Using 8-bit quantization on CUDA")
+            except Exception as e:
+                logger.warning(f"8-bit quantization failed: {e}, falling back to CPU")
+                use_cuda = False
+
+        if not use_cuda:
+            # CPU-only mode - no quantization
+            logger.info("Using CPU mode (no quantization)")
+            logger.warning("⚠️  CPU training is significantly slower than GPU training")
+            logger.info("   Expected training time: ~10-30 minutes (vs ~1-3 min on GPU)")
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                dtype=torch.float32,  # Updated from torch_dtype to dtype
+                low_cpu_mem_usage=True,
+            )
 
         # Load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -271,6 +312,7 @@ class PEFTTrainer:
 
             # Shuffle before splitting for better validation
             import random
+
             indices = list(range(len(tokenized_dataset)))
             random.shuffle(indices)
 
@@ -280,7 +322,9 @@ class PEFTTrainer:
             train_dataset = tokenized_dataset.select(train_indices)
             eval_dataset = tokenized_dataset.select(eval_indices)
 
-            logger.info(f"Split dataset: {len(train_dataset)} train, {len(eval_dataset)} validation")
+            logger.info(
+                f"Split dataset: {len(train_dataset)} train, {len(eval_dataset)} validation"
+            )
         else:
             logger.info("Validation disabled (insufficient data or validation_split=0)")
 
@@ -337,6 +381,7 @@ class PEFTTrainer:
 
             # Calculate perplexity (exp(loss))
             import math
+
             train_perplexity = math.exp(train_result.training_loss)
             logger.info(f"Training perplexity: {train_perplexity:.2f}")
 

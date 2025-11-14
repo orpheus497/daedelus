@@ -5,7 +5,7 @@ Provides web search capabilities with intelligent summarization using LLM.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import requests
 
@@ -27,7 +27,7 @@ class WebSearcher:
         self.llm = llm_manager
         self.timeout = 10
 
-    def search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Search the web using DuckDuckGo API.
 
@@ -84,7 +84,7 @@ class WebSearcher:
         return results[:max_results]
 
     def summarize_results(
-        self, query: str, results: List[Dict[str, Any]], detailed: bool = False
+        self, query: str, results: list[dict[str, Any]], detailed: bool = False
     ) -> str:
         """
         Summarize search results using LLM.
@@ -106,7 +106,9 @@ You are a helpful assistant. Answer questions clearly and accurately based on yo
 <|assistant|>
 """
 
-            return self.llm.generate(prompt, max_tokens=300, temperature=0.3, stop=["<|end|>", "<|user|>"])
+            return self.llm.generate(
+                prompt, max_tokens=300, temperature=0.3, stop=["<|end|>", "<|user|>"]
+            )
 
         # Build results context
         results_text = ""
@@ -138,14 +140,16 @@ Search Results:{results_text}
 <|assistant|>
 """
 
-        summary = self.llm.generate(prompt, max_tokens=max_tokens, temperature=0.3, stop=["<|end|>", "<|user|>"])
+        summary = self.llm.generate(
+            prompt, max_tokens=max_tokens, temperature=0.3, stop=["<|end|>", "<|user|>"]
+        )
 
         logger.info("Generated summary from search results")
         return summary
 
     def search_and_summarize(
         self, query: str, max_results: int = 5, detailed: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Perform web search and return AI-summarized results.
 

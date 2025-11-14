@@ -95,14 +95,14 @@ mv qwen2.5-3b-instruct-q4_k_m.gguf ~/.local/share/models/model.gguf
 
 ### Default Configuration
 
-Daedalus looks for models at: `~/.local/share/models/model.gguf`
+Daedalus auto-detects any GGUF model in `~/.local/share/models/` (no hard path required).
 
 Default settings in `~/.config/daedelus/config.yaml`:
 
 ```yaml
 llm:
   enabled: true
-  model_path: ~/.local/share/models/model.gguf
+  model_path: null  # auto-detect in ~/.local/share/models/
   context_length: 2048
   temperature: 0.7
 ```

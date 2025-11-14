@@ -14,11 +14,11 @@ Created by: orpheus497
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -243,10 +243,7 @@ class TrainingCoordinator:
                 )
             except Exception as e:
                 logger.warning(f"GGUF conversion failed: {e}")
-                self._notify(
-                    f"Warning: GGUF conversion failed - {e}\n"
-                    "Using fallback model"
-                )
+                self._notify(f"Warning: GGUF conversion failed - {e}\n" "Using fallback model")
                 # Use fallback - copy current model
                 current_model = self.deus_manager.get_model_path()
                 if current_model:
@@ -376,9 +373,7 @@ class TrainingCoordinator:
             error_message=error,
         )
 
-        logger.debug(
-            f"Training progress: {status.value} - {percentage}% - {step}"
-        )
+        logger.debug(f"Training progress: {status.value} - {percentage}% - {step}")
 
     def _notify(self, message: str) -> None:
         """

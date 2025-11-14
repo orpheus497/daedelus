@@ -63,7 +63,9 @@ def explain(ctx: click.Context, command_text: tuple, detailed: bool, examples: b
                     click.echo(f"  • {example}")
         else:
             # Get simple explanation
-            explanation = explainer.explain_command(command, include_context=False, detailed=detailed)
+            explanation = explainer.explain_command(
+                command, include_context=False, detailed=detailed
+            )
             click.echo(f"\nCommand: {command}")
             click.echo(f"\nExplanation:\n{explanation}")
 
@@ -72,9 +74,11 @@ def explain(ctx: click.Context, command_text: tuple, detailed: bool, examples: b
         click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
     except FileNotFoundError:
         click.echo(f"❌ LLM model not found at: {model_path}")
-        click.echo(f"\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:")
+        click.echo(
+            "\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:"
+        )
         click.echo(f"  {model_path}")
-        click.echo(f"\nOr create the directory first:")
+        click.echo("\nOr create the directory first:")
         click.echo(f"  mkdir -p {model_path.parent}")
     except Exception as e:
         click.echo(f"❌ Error: {e}")
@@ -96,12 +100,42 @@ def explain(ctx: click.Context, command_text: tuple, detailed: bool, examples: b
     help="Include explanation of generated command",
 )
 @click.pass_context
-def generate(
-    ctx: click.Context, description: tuple, alternatives: bool, explain: bool
-) -> None:
+def generate(ctx: click.Context, description: tuple, alternatives: bool, explain: bool) -> None:
     """Generate a command from natural language description."""
     desc_text = " ".join(description)
     config: Config = ctx.obj["config"]
+
+    # Try daemon first for generation/explanation
+    try:
+        from daedelus.daemon.ipc import IPCClient
+
+        client = IPCClient(config.get("daemon.socket_path"), timeout=60.0)
+        resp = client.send_request(
+            "generate_command",
+            {"description": desc_text, "return_multiple": alternatives},
+        )
+        if resp.get("status") == "ok" and ("command" in resp or "commands" in resp):
+            click.echo(f"\nTask: {desc_text}")
+            if explain:
+                cmd = (
+                    resp.get("command")
+                    if not alternatives
+                    else ", ".join(resp.get("commands", [])[:1])
+                )
+                exp = client.send_request("explain_command", {"command": cmd})
+                click.echo(f"\nGenerated command:\n  {cmd}")
+                if exp.get("status") == "ok" and exp.get("explanation"):
+                    click.echo(f"\nExplanation:\n{exp['explanation']}")
+                return
+            if alternatives:
+                click.echo("\nAlternative commands:")
+                for i, cmd in enumerate(resp.get("commands", []), 1):
+                    click.echo(f"  {i}. {cmd}")
+            else:
+                click.echo(f"\nGenerated command:\n  {resp.get('command','')}")
+            return
+    except Exception:
+        pass
 
     try:
         from daedelus.llm.command_generator import CommandGenerator
@@ -110,7 +144,7 @@ def generate(
         click.echo("Loading LLM (this may take a moment)...")
 
         # Get model path from config
-        model_path = Path(config.get("llm.model_path"))
+        model_path = Path(config.get("llm.model_path")).expanduser()
 
         # Initialize LLM
         llm = LLMManager(
@@ -146,9 +180,11 @@ def generate(
         click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
     except FileNotFoundError:
         click.echo(f"❌ LLM model not found at: {model_path}")
-        click.echo(f"\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:")
+        click.echo(
+            "\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:"
+        )
         click.echo(f"  {model_path}")
-        click.echo(f"\nOr create the directory first:")
+        click.echo("\nOr create the directory first:")
         click.echo(f"  mkdir -p {model_path.parent}")
     except Exception as e:
         click.echo(f"❌ Error: {e}")
@@ -187,7 +223,9 @@ You are a helpful assistant for shell commands and system administration. Answer
 """
 
         # Generate response
-        response = llm.generate(prompt, max_tokens=300, temperature=0.5, stop=["<|end|>", "<|user|>"])
+        response = llm.generate(
+            prompt, max_tokens=300, temperature=0.5, stop=["<|end|>", "<|user|>"]
+        )
 
         click.echo(f"\nQuestion: {query_text}")
         click.echo(f"\nAnswer:\n{response}")
@@ -197,9 +235,11 @@ You are a helpful assistant for shell commands and system administration. Answer
         click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
     except FileNotFoundError:
         click.echo(f"❌ LLM model not found at: {model_path}")
-        click.echo(f"\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:")
+        click.echo(
+            "\nTo use LLM features, download a model (e.g., Phi-3-mini GGUF) and place it at:"
+        )
         click.echo(f"  {model_path}")
-        click.echo(f"\nOr create the directory first:")
+        click.echo("\nOr create the directory first:")
         click.echo(f"  mkdir -p {model_path.parent}")
     except Exception as e:
         click.echo(f"❌ Error: {e}")
@@ -265,10 +305,10 @@ def websearch(ctx: click.Context, query: tuple, detailed: bool, results: int) ->
         click.echo("Ensure 'requests' is installed: pip install requests")
     except FileNotFoundError:
         click.echo(f"❌ LLM model not found at: {model_path}")
-        click.echo(f"\nTo use web search with AI summarization:")
-        click.echo(f"1. Download a GGUF model (see docs for instructions)")
+        click.echo("\nTo use web search with AI summarization:")
+        click.echo("1. Download a GGUF model (see docs for instructions)")
         click.echo(f"2. Place it at: {model_path}")
-        click.echo(f"\nSee README.md for model download instructions.")
+        click.echo("\nSee README.md for model download instructions.")
     except Exception as e:
         click.echo(f"❌ Error: {e}")
         logger.error(f"Web search failed: {e}", exc_info=True)

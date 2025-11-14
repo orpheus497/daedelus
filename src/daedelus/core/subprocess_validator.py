@@ -24,7 +24,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ class SubprocessValidationResult:
 
     is_safe: bool
     risk_level: str  # safe, low, medium, high, critical
-    violations: List[str]
-    sanitized_command: Optional[List[str]] = None
-    warnings: List[str] = None
+    violations: list[str]
+    sanitized_command: list[str] | None = None
+    warnings: list[str] = None
 
     def __post_init__(self) -> None:
         if self.warnings is None:
@@ -74,18 +74,64 @@ class SubprocessValidator:
 
     # Dangerous commands that should never be executed without validation
     DANGEROUS_COMMANDS = {
-        "rm", "rmdir", "dd", "mkfs", "fdisk", "parted", "wipefs",
-        "shred", "chmod", "chown", "kill", "killall", "pkill",
-        "systemctl", "shutdown", "reboot", "halt", "poweroff",
-        "iptables", "firewall-cmd", "ufw", "apt-get", "yum",
-        "dnf", "pacman", "brew", "pip", "npm", "gem", "cargo",
+        "rm",
+        "rmdir",
+        "dd",
+        "mkfs",
+        "fdisk",
+        "parted",
+        "wipefs",
+        "shred",
+        "chmod",
+        "chown",
+        "kill",
+        "killall",
+        "pkill",
+        "systemctl",
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "iptables",
+        "firewall-cmd",
+        "ufw",
+        "apt-get",
+        "apt",
+        "yum",
+        "dnf",
+        "zypper",
+        "pacman",
+        "brew",
+        "pip",
+        "pip3",
+        "npm",
+        "gem",
+        "cargo",
     }
 
     # Commands that are safe for most operations
     SAFE_COMMANDS = {
-        "ls", "cat", "echo", "pwd", "cd", "grep", "find", "which",
-        "wc", "sort", "uniq", "head", "tail", "less", "more",
-        "date", "cal", "uptime", "whoami", "hostname", "uname",
+        "ls",
+        "cat",
+        "echo",
+        "pwd",
+        "cd",
+        "grep",
+        "find",
+        "which",
+        "wc",
+        "sort",
+        "uniq",
+        "head",
+        "tail",
+        "less",
+        "more",
+        "date",
+        "cal",
+        "uptime",
+        "whoami",
+        "hostname",
+        "uname",
     }
 
     # Dangerous argument patterns
@@ -104,7 +150,7 @@ class SubprocessValidator:
     def __init__(
         self,
         allow_shell: bool = False,
-        audit_log_path: Optional[Path] = None,
+        audit_log_path: Path | None = None,
         strict_mode: bool = True,
     ) -> None:
         """
@@ -119,16 +165,18 @@ class SubprocessValidator:
         self.strict_mode = strict_mode
 
         if audit_log_path is None:
-            audit_log_path = Path.home() / ".local" / "share" / "daedelus" / "subprocess_audit.jsonl"
+            audit_log_path = (
+                Path.home() / ".local" / "share" / "daedelus" / "subprocess_audit.jsonl"
+            )
 
         self.audit_log_path = audit_log_path
         self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def validate_command(
         self,
-        command: Union[str, List[str]],
+        command: str | list[str],
         shell: bool = False,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
     ) -> SubprocessValidationResult:
         """
         Validate a subprocess command for security issues.
@@ -236,7 +284,7 @@ class SubprocessValidator:
         """
         return self.validate_command(command, shell=True)
 
-    def _validate_base_command(self, command: str) -> Tuple[List[str], str]:
+    def _validate_base_command(self, command: str) -> tuple[list[str], str]:
         """
         Validate the base command.
 
@@ -277,9 +325,7 @@ class SubprocessValidator:
 
         return violations, risk_level
 
-    def _validate_arguments(
-        self, arguments: List[str]
-    ) -> Tuple[List[str], List[str], str]:
+    def _validate_arguments(self, arguments: list[str]) -> tuple[list[str], list[str], str]:
         """
         Validate command arguments.
 
@@ -323,7 +369,7 @@ class SubprocessValidator:
 
         return violations, warnings, risk_level
 
-    def _check_dangerous_patterns(self, command: str) -> Tuple[List[str], str]:
+    def _check_dangerous_patterns(self, command: str) -> tuple[list[str], str]:
         """
         Check for dangerous patterns in full command.
 
@@ -343,7 +389,7 @@ class SubprocessValidator:
 
         return violations, risk_level
 
-    def _validate_cwd(self, cwd: str) -> Tuple[bool, List[str]]:
+    def _validate_cwd(self, cwd: str) -> tuple[bool, list[str]]:
         """
         Validate working directory.
 
@@ -382,7 +428,7 @@ class SubprocessValidator:
 
         return True, violations
 
-    def _sanitize_command(self, command: List[str]) -> List[str]:
+    def _sanitize_command(self, command: list[str]) -> list[str]:
         """
         Sanitize command arguments.
 
@@ -433,7 +479,7 @@ class SubprocessValidator:
         command: str,
         is_safe: bool,
         risk_level: str,
-        violations: List[str],
+        violations: list[str],
     ) -> None:
         """
         Log subprocess validation to audit log.
@@ -462,7 +508,7 @@ class SubprocessValidator:
 
     def get_safe_wrapper(
         self,
-        command: List[str],
+        command: list[str],
         **kwargs: Any,
     ) -> subprocess.CompletedProcess:
         """

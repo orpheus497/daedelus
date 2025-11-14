@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Daedalus Uninstall Script
-# Safely removes Daedalus and optionally cleans up data
+# Daedelus Uninstall Script
+# Safely removes Daedelus and optionally cleans up data
 # Created by: orpheus497
 
 set -e
@@ -19,7 +19,7 @@ MODELS_DIR="${HOME}/.local/share/models"
 VENV_DIR="./venv"
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}   Daedalus Uninstall Script${NC}"
+echo -e "${BLUE}   Daedelus Uninstall Script${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 

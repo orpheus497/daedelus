@@ -1,0 +1,19 @@
+# plugin.yaml
+plugin:
+  # --- Required Metadata ---
+  name: "Hello World"
+  version: "1.0.0"
+  author: "Daedalus Team"
+  description: "A simple example plugin that adds a 'hello' command."
+
+  # --- Entry Points ---
+  main_class: "main:HelloWorldPlugin"
+
+  # --- Capabilities ---
+  capabilities:
+    cli_commands: true
+    gui_components: false
+    background_tasks: false
+
+  # --- Security & Permissions ---
+  permissions: []

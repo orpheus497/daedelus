@@ -198,15 +198,21 @@ def start(ctx: click.Context, foreground: bool) -> None:
                 start_new_session=True,  # Detach from terminal
             )
 
-        # Wait a moment and check if it started
-        time.sleep(1)
+        # Wait for daemon to initialize (plugins take time to load)
+        # Try checking for up to 5 seconds with retries
+        max_retries = 10
+        retry_delay = 0.5
 
-        if is_daemon_running(config):
-            click.echo("✅ Daemon started successfully")
-            click.echo(f"Log file: {log_path}")
-        else:
-            click.echo("❌ Failed to start daemon")
-            click.echo(f"Check logs: {log_path}")
+        for _attempt in range(max_retries):
+            time.sleep(retry_delay)
+            if is_daemon_running(config):
+                click.echo("✅ Daemon started successfully")
+                click.echo(f"Log file: {log_path}")
+                return
+
+        # If we get here, daemon didn't start
+        click.echo("❌ Failed to start daemon")
+        click.echo(f"Check logs: {log_path}")
 
 
 @click.command()

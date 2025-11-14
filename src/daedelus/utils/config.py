@@ -206,7 +206,9 @@ class Config:
                     self.config["llm"]["model_path"] = str(gguf_files[0])
             else:
                 # Fallback to default if no .gguf files found
-                self.config["llm"]["model_path"] = str(models_dir / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
+                self.config["llm"]["model_path"] = str(
+                    models_dir / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+                )
         if self.config["peft"]["adapter_path"] is None:
             self.config["peft"]["adapter_path"] = str(self.data_dir / "llm" / "adapter")
 

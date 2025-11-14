@@ -23,7 +23,6 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
-    MofNCompleteColumn,
     Progress,
     SpinnerColumn,
     TaskID,
@@ -301,9 +300,7 @@ class TrainingUI:
 
         self.console.print()
         self.console.print(f"Training Progress: [{bar}] {percentage:.0f}%")
-        self.console.print(
-            f"{commands_count}/{threshold} commands until next training"
-        )
+        self.console.print(f"{commands_count}/{threshold} commands until next training")
         self.console.print()
 
     def _get_status_color(self, status: TrainingStatus) -> str:

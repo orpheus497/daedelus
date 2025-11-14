@@ -1,5 +1,7 @@
 """Shell integration tests."""
+
 import pytest
+
 
 @pytest.mark.integration
 def test_command_logging_from_shell(test_db):

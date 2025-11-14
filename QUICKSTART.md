@@ -254,14 +254,44 @@ Then restart your shell or run `source ~/.zshrc` (or equivalent).
 
 Once integrated, Daedalus works automatically:
 
+- **Start interactive mode** - Just run `daedelus` or `deus` (no arguments needed!)
 - **Type commands normally** - They're logged in real-time
 - **Press Ctrl+Space** - Get intelligent suggestions
 - **Keep working** - It learns from your patterns
 - **Ask in natural language** (Phase 2) - "how to find large files"
 
+**Pro Tip**: Running `daedelus` or `deus` without arguments starts the interactive REPL mode - the easiest way to use all features!
+
 ---
 
 ## Usage Examples
+
+### Interactive REPL Mode (NEW DEFAULT!)
+
+```bash
+# Simply run daedelus to enter interactive mode
+$ daedelus
+# or
+$ deus
+
+# Inside REPL, type /help to see all commands
+daedelus> /help
+
+# Execute any shell command
+daedelus> ls -la
+daedelus> git status
+daedelus> docker ps
+
+# Use REPL commands
+daedelus> /search git push
+daedelus> /explain "tar -xzf file.tar.gz"
+daedelus> /generate "find all python files"
+daedelus> /stats
+daedelus> /recent
+
+# Exit with /quit or Ctrl+D
+daedelus> /quit
+```
 
 ### Basic Command Suggestions (Phase 1)
 
@@ -365,7 +395,7 @@ model:
 # LLM settings
 llm:
   enabled: true  # Set to false to disable Phase 2 features
-  model_path: ~/.local/share/models/model.gguf  # Shared models directory
+  model_path: null  # Auto-detect in ~/.local/share/models/
   context_length: 2048
   temperature: 0.7
   top_p: 0.9
@@ -389,6 +419,7 @@ peft:
 ### Daemon Management
 
 ```bash
+daedelus                       # Start interactive REPL (default)
 daedelus setup                 # First-time setup
 daedelus start                 # Start daemon (background)
 daedelus start --foreground    # Start daemon (foreground)

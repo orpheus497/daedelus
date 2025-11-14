@@ -19,12 +19,14 @@ logger = logging.getLogger(__name__)
 def is_daemon_running(config: Config) -> bool:
     """Check if daemon is running (imported from daemon_commands)."""
     from daedelus.cli.daemon_commands import is_daemon_running as check_daemon
+
     return check_daemon(config)
 
 
 def ensure_daemon_running(config: Config, silent: bool = False) -> bool:
     """Ensure daemon is running (imported from daemon_commands)."""
     from daedelus.cli.daemon_commands import ensure_daemon_running as ensure_daemon
+
     return ensure_daemon(config, silent)
 
 
@@ -50,7 +52,8 @@ def repl(ctx: click.Context) -> None:
     try:
         from daedelus.cli.repl import start_repl
 
-        client = IPCClient(config.get("daemon.socket_path"))
+        # Use 60 second timeout for LLM operations
+        client = IPCClient(config.get("daemon.socket_path"), timeout=60.0)
         start_repl(client)
 
     except ImportError as e:

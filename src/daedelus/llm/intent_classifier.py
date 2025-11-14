@@ -21,7 +21,6 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -79,11 +78,11 @@ class Intent:
     type: IntentType
     confidence: float  # 0.0 - 1.0
     urgency: Urgency
-    keywords: List[str]
-    entities: Dict[str, str]  # Extracted entities (files, directories, etc.)
-    suggested_commands: List[str]
+    keywords: list[str]
+    entities: dict[str, str]  # Extracted entities (files, directories, etc.)
+    suggested_commands: list[str]
     needs_decomposition: bool = False
-    decomposed_steps: Optional[List[str]] = None
+    decomposed_steps: list[str] | None = None
 
 
 class IntentClassifier:
@@ -218,7 +217,16 @@ class IntentClassifier:
 
         # Urgency keywords
         self.urgency_keywords = {
-            Urgency.CRITICAL: ["emergency", "urgent", "critical", "immediately", "asap", "disaster", "broken", "down"],
+            Urgency.CRITICAL: [
+                "emergency",
+                "urgent",
+                "critical",
+                "immediately",
+                "asap",
+                "disaster",
+                "broken",
+                "down",
+            ],
             Urgency.HIGH: ["important", "soon", "quick", "quickly", "fast", "now", "failing"],
             Urgency.MEDIUM: ["should", "need", "want", "would like"],
             Urgency.LOW: ["maybe", "possibly", "eventually", "sometime", "when you can"],
@@ -270,7 +278,7 @@ class IntentClassifier:
             decomposed_steps=decomposed_steps,
         )
 
-    def _classify_type(self, query: str) -> Tuple[IntentType, float]:
+    def _classify_type(self, query: str) -> tuple[IntentType, float]:
         """
         Classify the intent type.
 
@@ -299,11 +307,7 @@ class IntentClassifier:
                         confidence = base_confidence
 
                         # Boost confidence if multiple patterns match
-                        matches = sum(
-                            1
-                            for p in pattern_list
-                            if re.search(p, query, re.IGNORECASE)
-                        )
+                        matches = sum(1 for p in pattern_list if re.search(p, query, re.IGNORECASE))
                         confidence = min(1.0, confidence + (matches - 1) * 0.05)
 
                         if confidence > max_confidence:
@@ -319,7 +323,7 @@ class IntentClassifier:
 
         return (best_intent, max_confidence)
 
-    def _extract_entities(self, query: str) -> Dict[str, str]:
+    def _extract_entities(self, query: str) -> dict[str, str]:
         """
         Extract entities from query (files, directories, commands, etc.).
 
@@ -337,22 +341,22 @@ class IntentClassifier:
             entities["files"] = [f for f in file_patterns if f]
 
         # Extract directory paths
-        dir_patterns = re.findall(r'(?:/[\w\-./]+|~/[\w\-./]*|\./[\w\-./]+)', query)
+        dir_patterns = re.findall(r"(?:/[\w\-./]+|~/[\w\-./]*|\./[\w\-./]+)", query)
         if dir_patterns:
             entities["directories"] = dir_patterns
 
         # Extract commands (words after specific verbs)
-        command_pattern = re.findall(r'(?:run|execute|use)\s+(\w+)', query, re.IGNORECASE)
+        command_pattern = re.findall(r"(?:run|execute|use)\s+(\w+)", query, re.IGNORECASE)
         if command_pattern:
             entities["commands"] = command_pattern
 
         # Extract file extensions
-        ext_pattern = re.findall(r'\b(\w+)\s+files?\b', query, re.IGNORECASE)
+        ext_pattern = re.findall(r"\b(\w+)\s+files?\b", query, re.IGNORECASE)
         if ext_pattern:
             entities["extensions"] = ext_pattern
 
         # Extract numbers (could be PIDs, ports, counts, etc.)
-        numbers = re.findall(r'\b\d+\b', query)
+        numbers = re.findall(r"\b\d+\b", query)
         if numbers:
             entities["numbers"] = numbers
 
@@ -375,7 +379,7 @@ class IntentClassifier:
         # Default to LOW urgency
         return Urgency.LOW
 
-    def _extract_keywords(self, query: str) -> List[str]:
+    def _extract_keywords(self, query: str) -> list[str]:
         """
         Extract important keywords from query.
 
@@ -387,14 +391,50 @@ class IntentClassifier:
         """
         # Remove common stop words
         stop_words = {
-            "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-            "have", "has", "had", "do", "does", "did", "will", "would", "could",
-            "should", "may", "might", "must", "can", "i", "you", "he", "she", "it",
-            "we", "they", "to", "of", "in", "on", "at", "for", "with", "from", "by",
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "can",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "to",
+            "of",
+            "in",
+            "on",
+            "at",
+            "for",
+            "with",
+            "from",
+            "by",
         }
 
         # Extract words
-        words = re.findall(r'\b\w+\b', query)
+        words = re.findall(r"\b\w+\b", query)
 
         # Filter stop words and short words
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
@@ -413,10 +453,10 @@ class IntentClassifier:
         """
         # Patterns indicating complex multi-step operations
         decomposition_indicators = [
-            r'\band\s+(?:then|also|additionally)\b',
-            r'\b(?:first|then|next|after\s+that|finally)\b',
-            r'\bpipe\b|\|\|?',
-            r'\b(?:count|filter|sort|group)\b.*\b(?:and|then)\b',
+            r"\band\s+(?:then|also|additionally)\b",
+            r"\b(?:first|then|next|after\s+that|finally)\b",
+            r"\bpipe\b|\|\|?",
+            r"\b(?:count|filter|sort|group)\b.*\b(?:and|then)\b",
         ]
 
         for pattern in decomposition_indicators:
@@ -424,12 +464,23 @@ class IntentClassifier:
                 return True
 
         # Check for multiple action verbs
-        action_verbs = ["find", "list", "count", "show", "filter", "sort", "group", "delete", "copy", "move"]
+        action_verbs = [
+            "find",
+            "list",
+            "count",
+            "show",
+            "filter",
+            "sort",
+            "group",
+            "delete",
+            "copy",
+            "move",
+        ]
         verb_count = sum(1 for verb in action_verbs if verb in query)
 
         return verb_count >= 2
 
-    def _decompose_query(self, query: str, entities: Dict[str, str]) -> List[str]:
+    def _decompose_query(self, query: str, entities: dict[str, str]) -> list[str]:
         """
         Decompose complex query into steps.
 
@@ -459,7 +510,7 @@ class IntentClassifier:
 
         # Generic decomposition based on conjunctions
         elif " and " in query_lower or " then " in query_lower:
-            parts = re.split(r'\s+(?:and|then)\s+', query_lower)
+            parts = re.split(r"\s+(?:and|then)\s+", query_lower)
             steps = [part.strip().capitalize() for part in parts if part.strip()]
 
         # Fallback: split on common conjunctions
@@ -473,8 +524,8 @@ class IntentClassifier:
         return steps if steps else ["Execute the operation"]
 
     def _generate_commands(
-        self, intent_type: IntentType, query: str, entities: Dict[str, str]
-    ) -> List[str]:
+        self, intent_type: IntentType, query: str, entities: dict[str, str]
+    ) -> list[str]:
         """
         Generate suggested commands based on intent.
 

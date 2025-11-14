@@ -40,10 +40,12 @@ Requires internet  →      Works 100% offline
 - 🔄 **Continuous Learning** - Automatically improves from every session
 - 🌐 **Cross-Platform** - Linux, macOS, BSD (Windows via WSL)
 - 🎨 **Shell Integration** - ZSH, Bash, Fish support
+- 🔌 **Plugin System** - Extensible architecture with permission-based security (v0.3.0)
+- 🎨 **GUI Dashboard** - Beautiful TUI for monitoring and configuration (v0.3.0)
 
 ## 🏗️ Architecture
 
-Daedalus uses a **hybrid architecture** with two phases:
+Daedalus uses a **hybrid architecture** with three complete phases:
 
 ### Phase 1: Embedding-Based System ✅
 ```
@@ -53,13 +55,23 @@ FastText Embeddings → Annoy Vector Search → Pattern Learning
 └── Incremental model updates
 ```
 
-### Phase 2: LLM Enhancement ✅ (Current)
+### Phase 2: LLM Enhancement ✅
 ```
 Phase 1 + llama.cpp (TinyLlama) → RAG Pipeline → PEFT/LoRA Fine-Tuning
 ├── Natural language command explanations
 ├── Command generation from descriptions
 ├── Q&A about shell commands
 └── Personalized model fine-tuning
+```
+
+### Phase 3: Advanced Features ✅ (v0.3.0)
+```
+Plugin System + GUI Dashboard + Permission Manager
+├── Dynamic plugin loading with lifecycle management
+├── Permission-based security model
+├── CLI command registration from plugins
+├── TUI dashboard with live metrics
+└── Config editing and command explanations
 ```
 
 ## 🚀 Quick Start
@@ -71,7 +83,7 @@ Phase 1 + llama.cpp (TinyLlama) → RAG Pipeline → PEFT/LoRA Fine-Tuning
 git clone https://github.com/orpheus497/daedelus.git
 cd daedelus
 
-# Quick install (recommended)
+# Quick install (recommended - includes automatic cleanup)
 chmod +x install.sh
 ./install.sh
 
@@ -80,6 +92,17 @@ pip install -e .
 ```
 
 **Requirements**: Python 3.10+, C++ compiler (g++)
+
+**Note**: The installer automatically:
+- Stops any existing daemons
+- Removes deprecated GPL dependencies
+- Cleans up stale PID/socket files
+- Ensures a fresh installation
+
+**Manual cleanup** (if needed):
+```bash
+./scripts/cleanup-daemon.sh
+```
 
 ### Setup
 
@@ -99,8 +122,8 @@ daedelus status
 For convenience, Daedelus provides a shorter `deus` command that works exactly the same:
 
 ```bash
+deus            # Start interactive REPL (default)
 deus start      # Same as: daedelus start
-deus repl       # Same as: daedelus repl
 deus status     # Same as: daedelus status
 ```
 
@@ -175,7 +198,11 @@ Now you can use shortcuts:
 Launch a powerful terminal interface with **all features always active**:
 
 ```bash
-daedelus repl    # or: deus repl  |  daedelus i  |  di (with shell integration)
+daedelus        # Default: starts interactive REPL
+# or
+deus            # Short alias
+# or  
+daedelus repl   # Explicit command (same result)
 ```
 
 When you start the REPL, **everything is automatically integrated**:
@@ -188,15 +215,19 @@ When you start the REPL, **everything is automatically integrated**:
 
 **No configuration needed** - all quality-of-life features are active by default
 
+**Just type `/help` inside the REPL to see all available commands!**
+
 REPL Commands:
 ```
+/help                  - Show comprehensive help with examples
 /search <query>       - Fuzzy search command history
 /explain <command>    - Explain what a command does
 /generate <desc>      - Generate command from description
-/recent               - Show recent commands
+/recent [n]           - Show recent commands
 /stats                - Usage statistics
-/help                 - Show help
 /quit                 - Exit (or Ctrl+D)
+
+Plus all regular shell commands work directly!
 ```
 
 ### 🔍 Fuzzy Command Search
@@ -247,6 +278,50 @@ daedelus tips
 ```
 
 Shows keyboard shortcuts, usage examples, and power-user features.
+
+
+### 🔌 Plugin System (v0.3.0)
+
+Daedelus now supports a powerful plugin system for extending functionality:
+
+```bash
+# Example: Use hello world plugin command
+daedelus hello "World"
+
+# Built-in plugins:
+# - hello_world: Example plugin demonstrating CLI commands
+# - analytics_export: Export command history to JSON/CSV
+# - neovim_integration: Edit config and view history in Neovim
+```
+
+**Create Your Own Plugins:**
+See `docs/PLUGIN_DEVELOPMENT.md` for a comprehensive guide including:
+- Plugin structure and manifest
+- API reference (DaedalusAPI)
+- Permission system
+- CLI command registration
+- Complete examples
+
+**Plugin Security:**
+- Permission-based access control
+- Automatic approval during daemon startup
+- User can revoke permissions anytime
+- Isolated execution context
+
+### 🎨 GUI Dashboard (v0.3.0)
+
+Launch a beautiful TUI dashboard for monitoring and configuration:
+
+```bash
+daedelus dashboard
+
+# Features:
+# - Live daemon metrics (uptime, requests, commands logged)
+# - Command history browser with search
+# - Usage analytics and statistics
+# - Config editor with live updates
+# - Command explanations (LLM-powered)
+```
 
 ## 📖 Usage
 
@@ -378,7 +453,7 @@ model:
 # Phase 2 LLM settings
 llm:
   enabled: true
-  model_path: ~/.local/share/models/model.gguf  # Place your GGUF model here
+  model_path: null  # Auto-detect any GGUF in ~/.local/share/models/
   context_length: 2048
   temperature: 0.7
 
@@ -483,6 +558,58 @@ Choose based on your hardware and needs:
 | Phi-3-mini | ~2.4GB | 4GB | ⚡⚡ | More capable, larger |
 | Qwen2.5-3B | ~3GB | 6GB | ⚡ | Multilingual support |
 | Mistral-7B | ~4GB | 8GB | ⚡ | More capable, slower |
+
+#### GPU Setup for Training (Optional but Recommended)
+
+**Why GPU?** Training with GPU is 10-30x faster than CPU (1-3 minutes vs 10-30 minutes).
+
+**Check GPU Status:**
+```bash
+# Run automatic diagnostic
+./scripts/fix_cuda_pytorch.sh
+```
+
+**Common Issue: PyTorch CUDA Version Mismatch**
+
+If diagnostic shows "CUDA not available":
+
+```bash
+# Reinstall PyTorch with correct CUDA version
+pip3 uninstall torch torchvision torchaudio -y
+
+# For CUDA 11.8 (most stable, recommended)
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# For CUDA 12.1
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Verify GPU is now accessible
+python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
+```
+
+**Set Environment Variables:**
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+export CUDA_HOME=/usr/local/cuda
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+# Reload shell
+source ~/.bashrc
+```
+
+**Training with GPU:**
+```bash
+# Training will automatically use GPU if available
+daedelus train --force
+
+# Monitor GPU usage during training
+watch -n 1 nvidia-smi
+```
+
+**CPU-Only Mode:** If you don't have a GPU or can't fix CUDA, Daedelus will automatically fall back to CPU mode. Training will be slower but fully functional.
+
+For detailed troubleshooting, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 #### Troubleshooting
 
@@ -620,13 +747,34 @@ bandit -r src/daedelus
 - [x] LLM dependencies included by default
 - [x] Model path: `~/.local/share/models/`
 
-### 🔮 Phase 3: Advanced Features (Q3-Q4 2025)
+### ✅ Phase 3: Advanced Features (COMPLETE - v0.3.0)
+- [x] Plugin System
+  - [x] Core infrastructure (discovery, loading, lifecycle)
+  - [x] Permission manager with security controls
+  - [x] CLI command registration
+  - [x] First-party plugins (hello_world, analytics_export, neovim_integration)
+  - [x] Developer documentation
+- [x] GUI Dashboard
+  - [x] TUI with Textual framework
+  - [x] Live daemon metrics
+  - [x] History browser and search
+  - [x] Config editor
+  - [x] Command explanations
+- [x] Bug Fixes
+  - [x] Daemon startup detection
+  - [x] Plugin CLI registration
+  - [x] Permission auto-approval
+
+### 🔮 Phase 4: Polish & Community (Future)
+- [ ] Additional plugin examples (vscode, analytics_charts, tmux)
+- [ ] GUI plugin manager
+- [ ] Streaming log viewer
 - [ ] Multi-language support
-- [ ] Plugin system
-- [ ] GUI dashboard
-- [ ] Vim/Neovim integration
+- [ ] Community plugin repository
 - [ ] Cloud sync (optional, encrypted)
+- [ ] Vim/Neovim deep integration
 - [ ] Team sharing features
+- [ ] Performance optimizations
 
 ## 🤝 Contributing
 

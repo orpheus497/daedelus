@@ -24,7 +24,6 @@ import os
 import signal
 import sqlite3
 import sys
-import tempfile
 import textwrap
 import traceback
 from abc import ABC, abstractmethod
@@ -32,21 +31,23 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type
+from typing import Any
 
 # Initialize logger first
 logger = logging.getLogger(__name__)
 
 # RestrictedPython for secure code execution
 try:
-    from RestrictedPython import compile_restricted, safe_globals, safe_builtins
+    from RestrictedPython import compile_restricted, safe_builtins, safe_globals
     from RestrictedPython.Guards import guarded_inplacevar
+
     RESTRICTED_PYTHON_AVAILABLE = True
 except ImportError:
     RESTRICTED_PYTHON_AVAILABLE = False
     guarded_inplacevar = None
     try:
-        from RestrictedPython import compile_restricted, safe_globals, safe_builtins
+        from RestrictedPython import compile_restricted, safe_builtins, safe_globals
+
         RESTRICTED_PYTHON_AVAILABLE = True
         logger.info("RestrictedPython loaded (guarded_inplacevar not available in this version)")
     except ImportError:
@@ -58,11 +59,13 @@ except ImportError:
 
 class SecurityError(Exception):
     """Raised when security validation fails."""
+
     pass
 
 
 class ToolPermission(Enum):
     """Permission levels for tools"""
+
     FILE_READ = "file_read"
     FILE_WRITE = "file_write"
     NETWORK = "network"
@@ -73,6 +76,7 @@ class ToolPermission(Enum):
 
 class ToolCategory(Enum):
     """Categories of tools"""
+
     UTILITY = "utility"
     ANALYSIS = "analysis"
     GENERATION = "generation"
@@ -85,16 +89,17 @@ class ToolCategory(Enum):
 @dataclass
 class ToolMetadata:
     """Metadata about a tool"""
+
     name: str
     version: str
     description: str
     author: str
     category: ToolCategory
-    permissions: Set[ToolPermission]
-    dependencies: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-    created: Optional[float] = None
-    updated: Optional[float] = None
+    permissions: set[ToolPermission]
+    dependencies: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    created: float | None = None
+    updated: float | None = None
     usage_count: int = 0
     enabled: bool = True
 
@@ -102,13 +107,14 @@ class ToolMetadata:
 @dataclass
 class ToolExecutionResult:
     """Result of tool execution"""
+
     tool_name: str
     success: bool
     output: Any = None
-    error: Optional[str] = None
+    error: str | None = None
     duration: float = 0.0
     timestamp: float = 0.0
-    session_id: Optional[str] = None
+    session_id: str | None = None
     permission_granted: bool = False
 
 
@@ -166,7 +172,7 @@ class BaseTool(ABC):
         """
         return self.metadata.description
 
-    def get_parameters(self) -> Dict[str, Any]:
+    def get_parameters(self) -> dict[str, Any]:
         """
         Get parameter schema for the tool.
 
@@ -178,10 +184,14 @@ class BaseTool(ABC):
 
         for name, param in sig.parameters.items():
             params[name] = {
-                'name': name,
-                'type': param.annotation.__name__ if param.annotation != inspect.Parameter.empty else 'any',
-                'default': param.default if param.default != inspect.Parameter.empty else None,
-                'required': param.default == inspect.Parameter.empty
+                "name": name,
+                "type": (
+                    param.annotation.__name__
+                    if param.annotation != inspect.Parameter.empty
+                    else "any"
+                ),
+                "default": param.default if param.default != inspect.Parameter.empty else None,
+                "required": param.default == inspect.Parameter.empty,
             }
 
         return params
@@ -204,15 +214,16 @@ class ToolRegistry:
         self.tools_dir = tools_dir
         self.tools_dir.mkdir(parents=True, exist_ok=True)
 
-        self.registered_tools: Dict[str, Type[BaseTool]] = {}
-        self.tool_instances: Dict[str, BaseTool] = {}
+        self.registered_tools: dict[str, type[BaseTool]] = {}
+        self.tool_instances: dict[str, BaseTool] = {}
 
         self._init_database()
 
     def _init_database(self):
         """Initialize database schema for tool registry"""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS tool_registry (
                     name TEXT PRIMARY KEY,
                     version TEXT NOT NULL,
@@ -228,9 +239,11 @@ class ToolRegistry:
                     enabled INTEGER DEFAULT 1,
                     source_path TEXT
                 )
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS tool_executions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp REAL NOT NULL,
@@ -241,14 +254,19 @@ class ToolRegistry:
                     error_message TEXT,
                     permission_granted INTEGER DEFAULT 0
                 )
-            """)
+            """
+            )
 
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_exec_timestamp ON tool_executions(timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_exec_name ON tool_executions(tool_name)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tool_exec_timestamp ON tool_executions(timestamp)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tool_exec_name ON tool_executions(tool_name)"
+            )
 
             conn.commit()
 
-    def register_tool(self, tool_class: Type[BaseTool], source_path: Optional[Path] = None) -> bool:
+    def register_tool(self, tool_class: type[BaseTool], source_path: Path | None = None) -> bool:
         """
         Register a tool class.
 
@@ -261,14 +279,16 @@ class ToolRegistry:
         """
         try:
             # Create instance to get metadata
-            temp_instance = tool_class(ToolMetadata(
-                name="temp",
-                version="0.0.0",
-                description="",
-                author="",
-                category=ToolCategory.CUSTOM,
-                permissions=set()
-            ))
+            temp_instance = tool_class(
+                ToolMetadata(
+                    name="temp",
+                    version="0.0.0",
+                    description="",
+                    author="",
+                    category=ToolCategory.CUSTOM,
+                    permissions=set(),
+                )
+            )
 
             metadata = temp_instance.metadata
 
@@ -277,25 +297,28 @@ class ToolRegistry:
 
             # Save to database
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO tool_registry (
                         name, version, description, author, category, permissions,
                         dependencies, tags, created, updated, enabled, source_path
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    metadata.name,
-                    metadata.version,
-                    metadata.description,
-                    metadata.author,
-                    metadata.category.value,
-                    json.dumps([p.value for p in metadata.permissions]),
-                    json.dumps(metadata.dependencies),
-                    json.dumps(metadata.tags),
-                    metadata.created or datetime.now().timestamp(),
-                    datetime.now().timestamp(),
-                    1 if metadata.enabled else 0,
-                    str(source_path) if source_path else None
-                ))
+                """,
+                    (
+                        metadata.name,
+                        metadata.version,
+                        metadata.description,
+                        metadata.author,
+                        metadata.category.value,
+                        json.dumps([p.value for p in metadata.permissions]),
+                        json.dumps(metadata.dependencies),
+                        json.dumps(metadata.tags),
+                        metadata.created or datetime.now().timestamp(),
+                        datetime.now().timestamp(),
+                        1 if metadata.enabled else 0,
+                        str(source_path) if source_path else None,
+                    ),
+                )
                 conn.commit()
 
             logger.info(f"Registered tool: {metadata.name} v{metadata.version}")
@@ -305,7 +328,7 @@ class ToolRegistry:
             logger.error(f"Failed to register tool: {e}")
             return False
 
-    def load_tool(self, name: str) -> Optional[BaseTool]:
+    def load_tool(self, name: str) -> BaseTool | None:
         """
         Load a tool instance.
 
@@ -332,18 +355,18 @@ class ToolRegistry:
                     return None
 
                 metadata = ToolMetadata(
-                    name=row['name'],
-                    version=row['version'],
-                    description=row['description'],
-                    author=row['author'],
-                    category=ToolCategory(row['category']),
-                    permissions={ToolPermission(p) for p in json.loads(row['permissions'])},
-                    dependencies=json.loads(row['dependencies']) if row['dependencies'] else [],
-                    tags=json.loads(row['tags']) if row['tags'] else [],
-                    created=row['created'],
-                    updated=row['updated'],
-                    usage_count=row['usage_count'],
-                    enabled=bool(row['enabled'])
+                    name=row["name"],
+                    version=row["version"],
+                    description=row["description"],
+                    author=row["author"],
+                    category=ToolCategory(row["category"]),
+                    permissions={ToolPermission(p) for p in json.loads(row["permissions"])},
+                    dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
+                    tags=json.loads(row["tags"]) if row["tags"] else [],
+                    created=row["created"],
+                    updated=row["updated"],
+                    usage_count=row["usage_count"],
+                    enabled=bool(row["enabled"]),
                 )
 
             # Create instance
@@ -381,7 +404,7 @@ class ToolRegistry:
                 spec.loader.exec_module(module)
 
                 # Find tool classes
-                for name, obj in inspect.getmembers(module, inspect.isclass):
+                for _name, obj in inspect.getmembers(module, inspect.isclass):
                     if issubclass(obj, BaseTool) and obj != BaseTool:
                         if self.register_tool(obj, file_path):
                             count += 1
@@ -392,7 +415,9 @@ class ToolRegistry:
         logger.info(f"Discovered {count} tools")
         return count
 
-    def list_tools(self, category: Optional[ToolCategory] = None, enabled_only: bool = True) -> List[ToolMetadata]:
+    def list_tools(
+        self, category: ToolCategory | None = None, enabled_only: bool = True
+    ) -> list[ToolMetadata]:
         """
         List available tools.
 
@@ -421,18 +446,18 @@ class ToolRegistry:
             tools = []
             for row in conn.execute(query, params):
                 metadata = ToolMetadata(
-                    name=row['name'],
-                    version=row['version'],
-                    description=row['description'],
-                    author=row['author'],
-                    category=ToolCategory(row['category']),
-                    permissions={ToolPermission(p) for p in json.loads(row['permissions'])},
-                    dependencies=json.loads(row['dependencies']) if row['dependencies'] else [],
-                    tags=json.loads(row['tags']) if row['tags'] else [],
-                    created=row['created'],
-                    updated=row['updated'],
-                    usage_count=row['usage_count'],
-                    enabled=bool(row['enabled'])
+                    name=row["name"],
+                    version=row["version"],
+                    description=row["description"],
+                    author=row["author"],
+                    category=ToolCategory(row["category"]),
+                    permissions={ToolPermission(p) for p in json.loads(row["permissions"])},
+                    dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
+                    tags=json.loads(row["tags"]) if row["tags"] else [],
+                    created=row["created"],
+                    updated=row["updated"],
+                    usage_count=row["usage_count"],
+                    enabled=bool(row["enabled"]),
                 )
                 tools.append(metadata)
 
@@ -472,8 +497,8 @@ class ToolExecutor:
     def __init__(
         self,
         registry: ToolRegistry,
-        session_id: Optional[str] = None,
-        require_permission_approval: bool = True
+        session_id: str | None = None,
+        require_permission_approval: bool = True,
     ):
         """
         Initialize tool executor.
@@ -488,13 +513,10 @@ class ToolExecutor:
         self.require_permission_approval = require_permission_approval
 
         # Track granted permissions per tool
-        self.granted_permissions: Dict[str, Set[ToolPermission]] = {}
+        self.granted_permissions: dict[str, set[ToolPermission]] = {}
 
     def execute_tool(
-        self,
-        tool_name: str,
-        sandboxed: bool = False,
-        **kwargs
+        self, tool_name: str, sandboxed: bool = False, **kwargs
     ) -> ToolExecutionResult:
         """
         Execute a tool with permission checking.
@@ -508,13 +530,14 @@ class ToolExecutor:
             ToolExecutionResult
         """
         import time
+
         start_time = time.time()
 
         result = ToolExecutionResult(
             tool_name=tool_name,
             success=False,
             timestamp=datetime.now().timestamp(),
-            session_id=self.session_id
+            session_id=self.session_id,
         )
 
         try:
@@ -592,13 +615,18 @@ class ToolExecutor:
 
         # Check if approval required
         if self.require_permission_approval:
-            logger.info(f"Tool {tool_name} requires permissions: {[p.value for p in required_perms]}")
+            logger.info(
+                f"Tool {tool_name} requires permissions: {[p.value for p in required_perms]}"
+            )
 
             # Prompt user for permission
             try:
                 import click
+
                 perms_str = ", ".join([p.value for p in required_perms])
-                message = f"Tool '{tool_name}' requires these permissions: {perms_str}. Grant access?"
+                message = (
+                    f"Tool '{tool_name}' requires these permissions: {perms_str}. Grant access?"
+                )
 
                 if click.confirm(message, default=False):
                     # User approved - grant permissions
@@ -618,7 +646,7 @@ class ToolExecutor:
 
         return True
 
-    def _validate_tool_code(self, source: str, tool_name: str) -> tuple[bool, Optional[str]]:
+    def _validate_tool_code(self, source: str, tool_name: str) -> tuple[bool, str | None]:
         """
         Validate tool code using AST analysis.
 
@@ -629,11 +657,24 @@ class ToolExecutor:
         Returns:
             Tuple of (is_valid, error_message)
         """
-        ALLOWED_IMPORTS = {'json', 'datetime', 're', 'math', 'collections', 'itertools'}
+        ALLOWED_IMPORTS = {"json", "datetime", "re", "math", "collections", "itertools"}
         FORBIDDEN_NAMES = {
-            'exec', 'eval', 'compile', '__import__', 'open', 'file',
-            'input', 'raw_input', 'reload', 'breakpoint',
-            'exit', 'quit', 'help', 'license', 'copyright', 'credits'
+            "exec",
+            "eval",
+            "compile",
+            "__import__",
+            "open",
+            "file",
+            "input",
+            "raw_input",
+            "reload",
+            "breakpoint",
+            "exit",
+            "quit",
+            "help",
+            "license",
+            "copyright",
+            "credits",
         }
 
         try:
@@ -649,7 +690,7 @@ class ToolExecutor:
 
             # Check for forbidden function calls
             if isinstance(node, ast.Call):
-                if hasattr(node.func, 'id') and node.func.id in FORBIDDEN_NAMES:
+                if hasattr(node.func, "id") and node.func.id in FORBIDDEN_NAMES:
                     return False, f"Forbidden function call: {node.func.id}"
 
             # Check imports
@@ -669,9 +710,9 @@ class ToolExecutor:
         self,
         tool_name: str,
         source: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         success: bool,
-        error: Optional[str] = None
+        error: str | None = None,
     ) -> None:
         """
         Log tool execution to audit log for security monitoring.
@@ -683,26 +724,26 @@ class ToolExecutor:
             success: Whether execution succeeded
             error: Error message if failed
         """
-        audit_log_path = Path.home() / '.local/share/daedelus/audit.jsonl'
+        audit_log_path = Path.home() / ".local/share/daedelus/audit.jsonl"
         audit_log_path.parent.mkdir(parents=True, exist_ok=True)
 
         log_entry = {
-            'timestamp': datetime.now().isoformat(),
-            'event_type': 'tool_execution',
-            'tool_name': tool_name,
-            'code_hash': hashlib.sha256(source.encode()).hexdigest(),
-            'param_keys': list(params.keys()),
-            'success': success,
-            'error': error,
+            "timestamp": datetime.now().isoformat(),
+            "event_type": "tool_execution",
+            "tool_name": tool_name,
+            "code_hash": hashlib.sha256(source.encode()).hexdigest(),
+            "param_keys": list(params.keys()),
+            "success": success,
+            "error": error,
         }
 
         try:
-            with open(audit_log_path, 'a') as f:
-                f.write(json.dumps(log_entry) + '\n')
+            with open(audit_log_path, "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
             logger.warning(f"Failed to write audit log: {e}")
 
-    def _execute_sandboxed(self, tool: BaseTool, params: Dict[str, Any]) -> Any:
+    def _execute_sandboxed(self, tool: BaseTool, params: dict[str, Any]) -> Any:
         """
         Execute tool in sandboxed environment using RestrictedPython.
 
@@ -748,21 +789,16 @@ class ToolExecutor:
                     f"Executing tool {tool_name} with INSECURE basic sandbox. "
                     "Install RestrictedPython for security: pip install RestrictedPython>=6.2"
                 )
-                return self._execute_with_basic_sandbox(
-                    tool, tool_name, source, params, timeout
-                )
+                return self._execute_with_basic_sandbox(tool, tool_name, source, params, timeout)
 
         except Exception as e:
-            self._audit_log_execution(tool_name, source if 'source' in locals() else '', params, False, str(e))
+            self._audit_log_execution(
+                tool_name, source if "source" in locals() else "", params, False, str(e)
+            )
             raise
 
     def _execute_with_restricted_python(
-        self,
-        tool: BaseTool,
-        tool_name: str,
-        source: str,
-        params: Dict[str, Any],
-        timeout: float
+        self, tool: BaseTool, tool_name: str, source: str, params: dict[str, Any], timeout: float
     ) -> Any:
         """
         Execute tool using RestrictedPython (SECURE).
@@ -778,11 +814,7 @@ class ToolExecutor:
             Tool output
         """
         # Compile with RestrictedPython
-        byte_code = compile_restricted(
-            source,
-            filename=f'<tool:{tool_name}>',
-            mode='exec'
-        )
+        byte_code = compile_restricted(source, filename=f"<tool:{tool_name}>", mode="exec")
 
         if byte_code.errors:
             error_msg = f"RestrictedPython compilation errors: {byte_code.errors}"
@@ -791,25 +823,25 @@ class ToolExecutor:
 
         # Set up restricted environment
         restricted_globals = {
-            '__builtins__': safe_builtins,
-            '_getattr_': getattr,
-            '_getitem_': lambda obj, key: obj[key],
-            '_write_': lambda obj: obj,
+            "__builtins__": safe_builtins,
+            "_getattr_": getattr,
+            "_getitem_": lambda obj, key: obj[key],
+            "_write_": lambda obj: obj,
             **safe_globals,
             # Allowed safe modules
-            'json': __import__('json'),
-            'datetime': __import__('datetime'),
-            're': __import__('re'),
-            'math': __import__('math'),
-            'collections': __import__('collections'),
-            'itertools': __import__('itertools'),
+            "json": __import__("json"),
+            "datetime": __import__("datetime"),
+            "re": __import__("re"),
+            "math": __import__("math"),
+            "collections": __import__("collections"),
+            "itertools": __import__("itertools"),
         }
 
         # Add _inplacevar_ if available
         if guarded_inplacevar is not None:
-            restricted_globals['_inplacevar_'] = guarded_inplacevar
+            restricted_globals["_inplacevar_"] = guarded_inplacevar
 
-        restricted_locals = {'params': params}
+        restricted_locals = {"params": params}
 
         # Execute with timeout using signal
         def timeout_handler(signum, frame):
@@ -823,7 +855,7 @@ class ToolExecutor:
             exec(byte_code.code, restricted_globals, restricted_locals)
 
             # Call execute function
-            execute_func = restricted_locals.get('execute')
+            execute_func = restricted_locals.get("execute")
             if execute_func:
                 result = execute_func(tool, **params)
                 self._audit_log_execution(tool_name, source, params, True)
@@ -836,12 +868,7 @@ class ToolExecutor:
             signal.signal(signal.SIGALRM, old_handler)  # Restore handler
 
     def _execute_with_basic_sandbox(
-        self,
-        tool: BaseTool,
-        tool_name: str,
-        source: str,
-        params: Dict[str, Any],
-        timeout: float
+        self, tool: BaseTool, tool_name: str, source: str, params: dict[str, Any], timeout: float
     ) -> Any:
         """
         Execute tool using basic sandbox (INSECURE - fallback only).
@@ -861,18 +888,35 @@ class ToolExecutor:
         """
         # Create isolated namespace with limited builtins
         sandbox_globals = {
-            '__builtins__': {
-                'len': len, 'str': str, 'int': int, 'float': float,
-                'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple,
-                'set': set, 'range': range, 'enumerate': enumerate,
-                'zip': zip, 'map': map, 'filter': filter,
-                'sum': sum, 'min': min, 'max': max, 'abs': abs,
-                'round': round, 'sorted': sorted, 'reversed': reversed,
-                'any': any, 'all': all, 'print': print,
+            "__builtins__": {
+                "len": len,
+                "str": str,
+                "int": int,
+                "float": float,
+                "bool": bool,
+                "list": list,
+                "dict": dict,
+                "tuple": tuple,
+                "set": set,
+                "range": range,
+                "enumerate": enumerate,
+                "zip": zip,
+                "map": map,
+                "filter": filter,
+                "sum": sum,
+                "min": min,
+                "max": max,
+                "abs": abs,
+                "round": round,
+                "sorted": sorted,
+                "reversed": reversed,
+                "any": any,
+                "all": all,
+                "print": print,
             }
         }
 
-        sandbox_locals = {'params': params}
+        sandbox_locals = {"params": params}
 
         # Execute with timeout
         def timeout_handler(signum, frame):
@@ -883,11 +927,11 @@ class ToolExecutor:
 
         try:
             # Compile and execute
-            code = compile(source, f'<tool:{tool_name}>', 'exec')
+            code = compile(source, f"<tool:{tool_name}>", "exec")
             exec(code, sandbox_globals, sandbox_locals)
 
             # Call execute function
-            execute_func = sandbox_locals.get('execute')
+            execute_func = sandbox_locals.get("execute")
             if execute_func:
                 result = execute_func(tool, **params)
                 self._audit_log_execution(tool_name, source, params, True)
@@ -902,30 +946,36 @@ class ToolExecutor:
     def _log_execution(self, result: ToolExecutionResult):
         """Log tool execution to database"""
         with sqlite3.connect(self.registry.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO tool_executions (
                     timestamp, tool_name, success, duration,
                     session_id, error_message, permission_granted
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                result.timestamp,
-                result.tool_name,
-                1 if result.success else 0,
-                result.duration,
-                result.session_id,
-                result.error,
-                1 if result.permission_granted else 0
-            ))
+            """,
+                (
+                    result.timestamp,
+                    result.tool_name,
+                    1 if result.success else 0,
+                    result.duration,
+                    result.session_id,
+                    result.error,
+                    1 if result.permission_granted else 0,
+                ),
+            )
             conn.commit()
 
     def _increment_usage(self, tool_name: str):
         """Increment usage count for tool"""
         with sqlite3.connect(self.registry.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE tool_registry
                 SET usage_count = usage_count + 1
                 WHERE name = ?
-            """, (tool_name,))
+            """,
+                (tool_name,),
+            )
             conn.commit()
 
 
@@ -936,10 +986,7 @@ class ToolDeveloper:
 
     @staticmethod
     def create_tool_template(
-        name: str,
-        category: ToolCategory,
-        permissions: List[ToolPermission],
-        output_path: Path
+        name: str, category: ToolCategory, permissions: list[ToolPermission], output_path: Path
     ) -> bool:
         """
         Create a new tool from template.
@@ -953,7 +1000,8 @@ class ToolDeveloper:
         Returns:
             True if created successfully
         """
-        template = textwrap.dedent(f'''
+        template = textwrap.dedent(
+            f'''
             """
             {name} Tool
             {'=' * (len(name) + 5)}
@@ -1078,11 +1126,12 @@ class ToolDeveloper:
                     Examples:
                         [Add usage examples here]
                     """
-        ''').strip()
+        '''
+        ).strip()
 
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, 'w') as f:
+            with open(output_path, "w") as f:
                 f.write(template)
 
             logger.info(f"Created tool template: {output_path}")
@@ -1093,7 +1142,7 @@ class ToolDeveloper:
             return False
 
     @staticmethod
-    def validate_tool_code(tool_path: Path) -> Tuple[bool, List[str]]:
+    def validate_tool_code(tool_path: Path) -> tuple[bool, list[str]]:
         """
         Validate tool code for safety and correctness.
 
@@ -1106,14 +1155,14 @@ class ToolDeveloper:
         errors = []
 
         try:
-            with open(tool_path, 'r') as f:
+            with open(tool_path) as f:
                 code = f.read()
 
             # Parse AST
             tree = ast.parse(code)
 
             # Check for dangerous patterns
-            dangerous_imports = ['os', 'subprocess', 'sys', 'eval', 'exec', '__import__']
+            dangerous_imports = ["os", "subprocess", "sys", "eval", "exec", "__import__"]
 
             for node in ast.walk(tree):
                 # Check imports
@@ -1129,7 +1178,7 @@ class ToolDeveloper:
                 # Check for eval/exec calls
                 if isinstance(node, ast.Call):
                     if isinstance(node.func, ast.Name):
-                        if node.func.id in ['eval', 'exec', '__import__']:
+                        if node.func.id in ["eval", "exec", "__import__"]:
                             errors.append(f"Dangerous function call: {node.func.id}")
 
             # Check for BaseTool subclass
@@ -1137,7 +1186,7 @@ class ToolDeveloper:
             for node in ast.walk(tree):
                 if isinstance(node, ast.ClassDef):
                     for base in node.bases:
-                        if isinstance(base, ast.Name) and base.id == 'BaseTool':
+                        if isinstance(base, ast.Name) and base.id == "BaseTool":
                             has_tool_class = True
                             break
 

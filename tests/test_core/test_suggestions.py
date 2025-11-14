@@ -7,6 +7,7 @@ Created by: orpheus497
 """
 
 import pytest
+
 from daedelus.core.suggestions import SuggestionEngine
 
 
@@ -20,7 +21,7 @@ def test_tier1_exact_match(test_db):
     """Test exact prefix matching."""
     # Log commands
     for i in range(5):
-        test_db.log_command(f"git status", "/home/user/project", 0, 0.05)
+        test_db.log_command("git status", "/home/user/project", 0, 0.05)
     test_db.log_command("git add .", "/home/user/project", 0, 0.12)
 
     engine = SuggestionEngine(test_db)

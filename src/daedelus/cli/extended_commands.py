@@ -12,15 +12,13 @@ Author: orpheus497
 License: MIT
 """
 
-import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 import click
+from rich import print as rprint
 from rich.console import Console
 from rich.table import Table as RichTable
-from rich import print as rprint
 
 from ..utils.config import Config
 
@@ -43,7 +41,7 @@ def files_group():
 @click.option("--limit", "-n", type=int, default=20, help="Number of records to show")
 @click.option("--operation", "-o", type=str, help="Filter by operation type (read/write/list)")
 @click.pass_context
-def files_history(ctx: click.Context, limit: int, operation: Optional[str]):
+def files_history(ctx: click.Context, limit: int, operation: str | None):
     """
     View file operation history.
 
@@ -83,6 +81,7 @@ def files_history(ctx: click.Context, limit: int, operation: Optional[str]):
                 timestamp, op, path, success, bytes_read, bytes_written = row
 
                 from datetime import datetime
+
                 time_str = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
                 status = "✓ Success" if success else "✗ Failed"
 
@@ -132,11 +131,11 @@ def files_stats(ctx: click.Context):
         rprint(f"[bold]Total Bytes Written:[/bold] {stats['total_bytes_written']:,}")
 
         rprint("\n[bold]Operations by Type:[/bold]")
-        for op_type, count in stats['operations_by_type'].items():
+        for op_type, count in stats["operations_by_type"].items():
             rprint(f"  • {op_type}: {count:,}")
 
         rprint("\n[bold]Most Accessed Files:[/bold]")
-        for i, file_stat in enumerate(stats['most_accessed_files'][:10], 1):
+        for i, file_stat in enumerate(stats["most_accessed_files"][:10], 1):
             rprint(f"  {i}. {file_stat['file_path']} ({file_stat['count']} times)")
 
     except Exception as e:
@@ -157,7 +156,7 @@ def tools_group():
 @click.option("--category", "-c", type=str, help="Filter by category")
 @click.option("--enabled-only", is_flag=True, help="Show only enabled tools")
 @click.pass_context
-def tools_list(ctx: click.Context, category: Optional[str], enabled_only: bool):
+def tools_list(ctx: click.Context, category: str | None, enabled_only: bool):
     """
     List installed tools.
 
@@ -174,7 +173,7 @@ def tools_list(ctx: click.Context, category: Optional[str], enabled_only: bool):
         return
 
     try:
-        from ..core.tool_system import ToolRegistry, ToolCategory
+        from ..core.tool_system import ToolCategory, ToolRegistry
 
         registry = ToolRegistry(tools_db, tools_dir)
 
@@ -201,7 +200,7 @@ def tools_list(ctx: click.Context, category: Optional[str], enabled_only: bool):
                 tool.category.value,
                 tool.author,
                 status,
-                str(tool.usage_count)
+                str(tool.usage_count),
             )
 
         console.print(table)
@@ -258,116 +257,202 @@ def tools_create(ctx: click.Context, name: str, category: str):
         return
 
     try:
-        from ..core.tool_system import ToolDeveloper, ToolCategory, ToolPermission
+        from ..core.tool_system import ToolCategory, ToolDeveloper, ToolPermission
 
         # Create tool template
         ToolDeveloper.create_tool_template(
             name=name,
             category=ToolCategory(category.upper()),
             permissions=[ToolPermission.FILE_READ],  # Default permission
-            output_path=output_path
+            output_path=output_path,
         )
 
         click.echo(f"✓ Created tool template: {output_path}")
-        click.echo(f"\nNext steps:")
+        click.echo("\nNext steps:")
         click.echo(f"  1. Edit {output_path} to implement your tool")
-        click.echo(f"  2. Run 'daedelus tools discover' to register it")
+        click.echo("  2. Run 'daedelus tools discover' to register it")
         click.echo(f"  3. Test with 'daedelus tools execute {name}'")
 
     except Exception as e:
         click.echo(f"Error creating tool: {e}", err=True)
 
 
-@click.group(name="ingest")
-def ingest_group():
+@click.group(name="ingest", invoke_without_command=True)
+@click.argument("file_path", type=click.Path(exists=True, path_type=Path), required=False)
+@click.option("--category", "-c", type=str, help="Category for the document")
+@click.option("--tags", "-t", multiple=True, help="Tags for the document")
+@click.pass_context
+def ingest_group(ctx: click.Context, file_path: Path | None, category: str | None, tags: tuple):
     """
     Document ingestion commands.
 
     Ingest documents and files to add them to the training data.
+
+    Usage:
+        daedelus ingest <file>              # Quick ingest a single file
+        daedelus ingest document <file>     # Ingest with subcommand
+        daedelus ingest directory <dir>     # Ingest directory
     """
-    pass
+    if ctx.invoked_subcommand is None:
+        if file_path is None:
+            click.echo(ctx.get_help())
+            return
+
+        # Direct file ingestion shortcut
+        config: Config = ctx.obj["config"]
+        data_dir = config.data_dir
+        doc_ingest_db = data_dir / "ingestion.db"
+        storage_path = data_dir / "ingested_documents"
+
+        try:
+            from ..llm.document_ingestion import DocumentIngestionManager
+
+            console.print(f"[cyan]📄 Ingesting document:[/cyan] {file_path}")
+            manager = DocumentIngestionManager(doc_ingest_db, storage_path)
+            success = manager.ingest_document(
+                file_path, category=category, tags=list(tags) if tags else None
+            )
+
+            if success:
+                console.print(f"[green]✅ Successfully ingested:[/green] {file_path.name}")
+                stats = manager.get_statistics()
+                console.print(
+                    f"\n[dim]Total documents: {stats['total_documents']} | "
+                    f"Training entries: {stats['total_training_entries']}[/dim]"
+                )
+            else:
+                console.print(f"[red]❌ Failed to ingest:[/red] {file_path.name}")
+        except Exception as e:
+            console.print(f"[red]❌ Error:[/red] {e}")
+            logger.error(f"Error ingesting document: {e}", exc_info=True)
 
 
 @ingest_group.command(name="document")
 @click.argument("file_path", type=click.Path(exists=True, path_type=Path))
-@click.option("--category", "-c", type=str, help="Category for the document")
-@click.option("--tags", "-t", multiple=True, help="Tags for the document")
+@click.option(
+    "--category",
+    "-c",
+    type=str,
+    help="Category for the document (e.g., 'shell', 'python', 'documentation')",
+)
+@click.option(
+    "--tags", "-t", multiple=True, help="Tags for the document (can be specified multiple times)"
+)
 @click.pass_context
-def ingest_document(ctx: click.Context, file_path: Path, category: Optional[str], tags: tuple):
+def ingest_document(ctx: click.Context, file_path: Path, category: str | None, tags: tuple):
     """
     Ingest a document into the training data.
 
-    Processes the document, extracts content, and adds it to the
-    training data for model fine-tuning.
+    Processes documents and converts them into training data for the
+    Daedelus LLM. Supported formats: MD, code, PDF, HTML, JSON, YAML, XML.
+
+    Examples:
+
+        # Ingest a markdown document
+        daedelus ingest document ./docs/tutorial.md -c documentation -t tutorial
+
+        # Ingest a Python script
+        daedelus ingest document ./scripts/backup.py -c python -t automation
+
+        # Ingest shell script
+        daedelus ingest document ./install.sh -c shell -t installation
     """
     config: Config = ctx.obj["config"]
     data_dir = config.data_dir
 
-    doc_ingest_db = data_dir / "document_ingestion.db"
+    doc_ingest_db = data_dir / "ingestion.db"
     storage_path = data_dir / "ingested_documents"
 
     try:
         from ..llm.document_ingestion import DocumentIngestionManager
 
+        console.print(f"[cyan]📄 Ingesting document:[/cyan] {file_path}")
+
         manager = DocumentIngestionManager(doc_ingest_db, storage_path)
 
-        click.echo(f"Ingesting document: {file_path}")
-
         success = manager.ingest_document(
-            file_path,
-            category=category,
-            tags=list(tags) if tags else None
+            file_path, category=category, tags=list(tags) if tags else None
         )
 
         if success:
-            click.echo("✓ Document ingested successfully")
+            console.print(f"[green]✅ Successfully ingested:[/green] {file_path.name}")
 
             # Show statistics
             stats = manager.get_statistics()
-            click.echo(f"\nTotal documents: {stats['total_documents']}")
-            click.echo(f"Training entries: {stats['total_training_entries']}")
+            console.print(
+                f"\n[dim]Total documents: {stats['total_documents']} | "
+                f"Training entries: {stats['total_training_entries']}[/dim]"
+            )
         else:
-            click.echo("✗ Failed to ingest document", err=True)
+            console.print(f"[red]❌ Failed to ingest:[/red] {file_path.name}")
 
     except Exception as e:
-        click.echo(f"Error ingesting document: {e}", err=True)
+        console.print(f"[red]❌ Error:[/red] {e}")
+        logger.error(f"Error ingesting document: {e}", exc_info=True)
 
 
 @ingest_group.command(name="directory")
 @click.argument("dir_path", type=click.Path(exists=True, path_type=Path))
-@click.option("--recursive", "-r", is_flag=True, help="Process directory recursively")
-@click.option("--pattern", "-p", type=str, default="*", help="File pattern to match")
+@click.option("--recursive", "-r", is_flag=True, help="Recursively process subdirectories")
+@click.option(
+    "--pattern", "-p", type=str, default="*", help="File pattern to match (e.g., '*.md', '*.py')"
+)
+@click.option("--category", "-c", type=str, help="Category for all documents")
 @click.pass_context
-def ingest_directory(ctx: click.Context, dir_path: Path, recursive: bool, pattern: str):
+def ingest_directory(
+    ctx: click.Context, dir_path: Path, recursive: bool, pattern: str, category: str | None
+):
     """
     Ingest all documents from a directory.
 
-    Recursively processes all documents in a directory and adds them
-    to the training data.
+    Processes all matching files in a directory and converts them
+    into training data for the Daedelus LLM.
+
+    Examples:
+
+        # Ingest all markdown files in docs/
+        daedelus ingest directory ./docs -p "*.md" -c documentation
+
+        # Recursively ingest all Python files
+        daedelus ingest directory ./src -r -p "*.py" -c code
+
+        # Ingest all files in a directory
+        daedelus ingest directory ./training_data -r
     """
     config: Config = ctx.obj["config"]
     data_dir = config.data_dir
 
-    doc_ingest_db = data_dir / "document_ingestion.db"
+    doc_ingest_db = data_dir / "ingestion.db"
     storage_path = data_dir / "ingested_documents"
 
     try:
         from ..llm.document_ingestion import DocumentIngestionManager
 
-        manager = DocumentIngestionManager(doc_ingest_db, storage_path)
+        console.print(
+            f"[cyan]📂 Ingesting documents from:[/cyan] {dir_path} "
+            f"[dim](pattern: {pattern}, recursive: {recursive})[/dim]"
+        )
 
-        click.echo(f"Ingesting documents from: {dir_path}")
-        click.echo(f"Pattern: {pattern}, Recursive: {recursive}")
+        manager = DocumentIngestionManager(doc_ingest_db, storage_path)
 
         stats = manager.ingest_directory(dir_path, recursive=recursive, pattern=pattern)
 
-        click.echo(f"\n✓ Ingestion complete:")
-        click.echo(f"  • Successful: {stats['success']}")
-        click.echo(f"  • Failed: {stats['failed']}")
-        click.echo(f"  • Skipped: {stats['skipped']}")
+        # Display results
+        console.print("\n[green]✅ Ingestion complete![/green]")
+        console.print(f"  • Success: {stats['success']}")
+        console.print(f"  • Failed: {stats['failed']}")
+        console.print(f"  • Skipped: {stats['skipped']}")
+
+        # Show overall statistics
+        overall_stats = manager.get_statistics()
+        console.print(
+            f"\n[dim]Total documents: {overall_stats['total_documents']} | "
+            f"Training entries: {overall_stats['total_training_entries']}[/dim]"
+        )
 
     except Exception as e:
-        click.echo(f"Error ingesting directory: {e}", err=True)
+        console.print(f"[red]❌ Error:[/red] {e}")
+        logger.error(f"Error ingesting directory: {e}", exc_info=True)
 
 
 @click.group(name="training")
@@ -388,12 +473,7 @@ def training_group():
 @click.option("--limit", "-l", type=int, default=1000, help="Limit per source")
 @click.pass_context
 def training_collect(
-    ctx: click.Context,
-    commands: bool,
-    files: bool,
-    tools: bool,
-    documents: bool,
-    limit: int
+    ctx: click.Context, commands: bool, files: bool, tools: bool, documents: bool, limit: int
 ):
     """
     Collect training data from all sources.
@@ -412,7 +492,7 @@ def training_collect(
             file_ops_db=data_dir / "file_operations.db",
             tool_db=data_dir / "tools.db",
             doc_ingest_db=data_dir / "document_ingestion.db",
-            output_dir=data_dir / "training_data"
+            output_dir=data_dir / "training_data",
         )
 
         click.echo("Collecting training data from all sources...")
@@ -422,7 +502,7 @@ def training_collect(
             include_file_ops=files,
             include_tools=tools,
             include_documents=documents,
-            limit_per_source=limit
+            limit_per_source=limit,
         )
 
         click.echo(f"\n✓ Collected {len(dataset.examples)} training examples")
@@ -430,6 +510,7 @@ def training_collect(
         # Show breakdown
         rprint("\n[bold]Examples by Source:[/bold]")
         from collections import Counter
+
         source_counts = Counter(ex.source.value for ex in dataset.examples)
         for source, count in source_counts.items():
             rprint(f"  • {source}: {count:,}")
@@ -439,11 +520,23 @@ def training_collect(
 
 
 @training_group.command(name="export")
-@click.option("--format", "-f", type=click.Choice(["jsonl", "json", "alpaca"]), default="jsonl", help="Export format")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["jsonl", "json", "alpaca"]),
+    default="jsonl",
+    help="Export format",
+)
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file path")
-@click.option("--quality", "-q", type=click.Choice(["high", "medium", "low"]), default="medium", help="Minimum quality")
+@click.option(
+    "--quality",
+    "-q",
+    type=click.Choice(["high", "medium", "low"]),
+    default="medium",
+    help="Minimum quality",
+)
 @click.pass_context
-def training_export(ctx: click.Context, format: str, output: Optional[Path], quality: str):
+def training_export(ctx: click.Context, format: str, output: Path | None, quality: str):
     """
     Export training data to file.
 
@@ -461,7 +554,7 @@ def training_export(ctx: click.Context, format: str, output: Optional[Path], qua
             file_ops_db=data_dir / "file_operations.db",
             tool_db=data_dir / "tools.db",
             doc_ingest_db=data_dir / "document_ingestion.db",
-            output_dir=data_dir / "training_data"
+            output_dir=data_dir / "training_data",
         )
 
         # Collect data
@@ -473,6 +566,7 @@ def training_export(ctx: click.Context, format: str, output: Optional[Path], qua
 
         if not output:
             from datetime import datetime
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output = data_dir / "training_data" / f"training_export_{timestamp}.{format}"
 
@@ -485,100 +579,133 @@ def training_export(ctx: click.Context, format: str, output: Optional[Path], qua
 
 
 @training_group.command(name="stats")
+@click.option(
+    "--source",
+    "-s",
+    type=click.Choice(["all", "commands", "files", "tools", "documents"]),
+    default="all",
+    help="Show stats for specific source",
+)
 @click.pass_context
-def training_stats(ctx: click.Context):
+def training_stats(ctx: click.Context, source: str):
     """
     Show training data statistics.
 
-    Displays statistics about available training data from all sources.
+    Displays statistics about available training data from all sources,
+    including ingested documents, command history, file operations, and tools.
+
+    Examples:
+
+        # Show all statistics
+        daedelus training stats
+
+        # Show only document ingestion statistics
+        daedelus training stats -s documents
     """
     config: Config = ctx.obj["config"]
     data_dir = config.data_dir
 
     try:
-        from ..llm.training_data_organizer import TrainingDataOrganizer
+        # Show document ingestion stats if requested
+        if source in ["all", "documents"]:
+            try:
+                from ..llm.document_ingestion import DocumentIngestionManager
 
-        organizer = TrainingDataOrganizer(
-            history_db=data_dir / "history.db",
-            file_ops_db=data_dir / "file_operations.db",
-            tool_db=data_dir / "tools.db",
-            doc_ingest_db=data_dir / "document_ingestion.db",
-            output_dir=data_dir / "training_data"
-        )
+                doc_ingest_db = data_dir / "ingestion.db"
+                storage_path = data_dir / "ingested_documents"
 
-        stats = organizer.get_statistics()
+                if doc_ingest_db.exists():
+                    manager = DocumentIngestionManager(doc_ingest_db, storage_path)
+                    doc_stats = manager.get_statistics()
 
-        rprint("\n[bold cyan]Training Data Statistics[/bold cyan]\n")
+                    console.print("\n[bold cyan]📄 Document Ingestion Statistics[/bold cyan]\n")
 
-        for source, source_stats in stats.get('sources', {}).items():
-            rprint(f"[bold]{source.title()}:[/bold]")
-            for key, value in source_stats.items():
-                rprint(f"  • {key}: {value}")
-            rprint()
+                    # Overall stats
+                    table = RichTable(show_header=True)
+                    table.add_column("Metric", style="cyan")
+                    table.add_column("Count", style="green", justify="right")
+
+                    table.add_row("Total Documents", str(doc_stats["total_documents"]))
+                    table.add_row("Training Entries", str(doc_stats["total_training_entries"]))
+
+                    console.print(table)
+
+                    # By document type
+                    if doc_stats["by_type"]:
+                        console.print("\n[bold]Documents by Type:[/bold]")
+                        type_table = RichTable(show_header=True)
+                        type_table.add_column("Type", style="cyan")
+                        type_table.add_column("Count", style="green", justify="right")
+
+                        for doc_type, count in sorted(doc_stats["by_type"].items()):
+                            type_table.add_row(doc_type, str(count))
+
+                        console.print(type_table)
+
+                    # By status
+                    if doc_stats["by_status"]:
+                        console.print("\n[bold]Documents by Status:[/bold]")
+                        status_table = RichTable(show_header=True)
+                        status_table.add_column("Status", style="cyan")
+                        status_table.add_column("Count", style="green", justify="right")
+
+                        for status, count in sorted(doc_stats["by_status"].items()):
+                            status_table.add_row(status, str(count))
+
+                        console.print(status_table)
+
+                    console.print()
+
+                    if source == "documents":
+                        return
+            except Exception as e:
+                logger.debug(f"Failed to get document ingestion stats: {e}")
+
+        # Show comprehensive stats if "all" or specific source
+        if source == "all" or source != "documents":
+            try:
+                from ..llm.training_data_organizer import TrainingDataOrganizer
+
+                organizer = TrainingDataOrganizer(
+                    history_db=data_dir / "history.db",
+                    file_ops_db=data_dir / "file_operations.db",
+                    tool_db=data_dir / "tools.db",
+                    doc_ingest_db=data_dir / "document_ingestion.db",
+                    output_dir=data_dir / "training_data",
+                )
+
+                stats = organizer.get_statistics()
+
+                rprint("\n[bold cyan]Training Data Statistics[/bold cyan]\n")
+
+                for src, source_stats in stats.get("sources", {}).items():
+                    if source == "all" or src.lower() == source:
+                        rprint(f"[bold]{src.title()}:[/bold]")
+                        for key, value in source_stats.items():
+                            rprint(f"  • {key}: {value}")
+                        rprint()
+            except Exception as e:
+                logger.debug(f"Failed to get training organizer stats: {e}")
+                if source != "all" and source != "documents":
+                    click.echo(f"Error getting statistics for {source}: {e}", err=True)
 
     except Exception as e:
         click.echo(f"Error getting training statistics: {e}", err=True)
 
 
 @click.command(name="dashboard")
-@click.option("--enhanced", is_flag=True, help="Use enhanced dashboard with all features")
 @click.pass_context
-def dashboard_command(ctx: click.Context, enhanced: bool):
+def dashboard_command(ctx: click.Context):
     """
     Launch the Daedelus dashboard.
 
     Interactive TUI dashboard for viewing statistics, managing settings,
     and controlling all Daedelus features.
     """
-    config: Config = ctx.obj["config"]
-    data_dir = config.data_dir
-
     try:
-        if enhanced:
-            from ..ui.enhanced_dashboard import run_enhanced_dashboard
-            run_enhanced_dashboard(data_dir, config)
-        else:
-            from ..ui.dashboard import run_dashboard
-            from ..core.database import CommandDatabase
-            import os
+        from ..ui.dashboard import run_dashboard
 
-            # Get stats from database
-            db_path = config.get("database.path")
-
-            # Initialize stats with defaults
-            stats = {
-                "total_commands": 0,
-                "successful_commands": 0,
-                "success_rate": 0.0,
-                "total_sessions": 0,
-                "database_size_bytes": 0
-            }
-
-            # Try to get actual stats from database
-            try:
-                if Path(db_path).exists():
-                    # Get database file size
-                    stats["database_size_bytes"] = os.path.getsize(db_path)
-
-                    # Get command statistics
-                    db = CommandDatabase(db_path)
-                    db_stats = db.get_statistics()
-
-                    stats["total_commands"] = db_stats.get("total_commands", 0)
-                    stats["successful_commands"] = db_stats.get("successful_commands", 0)
-                    stats["success_rate"] = db_stats.get("success_rate", 0.0)
-
-                    # Get session count
-                    sessions = db.get_all_sessions()
-                    stats["total_sessions"] = len(sessions)
-
-                    db.close()
-            except Exception as e:
-                logger.warning(f"Could not load database stats: {e}")
-                # Continue with default stats
-
-            run_dashboard(stats)
-
+        run_dashboard()
     except Exception as e:
         click.echo(f"Error launching dashboard: {e}", err=True)
 
@@ -596,6 +723,7 @@ def settings_command(ctx: click.Context):
 
     try:
         from textual.app import App
+
         from ..ui.settings_panel import SettingsPanel
 
         class SettingsApp(App):
@@ -620,6 +748,7 @@ def memory_command(ctx: click.Context):
     """
     try:
         from textual.app import App
+
         from ..ui.memory_and_permissions import MemoryAndPermissionsPanel
 
         class MemoryApp(App):

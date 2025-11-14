@@ -7,8 +7,8 @@ Created by: orpheus497
 """
 
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
 
@@ -279,11 +279,9 @@ def pytest_configure(config):
     Args:
         config: Pytest config object
     """
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
     config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
     config.addinivalue_line("markers", "llm: marks tests that require LLM models")
-    config.addinivalue_line(
-        "markers", "performance: marks tests that measure performance"
-    )
+    config.addinivalue_line("markers", "performance: marks tests that measure performance")

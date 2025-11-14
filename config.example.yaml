@@ -139,7 +139,7 @@ performance:
 # ============================================
 llm:
   # Enable LLM-based suggestions
-  enabled: false
+  enabled: true
 
   # Path to GGUF model file (TinyLlama 1.1B recommended - 100% FOSS)
   # Automatically scans for any .gguf file in ~/.local/share/models/

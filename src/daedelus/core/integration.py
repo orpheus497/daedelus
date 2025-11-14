@@ -18,28 +18,20 @@ License: MIT
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from ..utils.config import Config
-from .file_operations import (
-    FileOperationsManager,
-    FilePermissionManager,
-    FileMemoryTracker
-)
-from .command_executor import (
-    CommandExecutor,
-    CommandExecutionMemory,
-    ExecutionMode,
-    InteractiveShell
-)
-from .tool_system import (
-    ToolRegistry,
-    ToolExecutor,
-    ToolDeveloper
-)
-from .safety import SafetyAnalyzer
 from ..llm.document_ingestion import DocumentIngestionManager
 from ..llm.training_data_organizer import TrainingDataOrganizer
+from ..utils.config import Config
+from .command_executor import (
+    CommandExecutionMemory,
+    CommandExecutor,
+    ExecutionMode,
+    InteractiveShell,
+)
+from .file_operations import FileMemoryTracker, FileOperationsManager, FilePermissionManager
+from .safety import SafetyAnalyzer
+from .tool_system import ToolExecutor, ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +64,7 @@ class DaedelusIntegration:
         >>> dataset = integration.training_organizer.collect_all_training_data()
     """
 
-    def __init__(
-        self,
-        config: Optional[Config] = None,
-        session_id: Optional[str] = None
-    ):
+    def __init__(self, config: Config | None = None, session_id: str | None = None):
         """
         Initialize integration.
 
@@ -92,16 +80,16 @@ class DaedelusIntegration:
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         # Components (initialized on demand)
-        self._file_ops: Optional[FileOperationsManager] = None
-        self._cmd_exec: Optional[CommandExecutor] = None
-        self._tool_executor: Optional[ToolExecutor] = None
-        self._tool_registry: Optional[ToolRegistry] = None
-        self._doc_ingest: Optional[DocumentIngestionManager] = None
-        self._training_organizer: Optional[TrainingDataOrganizer] = None
-        self._interactive_shell: Optional[InteractiveShell] = None
+        self._file_ops: FileOperationsManager | None = None
+        self._cmd_exec: CommandExecutor | None = None
+        self._tool_executor: ToolExecutor | None = None
+        self._tool_registry: ToolRegistry | None = None
+        self._doc_ingest: DocumentIngestionManager | None = None
+        self._training_organizer: TrainingDataOrganizer | None = None
+        self._interactive_shell: InteractiveShell | None = None
 
         # Shared components
-        self._safety_analyzer: Optional[SafetyAnalyzer] = None
+        self._safety_analyzer: SafetyAnalyzer | None = None
 
         logger.info(f"Daedelus integration initialized (session: {self.session_id})")
 
@@ -156,7 +144,7 @@ class DaedelusIntegration:
         self._file_ops = FileOperationsManager(
             permission_manager=permission_manager,
             memory_tracker=memory_tracker,
-            session_id=self.session_id
+            session_id=self.session_id,
         )
 
         logger.debug("✓ File operations initialized")
@@ -179,7 +167,7 @@ class DaedelusIntegration:
             safety_analyzer=self._safety_analyzer,
             memory_tracker=memory_tracker,
             session_id=self.session_id,
-            default_timeout=self.config.get("command_execution.default_timeout", 300)
+            default_timeout=self.config.get("command_execution.default_timeout", 300),
         )
 
         logger.debug("✓ Command execution initialized")
@@ -200,7 +188,7 @@ class DaedelusIntegration:
         self._tool_executor = ToolExecutor(
             registry=self._tool_registry,
             session_id=self.session_id,
-            require_permission_approval=self.config.get("tools.require_permission_approval", True)
+            require_permission_approval=self.config.get("tools.require_permission_approval", True),
         )
 
         # Auto-discover tools if enabled
@@ -233,7 +221,7 @@ class DaedelusIntegration:
             file_ops_db=self.data_dir / "file_operations.db",
             tool_db=self.data_dir / "tools.db",
             doc_ingest_db=self.data_dir / "document_ingestion.db",
-            output_dir=self.data_dir / "training_data"
+            output_dir=self.data_dir / "training_data",
         )
 
         logger.debug("✓ Training data organizer initialized")
@@ -285,122 +273,117 @@ class DaedelusIntegration:
         """Get interactive shell (lazy init)"""
         if self._interactive_shell is None:
             self._interactive_shell = InteractiveShell(
-                executor=self.cmd_exec,
-                initial_cwd=os.getcwd(),
-                initial_env=os.environ.copy()
+                executor=self.cmd_exec, initial_cwd=os.getcwd(), initial_env=os.environ.copy()
             )
         return self._interactive_shell
 
-    def get_comprehensive_statistics(self) -> Dict[str, Any]:
+    def get_comprehensive_statistics(self) -> dict[str, Any]:
         """
         Get comprehensive statistics from all subsystems.
 
         Returns:
             Dictionary with statistics from all components
         """
-        stats = {
-            'session_id': self.session_id,
-            'data_dir': str(self.data_dir),
-            'subsystems': {}
-        }
+        stats = {"session_id": self.session_id, "data_dir": str(self.data_dir), "subsystems": {}}
 
         # File operations stats
         if self._file_ops:
             try:
-                stats['subsystems']['file_operations'] = self._file_ops.memory_tracker.get_statistics()
+                stats["subsystems"][
+                    "file_operations"
+                ] = self._file_ops.memory_tracker.get_statistics()
             except Exception as e:
                 logger.error(f"Error getting file ops stats: {e}")
-                stats['subsystems']['file_operations'] = {'error': str(e)}
+                stats["subsystems"]["file_operations"] = {"error": str(e)}
 
         # Command execution stats
         if self._cmd_exec:
             try:
-                stats['subsystems']['command_execution'] = self._cmd_exec.memory_tracker.get_statistics()
+                stats["subsystems"][
+                    "command_execution"
+                ] = self._cmd_exec.memory_tracker.get_statistics()
             except Exception as e:
                 logger.error(f"Error getting cmd exec stats: {e}")
-                stats['subsystems']['command_execution'] = {'error': str(e)}
+                stats["subsystems"]["command_execution"] = {"error": str(e)}
 
         # Tool system stats
         if self._tool_registry:
             try:
                 tools = self._tool_registry.list_tools()
-                stats['subsystems']['tools'] = {
-                    'total_tools': len(tools),
-                    'enabled_tools': len([t for t in tools if t.enabled])
+                stats["subsystems"]["tools"] = {
+                    "total_tools": len(tools),
+                    "enabled_tools": len([t for t in tools if t.enabled]),
                 }
             except Exception as e:
                 logger.error(f"Error getting tool stats: {e}")
-                stats['subsystems']['tools'] = {'error': str(e)}
+                stats["subsystems"]["tools"] = {"error": str(e)}
 
         # Document ingestion stats
         if self._doc_ingest:
             try:
-                stats['subsystems']['document_ingestion'] = self._doc_ingest.get_statistics()
+                stats["subsystems"]["document_ingestion"] = self._doc_ingest.get_statistics()
             except Exception as e:
                 logger.error(f"Error getting doc ingest stats: {e}")
-                stats['subsystems']['document_ingestion'] = {'error': str(e)}
+                stats["subsystems"]["document_ingestion"] = {"error": str(e)}
 
         # Training data stats
         if self._training_organizer:
             try:
-                stats['subsystems']['training_data'] = self._training_organizer.get_statistics()
+                stats["subsystems"]["training_data"] = self._training_organizer.get_statistics()
             except Exception as e:
                 logger.error(f"Error getting training stats: {e}")
-                stats['subsystems']['training_data'] = {'error': str(e)}
+                stats["subsystems"]["training_data"] = {"error": str(e)}
 
         return stats
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """
         Perform health check on all subsystems.
 
         Returns:
             Dictionary with health status of each component
         """
-        health = {
-            'overall': 'healthy',
-            'subsystems': {}
-        }
+        health = {"overall": "healthy", "subsystems": {}}
 
         # Check file operations
         try:
             self.file_ops.get_metadata(Path.home())
-            health['subsystems']['file_operations'] = 'healthy'
+            health["subsystems"]["file_operations"] = "healthy"
         except Exception as e:
-            health['subsystems']['file_operations'] = f'unhealthy: {e}'
-            health['overall'] = 'degraded'
+            health["subsystems"]["file_operations"] = f"unhealthy: {e}"
+            health["overall"] = "degraded"
 
         # Check command execution
         try:
-            result = self.cmd_exec.execute("echo test", mode=ExecutionMode.DRY_RUN)
-            health['subsystems']['command_execution'] = 'healthy'
+            self.cmd_exec.execute("echo test", mode=ExecutionMode.DRY_RUN)
+            health["subsystems"]["command_execution"] = "healthy"
         except Exception as e:
-            health['subsystems']['command_execution'] = f'unhealthy: {e}'
-            health['overall'] = 'degraded'
+            health["subsystems"]["command_execution"] = f"unhealthy: {e}"
+            health["overall"] = "degraded"
 
         # Check tool system
         try:
-            tools = self.tool_registry.list_tools()
-            health['subsystems']['tool_system'] = 'healthy'
+            self.tool_registry.list_tools()
+            health["subsystems"]["tool_system"] = "healthy"
         except Exception as e:
-            health['subsystems']['tool_system'] = f'unhealthy: {e}'
-            health['overall'] = 'degraded'
+            health["subsystems"]["tool_system"] = f"unhealthy: {e}"
+            health["overall"] = "degraded"
 
         # Check document ingestion
         try:
-            stats = self.doc_ingest.get_statistics()
-            health['subsystems']['document_ingestion'] = 'healthy'
+            self.doc_ingest.get_statistics()
+            health["subsystems"]["document_ingestion"] = "healthy"
         except Exception as e:
-            health['subsystems']['document_ingestion'] = f'unhealthy: {e}'
-            health['overall'] = 'degraded'
+            health["subsystems"]["document_ingestion"] = f"unhealthy: {e}"
+            health["overall"] = "degraded"
 
         # Check training organizer
         try:
-            stats = self.training_organizer.get_statistics()
-            health['subsystems']['training_organizer'] = 'healthy'
+            self.training_organizer.get_statistics()
+            health["subsystems"]["training_organizer"] = "healthy"
         except Exception as e:
-            health['subsystems']['training_organizer'] = f'unhealthy: {e}'
-            health['overall'] = 'degraded'
+            health["subsystems"]["training_organizer"] = f"unhealthy: {e}"
+            health["overall"] = "degraded"
 
         return health
 
@@ -423,10 +406,10 @@ class DaedelusIntegration:
 
 
 # Global singleton instance
-_global_integration: Optional[DaedelusIntegration] = None
+_global_integration: DaedelusIntegration | None = None
 
 
-def get_integration(config: Optional[Config] = None) -> DaedelusIntegration:
+def get_integration(config: Config | None = None) -> DaedelusIntegration:
     """
     Get global integration instance (singleton pattern).
 
@@ -444,7 +427,9 @@ def get_integration(config: Optional[Config] = None) -> DaedelusIntegration:
     return _global_integration
 
 
-def initialize_integration(config: Optional[Config] = None, discover_tools: bool = True) -> DaedelusIntegration:
+def initialize_integration(
+    config: Config | None = None, discover_tools: bool = True
+) -> DaedelusIntegration:
     """
     Initialize the global integration instance.
 

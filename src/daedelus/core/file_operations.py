@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 import magic  # python-magic for file type detection
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 class AccessType(Enum):
     """Types of file access operations"""
+
     READ = "read"
     WRITE = "write"
     EXECUTE = "execute"
@@ -41,6 +42,7 @@ class AccessType(Enum):
 
 class PermissionLevel(Enum):
     """Permission levels for file operations"""
+
     ALLOWED = "allowed"
     PROMPT = "prompt"
     DENIED = "denied"
@@ -49,26 +51,28 @@ class PermissionLevel(Enum):
 @dataclass
 class FileAccessRecord:
     """Record of a file access operation"""
+
     timestamp: float
     operation: AccessType
     file_path: str
     success: bool
     user_approved: bool = False
-    error_message: Optional[str] = None
-    bytes_read: Optional[int] = None
-    bytes_written: Optional[int] = None
-    session_id: Optional[str] = None
+    error_message: str | None = None
+    bytes_read: int | None = None
+    bytes_written: int | None = None
+    session_id: str | None = None
 
 
 @dataclass
 class PermissionRule:
     """Rule for file access permissions"""
+
     pattern: str  # Glob pattern or regex
-    access_types: Set[AccessType]
+    access_types: set[AccessType]
     permission: PermissionLevel
     reason: str = ""
     is_regex: bool = False
-    compiled_pattern: Optional[re.Pattern] = field(default=None, repr=False)
+    compiled_pattern: re.Pattern | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """Compile regex pattern if needed"""
@@ -91,7 +95,7 @@ class FilePermissionManager:
     - Deny execute by default (requires explicit permission)
     """
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Path | None = None):
         """
         Initialize permission manager.
 
@@ -99,9 +103,9 @@ class FilePermissionManager:
             config_path: Path to permissions configuration file
         """
         self.config_path = config_path
-        self.rules: List[PermissionRule] = []
-        self.user_grants: Dict[str, Set[AccessType]] = {}  # Cached user permissions
-        self.session_denials: Set[Tuple[str, AccessType]] = set()  # Denied in this session
+        self.rules: list[PermissionRule] = []
+        self.user_grants: dict[str, set[AccessType]] = {}  # Cached user permissions
+        self.session_denials: set[tuple[str, AccessType]] = set()  # Denied in this session
 
         self._load_default_rules()
         if config_path and config_path.exists():
@@ -111,19 +115,32 @@ class FilePermissionManager:
         """Load default permission rules"""
         # DENY: Sensitive directories
         sensitive_dirs = [
-            "~/.ssh", "~/.gnupg", "~/.password-store",
-            "~/.aws", "~/.kube", "~/.docker",
-            "/etc/shadow", "/etc/passwd", "/root"
+            "~/.ssh",
+            "~/.gnupg",
+            "~/.password-store",
+            "~/.aws",
+            "~/.kube",
+            "~/.docker",
+            "/etc/shadow",
+            "/etc/passwd",
+            "/root",
         ]
         for dir_path in sensitive_dirs:
             expanded = os.path.expanduser(dir_path)
-            self.rules.append(PermissionRule(
-                pattern=f"{expanded}/**",
-                access_types={AccessType.READ, AccessType.WRITE, AccessType.DELETE, AccessType.EXECUTE},
-                permission=PermissionLevel.DENIED,
-                reason="Sensitive system/security directory",
-                is_regex=False
-            ))
+            self.rules.append(
+                PermissionRule(
+                    pattern=f"{expanded}/**",
+                    access_types={
+                        AccessType.READ,
+                        AccessType.WRITE,
+                        AccessType.DELETE,
+                        AccessType.EXECUTE,
+                    },
+                    permission=PermissionLevel.DENIED,
+                    reason="Sensitive system/security directory",
+                    is_regex=False,
+                )
+            )
 
         # DENY: Sensitive file patterns
         sensitive_patterns = [
@@ -134,40 +151,53 @@ class FilePermissionManager:
             r".*\.env(\..+)?$",  # Environment files
         ]
         for pattern in sensitive_patterns:
-            self.rules.append(PermissionRule(
-                pattern=pattern,
-                access_types={AccessType.READ, AccessType.WRITE, AccessType.DELETE, AccessType.EXECUTE},
-                permission=PermissionLevel.DENIED,
-                reason="Sensitive file pattern",
-                is_regex=True
-            ))
+            self.rules.append(
+                PermissionRule(
+                    pattern=pattern,
+                    access_types={
+                        AccessType.READ,
+                        AccessType.WRITE,
+                        AccessType.DELETE,
+                        AccessType.EXECUTE,
+                    },
+                    permission=PermissionLevel.DENIED,
+                    reason="Sensitive file pattern",
+                    is_regex=True,
+                )
+            )
 
         # PROMPT: Write/Delete operations (require confirmation)
-        self.rules.append(PermissionRule(
-            pattern="**",
-            access_types={AccessType.WRITE, AccessType.DELETE},
-            permission=PermissionLevel.PROMPT,
-            reason="Write/Delete requires confirmation",
-            is_regex=False
-        ))
+        self.rules.append(
+            PermissionRule(
+                pattern="**",
+                access_types={AccessType.WRITE, AccessType.DELETE},
+                permission=PermissionLevel.PROMPT,
+                reason="Write/Delete requires confirmation",
+                is_regex=False,
+            )
+        )
 
         # PROMPT: Execute operations (require confirmation)
-        self.rules.append(PermissionRule(
-            pattern="**",
-            access_types={AccessType.EXECUTE},
-            permission=PermissionLevel.PROMPT,
-            reason="Execute requires confirmation",
-            is_regex=False
-        ))
+        self.rules.append(
+            PermissionRule(
+                pattern="**",
+                access_types={AccessType.EXECUTE},
+                permission=PermissionLevel.PROMPT,
+                reason="Execute requires confirmation",
+                is_regex=False,
+            )
+        )
 
         # ALLOW: Read current directory by default
-        self.rules.append(PermissionRule(
-            pattern="**",
-            access_types={AccessType.READ, AccessType.LIST, AccessType.METADATA},
-            permission=PermissionLevel.ALLOWED,
-            reason="Default read access",
-            is_regex=False
-        ))
+        self.rules.append(
+            PermissionRule(
+                pattern="**",
+                access_types={AccessType.READ, AccessType.LIST, AccessType.METADATA},
+                permission=PermissionLevel.ALLOWED,
+                reason="Default read access",
+                is_regex=False,
+            )
+        )
 
     def _load_rules_from_config(self):
         """Load custom rules from configuration file"""
@@ -175,19 +205,19 @@ class FilePermissionManager:
             return
 
         try:
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path) as f:
                 config = json.load(f)
 
-            for rule_data in config.get('permission_rules', []):
-                access_types = {AccessType(t) for t in rule_data.get('access_types', [])}
-                permission = PermissionLevel(rule_data.get('permission', 'prompt'))
+            for rule_data in config.get("permission_rules", []):
+                access_types = {AccessType(t) for t in rule_data.get("access_types", [])}
+                permission = PermissionLevel(rule_data.get("permission", "prompt"))
 
                 rule = PermissionRule(
-                    pattern=rule_data['pattern'],
+                    pattern=rule_data["pattern"],
                     access_types=access_types,
                     permission=permission,
-                    reason=rule_data.get('reason', ''),
-                    is_regex=rule_data.get('is_regex', False)
+                    reason=rule_data.get("reason", ""),
+                    is_regex=rule_data.get("is_regex", False),
                 )
 
                 # Prepend custom rules (higher priority)
@@ -234,7 +264,9 @@ class FilePermissionManager:
                 match = file_path.match(rule.pattern)
 
             if match:
-                logger.debug(f"Permission check: {file_path} {access_type} -> {rule.permission} ({rule.reason})")
+                logger.debug(
+                    f"Permission check: {file_path} {access_type} -> {rule.permission} ({rule.reason})"
+                )
                 return rule.permission
 
         # Default: prompt for safety
@@ -301,27 +333,27 @@ class FilePermissionManager:
         config = {}
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r') as f:
+                with open(self.config_path) as f:
                     config = json.load(f)
             except Exception as e:
                 logger.error(f"Could not load config: {e}")
                 return
 
         # Add permission grant
-        if 'permissions' not in config:
-            config['permissions'] = {}
-        if 'grants' not in config['permissions']:
-            config['permissions']['grants'] = {}
+        if "permissions" not in config:
+            config["permissions"] = {}
+        if "grants" not in config["permissions"]:
+            config["permissions"]["grants"] = {}
 
-        if file_path not in config['permissions']['grants']:
-            config['permissions']['grants'][file_path] = []
+        if file_path not in config["permissions"]["grants"]:
+            config["permissions"]["grants"][file_path] = []
 
-        if access_type.value not in config['permissions']['grants'][file_path]:
-            config['permissions']['grants'][file_path].append(access_type.value)
+        if access_type.value not in config["permissions"]["grants"][file_path]:
+            config["permissions"]["grants"][file_path].append(access_type.value)
 
         # Save config
         try:
-            with open(self.config_path, 'w') as f:
+            with open(self.config_path, "w") as f:
                 json.dump(config, f, indent=2)
             logger.info(f"Persisted permission grant to config: {file_path} - {access_type.value}")
         except Exception as e:
@@ -343,27 +375,27 @@ class FilePermissionManager:
         config = {}
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r') as f:
+                with open(self.config_path) as f:
                     config = json.load(f)
             except Exception as e:
                 logger.error(f"Could not load config: {e}")
                 return
 
         # Add permission denial
-        if 'permissions' not in config:
-            config['permissions'] = {}
-        if 'denials' not in config['permissions']:
-            config['permissions']['denials'] = {}
+        if "permissions" not in config:
+            config["permissions"] = {}
+        if "denials" not in config["permissions"]:
+            config["permissions"]["denials"] = {}
 
-        if file_path not in config['permissions']['denials']:
-            config['permissions']['denials'][file_path] = []
+        if file_path not in config["permissions"]["denials"]:
+            config["permissions"]["denials"][file_path] = []
 
-        if access_type.value not in config['permissions']['denials'][file_path]:
-            config['permissions']['denials'][file_path].append(access_type.value)
+        if access_type.value not in config["permissions"]["denials"][file_path]:
+            config["permissions"]["denials"][file_path].append(access_type.value)
 
         # Save config
         try:
-            with open(self.config_path, 'w') as f:
+            with open(self.config_path, "w") as f:
                 json.dump(config, f, indent=2)
             logger.info(f"Persisted permission denial to config: {file_path} - {access_type.value}")
         except Exception as e:
@@ -389,7 +421,8 @@ class FileMemoryTracker:
     def _init_database(self):
         """Initialize database schema"""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS file_access_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp REAL NOT NULL,
@@ -406,17 +439,26 @@ class FileMemoryTracker:
                     file_size INTEGER,
                     cwd TEXT
                 )
-            """)
+            """
+            )
 
             # Indexes for efficient querying
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_file_access_timestamp ON file_access_log(timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_file_access_path ON file_access_log(file_path)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_file_access_session ON file_access_log(session_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_file_access_operation ON file_access_log(operation)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_file_access_timestamp ON file_access_log(timestamp)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_file_access_path ON file_access_log(file_path)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_file_access_session ON file_access_log(session_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_file_access_operation ON file_access_log(operation)"
+            )
 
             conn.commit()
 
-    def log_access(self, record: FileAccessRecord, file_metadata: Optional[Dict[str, Any]] = None):
+    def log_access(self, record: FileAccessRecord, file_metadata: dict[str, Any] | None = None):
         """
         Log a file access operation.
 
@@ -427,30 +469,35 @@ class FileMemoryTracker:
         metadata = file_metadata or {}
 
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO file_access_log (
                     timestamp, operation, file_path, success, user_approved,
                     error_message, bytes_read, bytes_written, session_id,
                     file_type, mime_type, file_size, cwd
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record.timestamp,
-                record.operation.value,
-                record.file_path,
-                1 if record.success else 0,
-                1 if record.user_approved else 0,
-                record.error_message,
-                record.bytes_read,
-                record.bytes_written,
-                record.session_id,
-                metadata.get('file_type'),
-                metadata.get('mime_type'),
-                metadata.get('file_size'),
-                metadata.get('cwd', os.getcwd())
-            ))
+            """,
+                (
+                    record.timestamp,
+                    record.operation.value,
+                    record.file_path,
+                    1 if record.success else 0,
+                    1 if record.user_approved else 0,
+                    record.error_message,
+                    record.bytes_read,
+                    record.bytes_written,
+                    record.session_id,
+                    metadata.get("file_type"),
+                    metadata.get("mime_type"),
+                    metadata.get("file_size"),
+                    metadata.get("cwd", os.getcwd()),
+                ),
+            )
             conn.commit()
 
-    def get_recent_accesses(self, limit: int = 100, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_recent_accesses(
+        self, limit: int = 100, session_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """
         Get recent file access records.
 
@@ -465,22 +512,28 @@ class FileMemoryTracker:
             conn.row_factory = sqlite3.Row
 
             if session_id:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT * FROM file_access_log
                     WHERE session_id = ?
                     ORDER BY timestamp DESC
                     LIMIT ?
-                """, (session_id, limit))
+                """,
+                    (session_id, limit),
+                )
             else:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT * FROM file_access_log
                     ORDER BY timestamp DESC
                     LIMIT ?
-                """, (limit,))
+                """,
+                    (limit,),
+                )
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_file_history(self, file_path: Path) -> List[Dict[str, Any]]:
+    def get_file_history(self, file_path: Path) -> list[dict[str, Any]]:
         """
         Get access history for a specific file.
 
@@ -492,15 +545,18 @@ class FileMemoryTracker:
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT * FROM file_access_log
                 WHERE file_path = ?
                 ORDER BY timestamp DESC
-            """, (str(file_path.resolve()),))
+            """,
+                (str(file_path.resolve()),),
+            )
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get statistics about file access operations.
 
@@ -513,39 +569,47 @@ class FileMemoryTracker:
 
             # Operations by type
             by_type = {}
-            for row in conn.execute("SELECT operation, COUNT(*) as count FROM file_access_log GROUP BY operation"):
+            for row in conn.execute(
+                "SELECT operation, COUNT(*) as count FROM file_access_log GROUP BY operation"
+            ):
                 by_type[row[0]] = row[1]
 
             # Success rate
-            success_count = conn.execute("SELECT COUNT(*) FROM file_access_log WHERE success = 1").fetchone()[0]
+            success_count = conn.execute(
+                "SELECT COUNT(*) FROM file_access_log WHERE success = 1"
+            ).fetchone()[0]
             success_rate = (success_count / total * 100) if total > 0 else 0
 
             # Most accessed files
             most_accessed = []
-            for row in conn.execute("""
+            for row in conn.execute(
+                """
                 SELECT file_path, COUNT(*) as count
                 FROM file_access_log
                 GROUP BY file_path
                 ORDER BY count DESC
                 LIMIT 10
-            """):
-                most_accessed.append({'file_path': row[0], 'count': row[1]})
+            """
+            ):
+                most_accessed.append({"file_path": row[0], "count": row[1]})
 
             # Total bytes read/written
-            bytes_stats = conn.execute("""
+            bytes_stats = conn.execute(
+                """
                 SELECT
                     SUM(bytes_read) as total_read,
                     SUM(bytes_written) as total_written
                 FROM file_access_log
-            """).fetchone()
+            """
+            ).fetchone()
 
             return {
-                'total_operations': total,
-                'operations_by_type': by_type,
-                'success_rate': success_rate,
-                'most_accessed_files': most_accessed,
-                'total_bytes_read': bytes_stats[0] or 0,
-                'total_bytes_written': bytes_stats[1] or 0
+                "total_operations": total,
+                "operations_by_type": by_type,
+                "success_rate": success_rate,
+                "most_accessed_files": most_accessed,
+                "total_bytes_read": bytes_stats[0] or 0,
+                "total_bytes_written": bytes_stats[1] or 0,
             }
 
 
@@ -558,7 +622,7 @@ class FileOperationsManager:
         self,
         permission_manager: FilePermissionManager,
         memory_tracker: FileMemoryTracker,
-        session_id: Optional[str] = None
+        session_id: str | None = None,
     ):
         """
         Initialize file operations manager.
@@ -579,7 +643,7 @@ class FileOperationsManager:
             logger.warning(f"Failed to initialize python-magic: {e}")
             self.magic = None
 
-    def _get_file_metadata(self, file_path: Path) -> Dict[str, Any]:
+    def _get_file_metadata(self, file_path: Path) -> dict[str, Any]:
         """
         Get metadata about a file.
 
@@ -593,41 +657,41 @@ class FileOperationsManager:
 
         try:
             stat = file_path.stat()
-            metadata['file_size'] = stat.st_size
-            metadata['created'] = stat.st_ctime
-            metadata['modified'] = stat.st_mtime
-            metadata['accessed'] = stat.st_atime
-            metadata['mode'] = stat.st_mode
+            metadata["file_size"] = stat.st_size
+            metadata["created"] = stat.st_ctime
+            metadata["modified"] = stat.st_mtime
+            metadata["accessed"] = stat.st_atime
+            metadata["mode"] = stat.st_mode
 
             # Detect MIME type
             if self.magic:
                 try:
-                    metadata['mime_type'] = self.magic.from_file(str(file_path))
+                    metadata["mime_type"] = self.magic.from_file(str(file_path))
                 except Exception:
-                    metadata['mime_type'] = mimetypes.guess_type(str(file_path))[0]
+                    metadata["mime_type"] = mimetypes.guess_type(str(file_path))[0]
             else:
-                metadata['mime_type'] = mimetypes.guess_type(str(file_path))[0]
+                metadata["mime_type"] = mimetypes.guess_type(str(file_path))[0]
 
             # Determine file type category
-            mime = metadata.get('mime_type', '')
+            mime = metadata.get("mime_type", "")
             if mime:
-                if mime.startswith('text/'):
-                    metadata['file_type'] = 'text'
-                elif mime.startswith('image/'):
-                    metadata['file_type'] = 'image'
-                elif mime.startswith('application/'):
-                    if 'json' in mime:
-                        metadata['file_type'] = 'json'
-                    elif 'xml' in mime:
-                        metadata['file_type'] = 'xml'
-                    elif 'pdf' in mime:
-                        metadata['file_type'] = 'pdf'
+                if mime.startswith("text/"):
+                    metadata["file_type"] = "text"
+                elif mime.startswith("image/"):
+                    metadata["file_type"] = "image"
+                elif mime.startswith("application/"):
+                    if "json" in mime:
+                        metadata["file_type"] = "json"
+                    elif "xml" in mime:
+                        metadata["file_type"] = "xml"
+                    elif "pdf" in mime:
+                        metadata["file_type"] = "pdf"
                     else:
-                        metadata['file_type'] = 'binary'
+                        metadata["file_type"] = "binary"
                 else:
-                    metadata['file_type'] = 'unknown'
+                    metadata["file_type"] = "unknown"
             else:
-                metadata['file_type'] = 'unknown'
+                metadata["file_type"] = "unknown"
 
         except Exception as e:
             logger.error(f"Failed to get metadata for {file_path}: {e}")
@@ -636,11 +700,11 @@ class FileOperationsManager:
 
     def read_file(
         self,
-        file_path: Union[str, Path],
+        file_path: str | Path,
         binary: bool = False,
-        encoding: str = 'utf-8',
-        max_size: Optional[int] = None
-    ) -> Optional[Union[str, bytes]]:
+        encoding: str = "utf-8",
+        max_size: int | None = None,
+    ) -> str | bytes | None:
         """
         Read a file with permission checking and logging.
 
@@ -668,7 +732,7 @@ class FileOperationsManager:
                 success=False,
                 user_approved=False,
                 error_message="Permission denied",
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record)
             return None
@@ -678,6 +742,7 @@ class FileOperationsManager:
             logger.info(f"Read access requires approval: {file_path}")
             try:
                 import click
+
                 message = f"Allow read access to file: {file_path}?"
                 user_approved = click.confirm(message, default=False)
 
@@ -690,7 +755,7 @@ class FileOperationsManager:
                         success=False,
                         user_approved=False,
                         error_message="User denied access",
-                        session_id=self.session_id
+                        session_id=self.session_id,
                     )
                     self.memory_tracker.log_access(record)
                     return None
@@ -711,19 +776,21 @@ class FileOperationsManager:
             # Check file size
             file_size = file_path.stat().st_size
             if max_size and file_size > max_size:
-                raise ValueError(f"File size ({file_size} bytes) exceeds maximum ({max_size} bytes)")
+                raise ValueError(
+                    f"File size ({file_size} bytes) exceeds maximum ({max_size} bytes)"
+                )
 
             # Read file
             if binary:
-                with open(file_path, 'rb') as f:
+                with open(file_path, "rb") as f:
                     content = f.read()
             else:
-                with open(file_path, 'r', encoding=encoding) as f:
+                with open(file_path, encoding=encoding) as f:
                     content = f.read()
 
             # Log successful access
             metadata = self._get_file_metadata(file_path)
-            metadata['cwd'] = os.getcwd()
+            metadata["cwd"] = os.getcwd()
 
             record = FileAccessRecord(
                 timestamp=datetime.now().timestamp(),
@@ -731,8 +798,10 @@ class FileOperationsManager:
                 file_path=str(file_path),
                 success=True,
                 user_approved=user_approved,
-                bytes_read=len(content) if isinstance(content, bytes) else len(content.encode('utf-8')),
-                session_id=self.session_id
+                bytes_read=(
+                    len(content) if isinstance(content, bytes) else len(content.encode("utf-8"))
+                ),
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record, metadata)
 
@@ -749,18 +818,18 @@ class FileOperationsManager:
                 success=False,
                 user_approved=user_approved,
                 error_message=str(e),
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record)
             return None
 
     def write_file(
         self,
-        file_path: Union[str, Path],
-        content: Union[str, bytes],
+        file_path: str | Path,
+        content: str | bytes,
         binary: bool = False,
-        encoding: str = 'utf-8',
-        append: bool = False
+        encoding: str = "utf-8",
+        append: bool = False,
     ) -> bool:
         """
         Write to a file with permission checking and logging.
@@ -790,7 +859,7 @@ class FileOperationsManager:
                 success=False,
                 user_approved=False,
                 error_message="Permission denied",
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record)
             return False
@@ -800,6 +869,7 @@ class FileOperationsManager:
             logger.warning(f"Write access requires approval: {file_path}")
             try:
                 import click
+
                 message = f"Allow write access to file: {file_path}?"
                 user_approved = click.confirm(message, default=False)
 
@@ -812,7 +882,7 @@ class FileOperationsManager:
                         success=False,
                         user_approved=False,
                         error_message="User denied access",
-                        session_id=self.session_id
+                        session_id=self.session_id,
                     )
                     self.memory_tracker.log_access(record)
                     return False
@@ -828,20 +898,22 @@ class FileOperationsManager:
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Write file
-            mode = 'ab' if append and binary else 'a' if append else 'wb' if binary else 'w'
+            mode = "ab" if append and binary else "a" if append else "wb" if binary else "w"
 
             if binary:
                 with open(file_path, mode) as f:
-                    f.write(content if isinstance(content, bytes) else content.encode('utf-8'))
+                    f.write(content if isinstance(content, bytes) else content.encode("utf-8"))
             else:
                 with open(file_path, mode, encoding=encoding) as f:
-                    f.write(content if isinstance(content, str) else content.decode('utf-8'))
+                    f.write(content if isinstance(content, str) else content.decode("utf-8"))
 
             # Log successful access
             metadata = self._get_file_metadata(file_path)
-            metadata['cwd'] = os.getcwd()
+            metadata["cwd"] = os.getcwd()
 
-            bytes_written = len(content) if isinstance(content, bytes) else len(content.encode('utf-8'))
+            bytes_written = (
+                len(content) if isinstance(content, bytes) else len(content.encode("utf-8"))
+            )
 
             record = FileAccessRecord(
                 timestamp=datetime.now().timestamp(),
@@ -850,7 +922,7 @@ class FileOperationsManager:
                 success=True,
                 user_approved=user_approved,
                 bytes_written=bytes_written,
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record, metadata)
 
@@ -867,17 +939,14 @@ class FileOperationsManager:
                 success=False,
                 user_approved=user_approved,
                 error_message=str(e),
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record)
             return False
 
     def list_directory(
-        self,
-        dir_path: Union[str, Path],
-        pattern: Optional[str] = None,
-        recursive: bool = False
-    ) -> Optional[List[Path]]:
+        self, dir_path: str | Path, pattern: str | None = None, recursive: bool = False
+    ) -> list[Path] | None:
         """
         List files in a directory with permission checking.
 
@@ -904,7 +973,7 @@ class FileOperationsManager:
                 success=False,
                 user_approved=False,
                 error_message="Permission denied",
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record)
             return None
@@ -926,7 +995,7 @@ class FileOperationsManager:
                 if pattern:
                     files = list(dir_path.rglob(pattern))
                 else:
-                    files = list(dir_path.rglob('*'))
+                    files = list(dir_path.rglob("*"))
             else:
                 if pattern:
                     files = list(dir_path.glob(pattern))
@@ -940,9 +1009,9 @@ class FileOperationsManager:
                 file_path=str(dir_path),
                 success=True,
                 user_approved=user_approved,
-                session_id=self.session_id
+                session_id=self.session_id,
             )
-            metadata = {'cwd': os.getcwd(), 'file_count': len(files)}
+            metadata = {"cwd": os.getcwd(), "file_count": len(files)}
             self.memory_tracker.log_access(record, metadata)
 
             logger.info(f"Successfully listed directory: {dir_path} ({len(files)} files)")
@@ -958,12 +1027,12 @@ class FileOperationsManager:
                 success=False,
                 user_approved=user_approved,
                 error_message=str(e),
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record)
             return None
 
-    def get_metadata(self, file_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
+    def get_metadata(self, file_path: str | Path) -> dict[str, Any] | None:
         """
         Get metadata about a file.
 
@@ -991,7 +1060,7 @@ class FileOperationsManager:
                 operation=AccessType.METADATA,
                 file_path=str(file_path),
                 success=True,
-                session_id=self.session_id
+                session_id=self.session_id,
             )
             self.memory_tracker.log_access(record, metadata)
 

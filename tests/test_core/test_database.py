@@ -8,7 +8,6 @@ Created by: orpheus497
 """
 
 import time
-from pathlib import Path
 
 import pytest
 
@@ -49,7 +48,9 @@ def test_log_command(test_db):
 
     # Verify command was stored
     cursor = test_db.conn.cursor()
-    cursor.execute("SELECT command, cwd, exit_code FROM command_history WHERE id = ?", (command_id,))
+    cursor.execute(
+        "SELECT command, cwd, exit_code FROM command_history WHERE id = ?", (command_id,)
+    )
     row = cursor.fetchone()
 
     assert row is not None
@@ -168,9 +169,7 @@ def test_session_tracking(test_db):
 
     # Verify session was recorded
     cursor = test_db.conn.cursor()
-    cursor.execute(
-        "SELECT total_commands, end_time FROM sessions WHERE id = ?", (session_id,)
-    )
+    cursor.execute("SELECT total_commands, end_time FROM sessions WHERE id = ?", (session_id,))
     row = cursor.fetchone()
 
     assert row is not None
@@ -199,6 +198,7 @@ def test_cleanup_old_commands(test_db):
     """Test retention policy for old commands."""
     # Log old command (91 days ago)
     import uuid
+
     old_timestamp = time.time() - (91 * 24 * 60 * 60)
 
     # Create a session for old command
@@ -354,6 +354,7 @@ def test_invalid_command_data(test_db):
     """Test input validation and error handling."""
     # Test with None command (should handle gracefully)
     import sqlite3
+
     with pytest.raises((TypeError, ValueError, sqlite3.IntegrityError)):
         test_db.log_command(None, "/home/user", 0, 0.01)
 

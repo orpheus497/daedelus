@@ -18,16 +18,19 @@ Created: 2025-11-10
 
 import re
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any
+
 
 # Custom exceptions for different validation failures
 class ValidationError(ValueError):
     """Base validation error."""
+
     pass
 
 
 class SecurityError(Exception):
     """Security validation failed - potential attack detected."""
+
     pass
 
 
@@ -44,7 +47,24 @@ class InputValidator:
     """
 
     # Security patterns - patterns that indicate potential attacks
-    SHELL_METACHARACTERS = ['|', '&', ';', '\n', '>', '<', '`', '$', '(', ')', '{', '}', '*', '?', '[', ']']
+    SHELL_METACHARACTERS = [
+        "|",
+        "&",
+        ";",
+        "\n",
+        ">",
+        "<",
+        "`",
+        "$",
+        "(",
+        ")",
+        "{",
+        "}",
+        "*",
+        "?",
+        "[",
+        "]",
+    ]
     SQL_INJECTION_PATTERNS = [
         r"['\";].*(--)|(;)|(\b(OR|AND)\b.*=)",
         r"\b(UNION|SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC)\b",
@@ -53,16 +73,13 @@ class InputValidator:
 
     # Allowed base directories for file operations
     DEFAULT_ALLOWED_BASES = [
-        Path.home() / '.local/share/daedelus',
-        Path.home() / '.config/daedelus',
-        Path.home() / '.cache/daedelus',
+        Path.home() / ".local/share/daedelus",
+        Path.home() / ".config/daedelus",
+        Path.home() / ".cache/daedelus",
     ]
 
     @staticmethod
-    def validate_model_path(
-        path: Union[str, Path],
-        must_exist: bool = True
-    ) -> Path:
+    def validate_model_path(path: str | Path, must_exist: bool = True) -> Path:
         """
         Validate model file path.
 
@@ -106,7 +123,7 @@ class InputValidator:
             raise ValueError(f"Not a file: {path}")
 
         # Check extension
-        valid_extensions = ['.gguf', '.bin', '.pt', '.pth', '.safetensors', '.onnx']
+        valid_extensions = [".gguf", ".bin", ".pt", ".pth", ".safetensors", ".onnx"]
         if path.suffix.lower() not in valid_extensions:
             raise ValueError(
                 f"Invalid model format: {path.suffix}\n"
@@ -134,11 +151,7 @@ class InputValidator:
         return path
 
     @staticmethod
-    def validate_query(
-        query: str,
-        max_length: int = 1000,
-        min_length: int = 1
-    ) -> str:
+    def validate_query(query: str, max_length: int = 1000, min_length: int = 1) -> str:
         """
         Validate search query string.
 
@@ -171,7 +184,9 @@ class InputValidator:
 
         # Check length
         if len(query) < min_length:
-            raise ValueError(f"Query too short (minimum {min_length} character{'s' if min_length != 1 else ''})")
+            raise ValueError(
+                f"Query too short (minimum {min_length} character{'s' if min_length != 1 else ''})"
+            )
 
         if len(query) > max_length:
             raise ValueError(
@@ -180,7 +195,7 @@ class InputValidator:
             )
 
         # Remove control characters but keep whitespace
-        query = ''.join(char for char in query if char.isprintable() or char.isspace())
+        query = "".join(char for char in query if char.isprintable() or char.isspace())
 
         # Check for SQL injection patterns (defense in depth)
         for pattern in InputValidator.SQL_INJECTION_PATTERNS:
@@ -195,9 +210,7 @@ class InputValidator:
 
     @staticmethod
     def validate_path_traversal(
-        path: Union[str, Path],
-        base_dir: Optional[Path] = None,
-        must_exist: bool = False
+        path: str | Path, base_dir: Path | None = None, must_exist: bool = False
     ) -> Path:
         """
         Prevent path traversal attacks.
@@ -249,9 +262,9 @@ class InputValidator:
         if not is_allowed:
             raise SecurityError(
                 f"Path outside allowed directories: {path}\n"
-                f"Allowed directories:\n" +
-                '\n'.join(f"  - {base}" for base in allowed_bases) +
-                "\n\nHint: Use paths within ~/.local/share/daedelus, ~/.config/daedelus, or current directory"
+                f"Allowed directories:\n"
+                + "\n".join(f"  - {base}" for base in allowed_bases)
+                + "\n\nHint: Use paths within ~/.local/share/daedelus, ~/.config/daedelus, or current directory"
             )
 
         # Check existence if required
@@ -267,10 +280,7 @@ class InputValidator:
         return path
 
     @staticmethod
-    def validate_command_arg(
-        arg: str,
-        allow_empty: bool = False
-    ) -> str:
+    def validate_command_arg(arg: str, allow_empty: bool = False) -> str:
         """
         Validate command-line argument for safety.
 
@@ -299,7 +309,7 @@ class InputValidator:
             raise ValueError("Argument cannot be empty")
 
         # Check for null bytes (path/command injection)
-        if '\x00' in arg:
+        if "\x00" in arg:
             raise SecurityError("Argument contains null bytes")
 
         # Check for shell metacharacters
@@ -321,9 +331,9 @@ class InputValidator:
     def validate_config_value(
         value: Any,
         expected_type: type,
-        min_value: Optional[Union[int, float]] = None,
-        max_value: Optional[Union[int, float]] = None,
-        allowed_values: Optional[List[Any]] = None
+        min_value: int | float | None = None,
+        max_value: int | float | None = None,
+        allowed_values: list[Any] | None = None,
     ) -> Any:
         """
         Validate configuration value.
@@ -349,8 +359,7 @@ class InputValidator:
         # Type check
         if not isinstance(value, expected_type):
             raise ValueError(
-                f"Invalid type: expected {expected_type.__name__}, "
-                f"got {type(value).__name__}"
+                f"Invalid type: expected {expected_type.__name__}, " f"got {type(value).__name__}"
             )
 
         # Range check for numbers
@@ -369,14 +378,13 @@ class InputValidator:
         # Enum check
         if allowed_values is not None and value not in allowed_values:
             raise ValueError(
-                f"Invalid value: {value}\n"
-                f"Allowed values: {', '.join(map(str, allowed_values))}"
+                f"Invalid value: {value}\n" f"Allowed values: {', '.join(map(str, allowed_values))}"
             )
 
         return value
 
     @staticmethod
-    def validate_port(port: Union[int, str]) -> int:
+    def validate_port(port: int | str) -> int:
         """
         Validate port number.
 
@@ -407,6 +415,7 @@ class InputValidator:
 
         if port < 1024:
             import os
+
             if os.geteuid() != 0:  # Not root
                 raise ValueError(
                     f"Port {port} requires root privileges (< 1024)\n"
@@ -416,7 +425,7 @@ class InputValidator:
         return port
 
     @staticmethod
-    def validate_url(url: str, allowed_schemes: Optional[List[str]] = None) -> str:
+    def validate_url(url: str, allowed_schemes: list[str] | None = None) -> str:
         """
         Validate URL format.
 
@@ -442,10 +451,10 @@ class InputValidator:
 
         # Default allowed schemes
         if allowed_schemes is None:
-            allowed_schemes = ['http', 'https']
+            allowed_schemes = ["http", "https"]
 
         # Simple URL validation
-        url_pattern = r'^(https?|ftp)://[^\s/$.?#].[^\s]*$'
+        url_pattern = r"^(https?|ftp)://[^\s/$.?#].[^\s]*$"
         if not re.match(url_pattern, url, re.IGNORECASE):
             raise ValueError(
                 f"Invalid URL format: {url}\n"
@@ -453,7 +462,7 @@ class InputValidator:
             )
 
         # Check scheme
-        scheme = url.split('://')[0].lower()
+        scheme = url.split("://")[0].lower()
         if scheme not in allowed_schemes:
             raise ValueError(
                 f"URL scheme '{scheme}' not allowed\n"
@@ -483,24 +492,24 @@ class InputValidator:
             raise ValueError("Filename cannot be empty")
 
         # Remove path separators and null bytes
-        filename = filename.replace('/', '_').replace('\\', '_').replace('\x00', '')
+        filename = filename.replace("/", "_").replace("\\", "_").replace("\x00", "")
 
         # Remove or replace other dangerous characters
-        dangerous = ['<', '>', ':', '"', '|', '?', '*', '\n', '\r', '\t']
+        dangerous = ["<", ">", ":", '"', "|", "?", "*", "\n", "\r", "\t"]
         for char in dangerous:
-            filename = filename.replace(char, '_')
+            filename = filename.replace(char, "_")
 
         # Remove leading/trailing dots and spaces
-        filename = filename.strip('. ')
+        filename = filename.strip(". ")
 
         # Ensure not empty after sanitization
         if not filename:
-            filename = 'unnamed'
+            filename = "unnamed"
 
         # Truncate if too long
         if len(filename) > max_length:
-            name, ext = filename.rsplit('.', 1) if '.' in filename else (filename, '')
-            name = name[:max_length - len(ext) - 1]
+            name, ext = filename.rsplit(".", 1) if "." in filename else (filename, "")
+            name = name[: max_length - len(ext) - 1]
             filename = f"{name}.{ext}" if ext else name
 
         return filename
@@ -535,10 +544,9 @@ class SecurityValidator:
 
         # Check against Python keywords
         import keyword
+
         if keyword.iskeyword(name):
-            raise ValueError(
-                f"Cannot use Python keyword as identifier: {name}"
-            )
+            raise ValueError(f"Cannot use Python keyword as identifier: {name}")
 
         return name
 
@@ -564,7 +572,7 @@ class SecurityValidator:
             )
 
         # Count repetition operators (*, +, {n,m})
-        repetitions = pattern.count('*') + pattern.count('+') + pattern.count('{')
+        repetitions = pattern.count("*") + pattern.count("+") + pattern.count("{")
         if repetitions > 10:
             raise ValueError(
                 f"Too many repetition operators in regex ({repetitions})\n"

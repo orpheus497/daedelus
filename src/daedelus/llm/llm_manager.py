@@ -11,7 +11,6 @@ Created by: orpheus497
 """
 
 import hashlib
-import json
 import logging
 import threading
 import time
@@ -53,9 +52,7 @@ class LLMCache:
         key_str = f"{prompt}|{max_tokens}|{temperature:.2f}"
         return hashlib.md5(key_str.encode()).hexdigest()
 
-    def get(
-        self, prompt: str, max_tokens: int, temperature: float
-    ) -> str | None:
+    def get(self, prompt: str, max_tokens: int, temperature: float) -> str | None:
         """Get cached response if available and not expired."""
         with self._lock:
             key = self._get_key(prompt, max_tokens, temperature)
@@ -284,7 +281,9 @@ class LLMManager:
 
         # Check for exceptions
         if exception_container:
-            raise RuntimeError(f"Generation failed: {exception_container[0]}") from exception_container[0]
+            raise RuntimeError(
+                f"Generation failed: {exception_container[0]}"
+            ) from exception_container[0]
 
         # Extract generated text
         response = result_container[0]

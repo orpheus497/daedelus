@@ -1,0 +1,16 @@
+plugin:
+  name: "Analytics Export"
+  version: "1.0.0"
+  author: "orpheus497"
+  description: "Export command history analytics to JSON or CSV format"
+  
+  main_class: "daedelus.plugins.analytics_export.main:AnalyticsExporter"
+  
+  capabilities:
+    cli_commands: true
+    gui_components: false
+    background_tasks: false
+  
+  permissions:
+    - "database:read"
+    - "filesystem:write"

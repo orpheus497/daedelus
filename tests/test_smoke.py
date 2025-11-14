@@ -34,7 +34,7 @@ def test_version_format():
 
 def test_version_number():
     """Test that version matches expected value."""
-    assert daedelus.__version__ == "0.2.0"
+    assert daedelus.__version__ == "0.4.0"
 
 
 def test_core_modules_importable():

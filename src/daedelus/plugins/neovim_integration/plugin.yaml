@@ -1,0 +1,17 @@
+plugin:
+  name: "Neovim Integration"
+  version: "1.0.0"
+  author: "orpheus497"
+  description: "Integration with Neovim editor for enhanced command line experience"
+  
+  main_class: "daedelus.plugins.neovim_integration.main:NeovimIntegration"
+  
+  capabilities:
+    cli_commands: true
+    gui_components: false
+    background_tasks: false
+  
+  permissions:
+    - "shell:execute"
+    - "config:read"
+    - "filesystem:read"

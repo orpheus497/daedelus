@@ -24,13 +24,15 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from .safety import SafetyAnalyzer, SafetyLevel, SafetyReport
+from .subprocess_validator import SubprocessValidator
 
 logger = logging.getLogger(__name__)
 
@@ -38,20 +40,20 @@ logger = logging.getLogger(__name__)
 class ProcessTreeNode:
     """Represents a process and its children in the process tree."""
 
-    def __init__(self, pid: int, pgid: int, parent_pid: Optional[int] = None):
+    def __init__(self, pid: int, pgid: int, parent_pid: int | None = None):
         self.pid = pid
         self.pgid = pgid
         self.parent_pid = parent_pid
-        self.children: List['ProcessTreeNode'] = []
+        self.children: list[ProcessTreeNode] = []
         self.start_time = time.time()
         self.cpu_usage = 0.0
         self.memory_usage = 0  # bytes
 
-    def add_child(self, child: 'ProcessTreeNode') -> None:
+    def add_child(self, child: "ProcessTreeNode") -> None:
         """Add a child process node."""
         self.children.append(child)
 
-    def get_all_pids(self) -> List[int]:
+    def get_all_pids(self) -> list[int]:
         """Get all PIDs in this subtree."""
         pids = [self.pid]
         for child in self.children:
@@ -62,27 +64,28 @@ class ProcessTreeNode:
         """Update CPU and memory usage from /proc."""
         try:
             # Read CPU usage from /proc/[pid]/stat
-            with open(f"/proc/{self.pid}/stat", "r") as f:
+            with open(f"/proc/{self.pid}/stat") as f:
                 stat_data = f.read().split()
                 # Fields 13-16 are CPU time
                 utime = int(stat_data[13])  # User mode time
                 stime = int(stat_data[14])  # Kernel mode time
-                self.cpu_usage = (utime + stime) / os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+                self.cpu_usage = (utime + stime) / os.sysconf(os.sysconf_names["SC_CLK_TCK"])
 
             # Read memory usage from /proc/[pid]/status
-            with open(f"/proc/{self.pid}/status", "r") as f:
+            with open(f"/proc/{self.pid}/status") as f:
                 for line in f:
                     if line.startswith("VmRSS:"):
                         # Resident Set Size in KB
                         self.memory_usage = int(line.split()[1]) * 1024
                         break
-        except (FileNotFoundError, IOError, IndexError):
+        except (OSError, FileNotFoundError, IndexError):
             # Process may have terminated
             pass
 
 
 class ExecutionMode(Enum):
     """Execution modes for commands"""
+
     DIRECT = "direct"  # Run directly in shell
     SANDBOXED = "sandboxed"  # Run in restricted environment
     DRY_RUN = "dry_run"  # Don't actually execute
@@ -90,6 +93,7 @@ class ExecutionMode(Enum):
 
 class ExecutionStatus(Enum):
     """Status of command execution"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -116,20 +120,21 @@ class ResourceUsage:
 @dataclass
 class CommandResult:
     """Result of a command execution"""
+
     command: str
     status: ExecutionStatus
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
     stdout: str = ""
     stderr: str = ""
     duration: float = 0.0
     timestamp: float = 0.0
-    session_id: Optional[str] = None
+    session_id: str | None = None
     cwd: str = ""
-    environment: Dict[str, str] = None
+    environment: dict[str, str] = None
     user_approved: bool = False
-    safety_level: Optional[SafetyLevel] = None
-    error_message: Optional[str] = None
-    resource_usage: Optional[ResourceUsage] = None
+    safety_level: SafetyLevel | None = None
+    error_message: str | None = None
+    resource_usage: ResourceUsage | None = None
     process_tree_size: int = 0  # Number of processes in tree
 
     def __post_init__(self):
@@ -160,7 +165,8 @@ class CommandExecutionMemory:
         """Initialize/extend database schema for execution tracking"""
         with sqlite3.connect(self.db_path) as conn:
             # Add execution tracking table (extends command_history)
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS command_executions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp REAL NOT NULL,
@@ -178,13 +184,20 @@ class CommandExecutionMemory:
                     error_message TEXT,
                     execution_mode TEXT
                 )
-            """)
+            """
+            )
 
             # Indexes
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_exec_timestamp ON command_executions(timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_exec_session ON command_executions(session_id)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_exec_timestamp ON command_executions(timestamp)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_exec_session ON command_executions(session_id)"
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_exec_status ON command_executions(status)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_exec_command ON command_executions(command)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_exec_command ON command_executions(command)"
+            )
 
             conn.commit()
 
@@ -197,31 +210,36 @@ class CommandExecutionMemory:
             execution_mode: Mode used for execution
         """
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO command_executions (
                     timestamp, command, status, exit_code, stdout, stderr,
                     duration, session_id, cwd, environment, user_approved,
                     safety_level, error_message, execution_mode
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                result.timestamp,
-                result.command,
-                result.status.value,
-                result.exit_code,
-                result.stdout,
-                result.stderr,
-                result.duration,
-                result.session_id,
-                result.cwd,
-                json.dumps(result.environment),
-                1 if result.user_approved else 0,
-                result.safety_level.value if result.safety_level else None,
-                result.error_message,
-                execution_mode.value
-            ))
+            """,
+                (
+                    result.timestamp,
+                    result.command,
+                    result.status.value,
+                    result.exit_code,
+                    result.stdout,
+                    result.stderr,
+                    result.duration,
+                    result.session_id,
+                    result.cwd,
+                    json.dumps(result.environment),
+                    1 if result.user_approved else 0,
+                    result.safety_level.value if result.safety_level else None,
+                    result.error_message,
+                    execution_mode.value,
+                ),
+            )
             conn.commit()
 
-    def get_recent_executions(self, limit: int = 100, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_recent_executions(
+        self, limit: int = 100, session_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """
         Get recent command executions.
 
@@ -236,29 +254,35 @@ class CommandExecutionMemory:
             conn.row_factory = sqlite3.Row
 
             if session_id:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT * FROM command_executions
                     WHERE session_id = ?
                     ORDER BY timestamp DESC
                     LIMIT ?
-                """, (session_id, limit))
+                """,
+                    (session_id, limit),
+                )
             else:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT * FROM command_executions
                     ORDER BY timestamp DESC
                     LIMIT ?
-                """, (limit,))
+                """,
+                    (limit,),
+                )
 
             records = []
             for row in cursor.fetchall():
                 record = dict(row)
-                if record['environment']:
-                    record['environment'] = json.loads(record['environment'])
+                if record["environment"]:
+                    record["environment"] = json.loads(record["environment"])
                 records.append(record)
 
             return records
 
-    def get_command_history(self, command_pattern: str) -> List[Dict[str, Any]]:
+    def get_command_history(self, command_pattern: str) -> list[dict[str, Any]]:
         """
         Get execution history for commands matching a pattern.
 
@@ -270,15 +294,18 @@ class CommandExecutionMemory:
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT * FROM command_executions
                 WHERE command LIKE ?
                 ORDER BY timestamp DESC
-            """, (command_pattern,))
+            """,
+                (command_pattern,),
+            )
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get execution statistics.
 
@@ -291,33 +318,42 @@ class CommandExecutionMemory:
 
             # By status
             by_status = {}
-            for row in conn.execute("SELECT status, COUNT(*) as count FROM command_executions GROUP BY status"):
+            for row in conn.execute(
+                "SELECT status, COUNT(*) as count FROM command_executions GROUP BY status"
+            ):
                 by_status[row[0]] = row[1]
 
             # Success rate
-            completed = by_status.get('completed', 0)
+            completed = by_status.get("completed", 0)
             success_rate = (completed / total * 100) if total > 0 else 0
 
             # Average duration
-            avg_duration = conn.execute("SELECT AVG(duration) FROM command_executions WHERE status = 'completed'").fetchone()[0] or 0
+            avg_duration = (
+                conn.execute(
+                    "SELECT AVG(duration) FROM command_executions WHERE status = 'completed'"
+                ).fetchone()[0]
+                or 0
+            )
 
             # Most used commands
             most_used = []
-            for row in conn.execute("""
+            for row in conn.execute(
+                """
                 SELECT command, COUNT(*) as count
                 FROM command_executions
                 GROUP BY command
                 ORDER BY count DESC
                 LIMIT 10
-            """):
-                most_used.append({'command': row[0], 'count': row[1]})
+            """
+            ):
+                most_used.append({"command": row[0], "count": row[1]})
 
             return {
-                'total_executions': total,
-                'executions_by_status': by_status,
-                'success_rate': success_rate,
-                'average_duration': avg_duration,
-                'most_used_commands': most_used
+                "total_executions": total,
+                "executions_by_status": by_status,
+                "success_rate": success_rate,
+                "average_duration": avg_duration,
+                "most_used_commands": most_used,
             }
 
 
@@ -336,11 +372,11 @@ class CommandExecutor:
         self,
         safety_analyzer: SafetyAnalyzer,
         memory_tracker: CommandExecutionMemory,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         default_timeout: int = 300,
-        max_memory_mb: Optional[int] = None,
-        max_cpu_time: Optional[int] = None,
-        max_file_descriptors: Optional[int] = None,
+        max_memory_mb: int | None = None,
+        max_cpu_time: int | None = None,
+        max_file_descriptors: int | None = None,
     ):
         """
         Initialize command executor.
@@ -365,9 +401,11 @@ class CommandExecutor:
         self.max_file_descriptors = max_file_descriptors
 
         # Track active processes with process trees
-        self.active_processes: Dict[str, subprocess.Popen] = {}
-        self.process_trees: Dict[str, ProcessTreeNode] = {}
+        self.active_processes: dict[str, subprocess.Popen] = {}
+        self.process_trees: dict[str, ProcessTreeNode] = {}
         self.process_lock = threading.Lock()
+        # Validate subprocess commands before execution
+        self.subproc_validator = SubprocessValidator(allow_shell=True, strict_mode=True)
 
     def _set_resource_limits(self) -> None:
         """
@@ -386,7 +424,9 @@ class CommandExecutor:
 
         if self.max_file_descriptors:
             # File descriptor limit
-            resource.setrlimit(resource.RLIMIT_NOFILE, (self.max_file_descriptors, self.max_file_descriptors))
+            resource.setrlimit(
+                resource.RLIMIT_NOFILE, (self.max_file_descriptors, self.max_file_descriptors)
+            )
 
         # Create new process group for easier cleanup
         os.setpgrp()
@@ -429,7 +469,7 @@ class CommandExecutor:
 
                 try:
                     pid = int(entry)
-                    with open(f"/proc/{pid}/stat", "r") as f:
+                    with open(f"/proc/{pid}/stat") as f:
                         stat_data = f.read()
                         # Extract parent PID (4th field)
                         parent_pid = int(stat_data.split(")")[1].split()[1])
@@ -553,11 +593,11 @@ class CommandExecutor:
         self,
         command: str,
         mode: ExecutionMode = ExecutionMode.DIRECT,
-        timeout: Optional[int] = None,
-        cwd: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None,
+        timeout: int | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
         capture_output: bool = True,
-        stream_callback: Optional[Callable[[str], None]] = None
+        stream_callback: Callable[[str], None] | None = None,
     ) -> CommandResult:
         """
         Execute a command with safety checking and logging.
@@ -583,7 +623,7 @@ class CommandExecutor:
             timestamp=timestamp,
             session_id=self.session_id,
             cwd=cwd or os.getcwd(),
-            environment=env or {}
+            environment=env or {},
         )
 
         # Safety check
@@ -593,7 +633,9 @@ class CommandExecutor:
         if safety_report.level == SafetyLevel.BLOCKED:
             logger.error(f"Command blocked by safety analyzer: {command}")
             result.status = ExecutionStatus.DENIED
-            result.error_message = "Command blocked due to safety concerns: " + "; ".join(safety_report.warnings)
+            result.error_message = "Command blocked due to safety concerns: " + "; ".join(
+                safety_report.warnings
+            )
             self.memory_tracker.log_execution(result, mode)
             return result
 
@@ -603,15 +645,13 @@ class CommandExecutor:
 
             # Prompt user for confirmation
             # Get overall risk score from safety report
-            if safety_report.risk_score and hasattr(safety_report.risk_score, 'overall_risk'):
+            if safety_report.risk_score and hasattr(safety_report.risk_score, "overall_risk"):
                 overall_risk = safety_report.risk_score.overall_risk
             else:
                 # Fallback: estimate risk from safety level
                 overall_risk = 0.9 if safety_report.level == SafetyLevel.DANGEROUS else 0.6
 
-            user_approved = self._prompt_user_for_confirmation(
-                command, overall_risk, safety_report
-            )
+            user_approved = self._prompt_user_for_confirmation(command, overall_risk, safety_report)
 
             if not user_approved:
                 logger.info(f"User denied execution of command: {command}")
@@ -633,20 +673,24 @@ class CommandExecutor:
 
         # Sandboxed mode
         if mode == ExecutionMode.SANDBOXED:
-            return self._execute_sandboxed(command, result, timeout, cwd, env, capture_output, stream_callback)
+            return self._execute_sandboxed(
+                command, result, timeout, cwd, env, capture_output, stream_callback
+            )
 
         # Direct execution
-        return self._execute_direct(command, result, timeout, cwd, env, capture_output, stream_callback)
+        return self._execute_direct(
+            command, result, timeout, cwd, env, capture_output, stream_callback
+        )
 
     def _execute_direct(
         self,
         command: str,
         result: CommandResult,
-        timeout: Optional[int],
-        cwd: Optional[str],
-        env: Optional[Dict[str, str]],
+        timeout: int | None,
+        cwd: str | None,
+        env: dict[str, str] | None,
         capture_output: bool,
-        stream_callback: Optional[Callable[[str], None]]
+        stream_callback: Callable[[str], None] | None,
     ) -> CommandResult:
         """
         Execute command directly in shell with process tree tracking and resource limits.
@@ -666,6 +710,18 @@ class CommandExecutor:
             if env:
                 exec_env.update(env)
 
+            # Security validation (subprocess)
+            vres = self.subproc_validator.validate_command(
+                command, shell=True, cwd=cwd or os.getcwd()
+            )
+            if not vres.is_safe:
+                result.status = ExecutionStatus.DENIED
+                result.error_message = (
+                    f"Command failed security validation: {', '.join(vres.violations)}"
+                )
+                self.memory_tracker.log_execution(result, ExecutionMode.DIRECT)
+                return result
+
             # Execute command
             if stream_callback:
                 # Use PTY for real-time streaming
@@ -676,9 +732,11 @@ class CommandExecutor:
             else:
                 # Use subprocess for captured output with resource limits
                 # preexec_fn will set resource limits and create process group
-                preexec = self._set_resource_limits if any([
-                    self.max_memory_mb, self.max_cpu_time, self.max_file_descriptors
-                ]) else os.setpgrp
+                preexec = (
+                    self._set_resource_limits
+                    if any([self.max_memory_mb, self.max_cpu_time, self.max_file_descriptors])
+                    else os.setpgrp
+                )
 
                 process = subprocess.Popen(
                     command,
@@ -688,7 +746,7 @@ class CommandExecutor:
                     cwd=cwd,
                     env=exec_env,
                     text=True,
-                    preexec_fn=preexec  # Set resource limits and create process group
+                    preexec_fn=preexec,  # Set resource limits and create process group
                 )
 
                 # Track process
@@ -698,14 +756,14 @@ class CommandExecutor:
 
                 # Start resource monitoring in background
                 monitor_thread = threading.Thread(
-                    target=self._monitor_resources,
-                    args=(process_id,),
-                    daemon=True
+                    target=self._monitor_resources, args=(process_id,), daemon=True
                 )
                 monitor_thread.start()
 
                 try:
-                    stdout_data, stderr_data = process.communicate(timeout=timeout or self.default_timeout)
+                    stdout_data, stderr_data = process.communicate(
+                        timeout=timeout or self.default_timeout
+                    )
                     exit_code = process.returncode
                 except subprocess.TimeoutExpired:
                     # Kill entire process tree, not just parent
@@ -731,9 +789,7 @@ class CommandExecutor:
                             max_memory = max(max_memory, child.memory_usage)
 
                         result.resource_usage = ResourceUsage(
-                            cpu_time=total_cpu,
-                            max_memory=max_memory,
-                            child_processes=child_count
+                            cpu_time=total_cpu, max_memory=max_memory, child_processes=child_count
                         )
                         result.process_tree_size = len(tree.get_all_pids())
 
@@ -749,7 +805,9 @@ class CommandExecutor:
             result.duration = time.time() - start_time
 
             if result.status != ExecutionStatus.TIMEOUT:
-                result.status = ExecutionStatus.COMPLETED if exit_code == 0 else ExecutionStatus.FAILED
+                result.status = (
+                    ExecutionStatus.COMPLETED if exit_code == 0 else ExecutionStatus.FAILED
+                )
 
             logger.info(
                 f"Command executed: {command} "
@@ -771,11 +829,11 @@ class CommandExecutor:
         self,
         command: str,
         result: CommandResult,
-        timeout: Optional[int],
-        cwd: Optional[str],
-        env: Optional[Dict[str, str]],
+        timeout: int | None,
+        cwd: str | None,
+        env: dict[str, str] | None,
         capture_output: bool,
-        stream_callback: Optional[Callable[[str], None]]
+        stream_callback: Callable[[str], None] | None,
     ) -> CommandResult:
         """
         Execute command in sandboxed environment.
@@ -796,25 +854,44 @@ class CommandExecutor:
                 "--quiet",
                 "--shell=none",
                 "--",
-                "sh", "-c", command
+                "sh",
+                "-c",
+                command,
             ]
         elif self._check_command_exists("bwrap"):
             # Bubblewrap sandbox
             sandbox_cmd = [
                 "bwrap",
-                "--ro-bind", "/usr", "/usr",
-                "--ro-bind", "/lib", "/lib",
-                "--ro-bind", "/lib64", "/lib64",
-                "--ro-bind", "/bin", "/bin",
-                "--ro-bind", "/sbin", "/sbin",
-                "--tmpfs", "/tmp",
+                "--ro-bind",
+                "/usr",
+                "/usr",
+                "--ro-bind",
+                "/lib",
+                "/lib",
+                "--ro-bind",
+                "/lib64",
+                "/lib64",
+                "--ro-bind",
+                "/bin",
+                "/bin",
+                "--ro-bind",
+                "/sbin",
+                "/sbin",
+                "--tmpfs",
+                "/tmp",
                 "--unshare-all",
                 "--die-with-parent",
-                "sh", "-c", command
+                "sh",
+                "-c",
+                command,
             ]
         else:
-            logger.warning("No sandboxing tool found (firejail, bwrap), falling back to direct execution")
-            return self._execute_direct(command, result, timeout, cwd, env, capture_output, stream_callback)
+            logger.warning(
+                "No sandboxing tool found (firejail, bwrap), falling back to direct execution"
+            )
+            return self._execute_direct(
+                command, result, timeout, cwd, env, capture_output, stream_callback
+            )
 
         # Execute in sandbox
         try:
@@ -831,7 +908,7 @@ class CommandExecutor:
                 stderr=subprocess.PIPE if capture_output else None,
                 cwd=cwd,
                 env=exec_env,
-                text=True
+                text=True,
             )
 
             stdout_data, stderr_data = process.communicate(timeout=timeout or self.default_timeout)
@@ -843,12 +920,16 @@ class CommandExecutor:
             result.duration = time.time() - start_time
             result.status = ExecutionStatus.COMPLETED if exit_code == 0 else ExecutionStatus.FAILED
 
-            logger.info(f"Sandboxed command executed: {command} (exit={exit_code}, duration={result.duration:.2f}s)")
+            logger.info(
+                f"Sandboxed command executed: {command} (exit={exit_code}, duration={result.duration:.2f}s)"
+            )
 
         except subprocess.TimeoutExpired:
             process.kill()
             result.status = ExecutionStatus.TIMEOUT
-            result.error_message = f"Sandboxed command timed out after {timeout or self.default_timeout} seconds"
+            result.error_message = (
+                f"Sandboxed command timed out after {timeout or self.default_timeout} seconds"
+            )
             result.duration = time.time() - start_time
 
         except Exception as e:
@@ -864,9 +945,9 @@ class CommandExecutor:
     def _execute_with_pty(
         self,
         command: str,
-        cwd: Optional[str],
-        env: Dict[str, str],
-        stream_callback: Callable[[str], None]
+        cwd: str | None,
+        env: dict[str, str],
+        stream_callback: Callable[[str], None],
     ) -> subprocess.Popen:
         """
         Execute command with PTY for real-time output streaming.
@@ -886,9 +967,11 @@ class CommandExecutor:
 
         try:
             # preexec_fn will set resource limits and create process group
-            preexec = self._set_resource_limits if any([
-                self.max_memory_mb, self.max_cpu_time, self.max_file_descriptors
-            ]) else os.setsid
+            preexec = (
+                self._set_resource_limits
+                if any([self.max_memory_mb, self.max_cpu_time, self.max_file_descriptors])
+                else os.setsid
+            )
 
             process = subprocess.Popen(
                 command,
@@ -898,7 +981,7 @@ class CommandExecutor:
                 stderr=slave,
                 cwd=cwd,
                 env=env,
-                preexec_fn=preexec
+                preexec_fn=preexec,
             )
 
             os.close(slave)
@@ -910,7 +993,7 @@ class CommandExecutor:
                         try:
                             ready, _, _ = select.select([master], [], [], 0.1)
                             if ready:
-                                data = os.read(master, 1024).decode('utf-8', errors='replace')
+                                data = os.read(master, 1024).decode("utf-8", errors="replace")
                                 if data:
                                     stream_callback(data)
                                 else:
@@ -948,17 +1031,15 @@ class CommandExecutor:
 
     def _check_command_exists(self, command: str) -> bool:
         """Check if a command exists in PATH"""
-        return subprocess.run(
-            ["which", command],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        ).returncode == 0
+        return (
+            subprocess.run(
+                ["which", command], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ).returncode
+            == 0
+        )
 
     def _prompt_user_for_confirmation(
-        self,
-        command: str,
-        risk_score: float,
-        safety_report: SafetyReport
+        self, command: str, risk_score: float, safety_report: SafetyReport
     ) -> bool:
         """
         Prompt user for confirmation before executing dangerous command.
@@ -974,7 +1055,9 @@ class CommandExecutor:
         try:
             # Check if running in interactive terminal
             if not sys.stdin.isatty() or not sys.stdout.isatty():
-                logger.warning("Non-interactive environment detected, auto-denying dangerous command")
+                logger.warning(
+                    "Non-interactive environment detected, auto-denying dangerous command"
+                )
                 return False
 
             # Try to import click and rich for nice formatting
@@ -1013,41 +1096,40 @@ class CommandExecutor:
                     risk_text.append("\n")
 
                 # Display panel
-                console.print(Panel(
-                    risk_text,
-                    title=f"⚠️  Safety Check",
-                    border_style="red" if risk_score >= 0.8 else "yellow",
-                    padding=(1, 2)
-                ))
+                console.print(
+                    Panel(
+                        risk_text,
+                        title="⚠️  Safety Check",
+                        border_style="red" if risk_score >= 0.8 else "yellow",
+                        padding=(1, 2),
+                    )
+                )
 
                 # Prompt for confirmation
-                return click.confirm(
-                    "Do you want to proceed with this command?",
-                    default=False
-                )
+                return click.confirm("Do you want to proceed with this command?", default=False)
 
             except ImportError:
                 # Fallback to simple text prompt if rich/click not available
                 print(f"\n{'='*60}")
-                print(f"⚠️  SAFETY WARNING")
+                print("⚠️  SAFETY WARNING")
                 print(f"{'='*60}")
                 print(f"Command: {command}")
                 print(f"Risk Score: {risk_score:.1%}")
 
                 if safety_report.warnings:
-                    print(f"\nWarnings:")
+                    print("\nWarnings:")
                     for warning in safety_report.warnings:
                         print(f"  • {warning}")
 
                 if safety_report.suggestions:
-                    print(f"\nSuggestions:")
+                    print("\nSuggestions:")
                     for suggestion in safety_report.suggestions:
                         print(f"  • {suggestion}")
 
                 print(f"\n{'='*60}")
 
                 response = input("Proceed with execution? (y/N): ").strip().lower()
-                return response in ['y', 'yes']
+                return response in ["y", "yes"]
 
         except Exception as e:
             logger.error(f"Error in confirmation prompt: {e}")
@@ -1083,12 +1165,12 @@ class CommandExecutor:
                         return 0
                 return 0
 
-    def get_active_processes(self) -> List[str]:
+    def get_active_processes(self) -> list[str]:
         """Get list of active process IDs"""
         with self.process_lock:
             return list(self.active_processes.keys())
 
-    def get_process_tree_info(self, process_id: str) -> Optional[Dict[str, Any]]:
+    def get_process_tree_info(self, process_id: str) -> dict[str, Any] | None:
         """
         Get detailed process tree information.
 
@@ -1105,7 +1187,7 @@ class CommandExecutor:
 
             tree.update_resource_usage()
 
-            def node_to_dict(node: ProcessTreeNode) -> Dict[str, Any]:
+            def node_to_dict(node: ProcessTreeNode) -> dict[str, Any]:
                 return {
                     "pid": node.pid,
                     "pgid": node.pgid,
@@ -1113,7 +1195,7 @@ class CommandExecutor:
                     "cpu_usage": node.cpu_usage,
                     "memory_usage": node.memory_usage,
                     "uptime": time.time() - node.start_time,
-                    "children": [node_to_dict(child) for child in node.children]
+                    "children": [node_to_dict(child) for child in node.children],
                 }
 
             return node_to_dict(tree)
@@ -1127,8 +1209,8 @@ class InteractiveShell:
     def __init__(
         self,
         executor: CommandExecutor,
-        initial_cwd: Optional[str] = None,
-        initial_env: Optional[Dict[str, str]] = None
+        initial_cwd: str | None = None,
+        initial_env: dict[str, str] | None = None,
     ):
         """
         Initialize interactive shell.
@@ -1141,8 +1223,8 @@ class InteractiveShell:
         self.executor = executor
         self.cwd = initial_cwd or os.getcwd()
         self.env = initial_env or os.environ.copy()
-        self.history: List[CommandResult] = []
-        self.variables: Dict[str, str] = {}
+        self.history: list[CommandResult] = []
+        self.variables: dict[str, str] = {}
 
     def execute_command(self, command: str, **kwargs) -> CommandResult:
         """
@@ -1156,7 +1238,7 @@ class InteractiveShell:
             CommandResult
         """
         # Handle cd command specially to maintain state
-        if command.strip().startswith('cd '):
+        if command.strip().startswith("cd "):
             new_dir = command.strip()[3:].strip()
             try:
                 new_path = Path(new_dir).resolve() if new_dir else Path.home()
@@ -1170,7 +1252,7 @@ class InteractiveShell:
                     stdout=f"Changed directory to {self.cwd}",
                     timestamp=datetime.now().timestamp(),
                     session_id=self.executor.session_id,
-                    cwd=self.cwd
+                    cwd=self.cwd,
                 )
                 self.history.append(result)
                 return result
@@ -1183,23 +1265,18 @@ class InteractiveShell:
                     stderr=str(e),
                     timestamp=datetime.now().timestamp(),
                     session_id=self.executor.session_id,
-                    cwd=self.cwd
+                    cwd=self.cwd,
                 )
                 self.history.append(result)
                 return result
 
         # Execute command with current context
-        result = self.executor.execute(
-            command,
-            cwd=self.cwd,
-            env=self.env,
-            **kwargs
-        )
+        result = self.executor.execute(command, cwd=self.cwd, env=self.env, **kwargs)
 
         self.history.append(result)
         return result
 
-    def get_history(self, limit: Optional[int] = None) -> List[CommandResult]:
+    def get_history(self, limit: int | None = None) -> list[CommandResult]:
         """Get command history for this shell session"""
         if limit:
             return self.history[-limit:]

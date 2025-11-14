@@ -27,7 +27,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Pattern, Set
+from re import Pattern
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class PrivacyViolation:
     """Detected privacy violation."""
 
     command: str
-    violated_patterns: List[str]
+    violated_patterns: list[str]
     severity: str
     timestamp: float
     action_taken: str  # blocked, redacted, logged
@@ -69,8 +70,8 @@ class PrivacyConfig:
     """Privacy configuration."""
 
     level: PrivacyLevel = PrivacyLevel.MEDIUM
-    excluded_paths: Set[str] = field(default_factory=set)
-    excluded_patterns: List[Pattern[str]] = field(default_factory=list)
+    excluded_paths: set[str] = field(default_factory=set)
+    excluded_patterns: list[Pattern[str]] = field(default_factory=list)
     allow_logging_cwd: bool = True
     allow_logging_env_vars: bool = False
     hash_sensitive_data: bool = True
@@ -124,7 +125,7 @@ class PrivacyManager:
         "/etc/ssh",
     }
 
-    def __init__(self, config: Optional[PrivacyConfig] = None) -> None:
+    def __init__(self, config: PrivacyConfig | None = None) -> None:
         """
         Initialize privacy manager.
 
@@ -133,11 +134,11 @@ class PrivacyManager:
         """
         self.config = config or PrivacyConfig()
         self.patterns = self._build_patterns()
-        self.violations: List[PrivacyViolation] = []
-        self.dynamic_sensitive_paths: Set[str] = set()
+        self.violations: list[PrivacyViolation] = []
+        self.dynamic_sensitive_paths: set[str] = set()
         self._discover_sensitive_paths()
 
-    def _build_patterns(self) -> Dict[str, PrivacyPattern]:
+    def _build_patterns(self) -> dict[str, PrivacyPattern]:
         """
         Build comprehensive privacy patterns.
 
@@ -235,9 +236,7 @@ class PrivacyManager:
 
         patterns["phone_number"] = PrivacyPattern(
             name="phone_number",
-            pattern=re.compile(
-                r"\b(?:\+?1[-.]?)?\(?([0-9]{3})\)?[-.]?([0-9]{3})[-.]?([0-9]{4})\b"
-            ),
+            pattern=re.compile(r"\b(?:\+?1[-.]?)?\(?([0-9]{3})\)?[-.]?([0-9]{3})[-.]?([0-9]{4})\b"),
             description="Phone Number",
             severity="medium",
             category="pii",
@@ -289,7 +288,9 @@ class PrivacyManager:
         # IP Addresses (internal)
         patterns["internal_ip"] = PrivacyPattern(
             name="internal_ip",
-            pattern=re.compile(r"\b(?:10|172\.(?:1[6-9]|2[0-9]|3[01])|192\.168)\.[0-9]{1,3}\.[0-9]{1,3}\b"),
+            pattern=re.compile(
+                r"\b(?:10|172\.(?:1[6-9]|2[0-9]|3[01])|192\.168)\.[0-9]{1,3}\.[0-9]{1,3}\b"
+            ),
             description="Internal IP Address",
             severity="low",
             category="pii",
@@ -362,7 +363,7 @@ class PrivacyManager:
         if violations:
             # Block commands with critical violations
             if any(v.severity == "critical" for v in violations):
-                logger.warning(f"Blocking command with critical privacy violations")
+                logger.warning("Blocking command with critical privacy violations")
                 return False
 
             # In HIGH mode, block any violations
@@ -412,7 +413,7 @@ class PrivacyManager:
 
         return False
 
-    def check_violations(self, command: str) -> List[PrivacyViolation]:
+    def check_violations(self, command: str) -> list[PrivacyViolation]:
         """
         Check command for privacy violations.
 
@@ -480,7 +481,7 @@ class PrivacyManager:
             return self._hash_command(command)
 
         # Apply pattern-based redaction
-        for pattern_name, pattern_obj in self.patterns.items():
+        for _pattern_name, pattern_obj in self.patterns.items():
             # Always redact critical patterns
             if pattern_obj.severity == "critical":
                 redacted = pattern_obj.pattern.sub("[REDACTED]", redacted)
@@ -541,7 +542,7 @@ class PrivacyManager:
         except Exception as e:
             logger.error(f"Failed to log privacy violation: {e}")
 
-    def get_privacy_report(self) -> Dict[str, Any]:
+    def get_privacy_report(self) -> dict[str, Any]:
         """
         Generate privacy report with statistics.
 

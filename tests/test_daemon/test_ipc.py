@@ -62,6 +62,7 @@ def test_ping_pong(test_config, temp_dir):
     thread.start()
 
     import time
+
     time.sleep(0.1)
 
     # Send ping
@@ -89,8 +90,8 @@ def test_log_command_request(test_config):
             "command": "git status",
             "cwd": "/home/user/project",
             "exit_code": 0,
-            "duration": 0.05
-        }
+            "duration": 0.05,
+        },
     }
 
     # Should serialize to JSON
@@ -105,8 +106,8 @@ def test_suggest_request(test_config):
         "data": {
             "partial": "git st",
             "cwd": "/home/user/project",
-            "history": ["git add .", "git commit"]
-        }
+            "history": ["git add .", "git commit"],
+        },
     }
 
     json_str = json.dumps(message)
@@ -133,8 +134,8 @@ def test_invalid_message_format():
 
 def test_socket_permissions(test_config, temp_dir):
     """Test that socket has correct permissions."""
-    import socket
     import os
+    import socket
 
     socket_path = temp_dir / "test.sock"
 

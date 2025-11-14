@@ -15,7 +15,6 @@ import logging
 import os
 import re
 import signal
-import socket
 import sys
 import time
 import uuid
@@ -24,6 +23,8 @@ from typing import Any
 
 from daedelus.core.database import CommandDatabase
 from daedelus.core.embeddings import CommandEmbedder
+from daedelus.core.plugin_interface import DaedalusPlugin
+from daedelus.core.plugin_loader import PluginLoader
 from daedelus.core.suggestions import SuggestionEngine
 from daedelus.core.vector_store import VectorStore
 from daedelus.daemon.ipc import IPCServer
@@ -68,6 +69,14 @@ class DaedelusDaemon:
         self.vector_store: VectorStore | None = None
         self.suggestion_engine: SuggestionEngine | None = None
         self.ipc_server: IPCServer | None = None
+        self.plugin_loader: PluginLoader | None = None
+        self.plugins: list[DaedalusPlugin] = []
+
+        # LLM components (optional, only initialized if enabled in config)
+        self.llm_manager = None
+        self.command_explainer = None
+        self.command_generator = None
+        self.ai_interpreter = None
 
         # Privacy filtering
         self._excluded_paths: list[Path] = []
@@ -136,65 +145,93 @@ class DaedelusDaemon:
         )
 
         # Embedding model
-        model_path = Path(self.config.get("model.model_path"))
-        self.embedder = CommandEmbedder(
-            model_path=model_path,
-            embedding_dim=self.config.get("model.embedding_dim"),
-            vocab_size=self.config.get("model.vocab_size"),
-            min_count=self.config.get("model.min_count"),
-            word_ngrams=self.config.get("model.word_ngrams"),
-            epoch=self.config.get("model.epoch"),
-        )
+        # logger.info("Step 3/7: Initializing embedding model...")
+        # model_path = Path(self.config.get("model.model_path"))
+        # self.embedder = CommandEmbedder(
+        #     model_path=model_path,
+        #     embedding_dim=self.config.get("model.embedding_dim"),
+        #     vocab_size=self.config.get("model.vocab_size"),
+        #     min_count=self.config.get("model.min_count"),
+        #     word_ngrams=self.config.get("model.word_ngrams"),
+        #     epoch=self.config.get("model.epoch"),
+        # )
+        # logger.info("Step 3/7: Embedding model initialized.")
+        self.embedder = None  # Explicitly set to None
 
         # Try to load existing model, or train new one
-        try:
-            self.embedder.load()
-            logger.info("Loaded existing embedding model")
-        except FileNotFoundError:
-            logger.info("No existing model found")
-            # Try to train from existing commands if we have enough
-            recent_commands = self.db.get_recent_commands(n=1000, successful_only=True)
-            if len(recent_commands) >= 10:
-                logger.info(
-                    f"Found {len(recent_commands)} commands in database, training model..."
-                )
-                command_strings = [cmd["command"] for cmd in recent_commands]
-                try:
-                    self.embedder.train_from_corpus(command_strings)
-                    self.embedder.save()
-                    logger.info("Successfully trained and saved initial model")
-                except Exception as e:
-                    logger.warning(f"Failed to train initial model: {e}")
-            else:
-                logger.info("Not enough commands yet, will train after collecting data")
+        # try:
+        #     self.embedder.load()
+        #     logger.info("Loaded existing embedding model")
+        # except (FileNotFoundError, AttributeError):
+        #     logger.info("No existing model found, attempting to train...")
+        #     recent_commands = self.db.get_recent_commands(n=1000, successful_only=True)
+        #     if len(recent_commands) >= 10:
+        #         command_strings = [cmd["command"] for cmd in recent_commands]
+        #         try:
+        #             self.embedder.train_from_corpus(command_strings)
+        #             self.embedder.save()
+        #             logger.info("Successfully trained and saved initial model")
+        #         except Exception as e:
+        #             logger.warning(f"Failed to train initial model: {e}")
+        #     else:
+        #         logger.info("Not enough commands to train initial model.")
 
         # Vector store
-        index_path = Path(self.config.get("vector_store.index_path"))
-        self.vector_store = VectorStore(
-            index_path=index_path,
-            dim=self.config.get("model.embedding_dim"),
-            n_trees=self.config.get("vector_store.n_trees"),
-        )
-
-        # Try to load existing index
-        try:
-            self.vector_store.load()
-            logger.info("Loaded existing vector index")
-        except FileNotFoundError:
-            logger.info("No existing index found, will build on first use")
+        # logger.info("Step 4/7: Initializing vector store...")
+        # index_path = Path(self.config.get("vector_store.index_path"))
+        # self.vector_store = VectorStore(
+        #     index_path=index_path,
+        #     dim=self.config.get("model.embedding_dim"),
+        #     n_trees=self.config.get("vector_store.n_trees"),
+        # )
+        # try:
+        #     self.vector_store.load()
+        #     logger.info("Loaded existing vector index")
+        # except FileNotFoundError:
+        #     logger.info("No existing index found.")
+        # logger.info("Step 4/7: Vector store initialized.")
+        self.vector_store = None  # Explicitly set to None
 
         # Suggestion engine
-        self.suggestion_engine = SuggestionEngine(
-            db=self.db,
-            embedder=self.embedder,
-            vector_store=self.vector_store,
-            max_suggestions=self.config.get("suggestions.max_suggestions"),
-            min_confidence=self.config.get("suggestions.min_confidence"),
-        )
+        # logger.info("Step 5/7: Initializing suggestion engine...")
+        # self.suggestion_engine = SuggestionEngine(
+        #     db=self.db,
+        #     embedder=self.embedder,
+        #     vector_store=self.vector_store,
+        #     max_suggestions=self.config.get("suggestions.max_suggestions"),
+        #     min_confidence=self.config.get("suggestions.min_confidence"),
+        # )
+        # logger.info("Step 5/7: Suggestion engine initialized.")
+        self.suggestion_engine = None  # Explicitly set to None
 
         # IPC server
+        logger.info("Step 6/7: Initializing IPC server...")
         socket_path = self.config.get("daemon.socket_path")
         self.ipc_server = IPCServer(socket_path, handler=self)
+        logger.info("Step 6/7: IPC server initialized.")
+
+        # Plugin Loader
+        logger.info("Initializing plugin system...")
+        from daedelus.core.permission_manager import PermissionManager
+
+        internal_plugin_dir = Path(__file__).parent.parent / "plugins"
+        external_plugin_dir = Path.home() / ".local" / "share" / "daedelus" / "plugins"
+
+        # Initialize permission manager
+        permission_manager = PermissionManager(self.config.data_dir)
+
+        self.plugin_loader = PluginLoader(
+            internal_plugin_dir=internal_plugin_dir,
+            external_plugin_dir=external_plugin_dir,
+            cli_cache_path=self.config.data_dir / "cli_commands.json",
+            permission_manager=permission_manager,
+        )
+        self.plugin_loader.discover_and_load_plugins()
+        self.plugins = self.plugin_loader.get_loaded_plugins()
+        logger.info(f"Loaded {len(self.plugins)} plugins.")
+
+        # Initialize LLM components if enabled
+        self._initialize_llm_components()
 
         logger.info("All components initialized")
 
@@ -229,6 +266,61 @@ class DaedelusDaemon:
                 f"Privacy filters loaded: {len(self._excluded_paths)} paths, "
                 f"{len(self._excluded_patterns)} patterns"
             )
+
+    def _initialize_llm_components(self) -> None:
+        """Initialize LLM components if enabled in configuration."""
+        try:
+            # Check if LLM is enabled in config
+            llm_enabled = self.config.get("llm.enabled", False)
+            if not llm_enabled:
+                logger.info("LLM features disabled in configuration")
+                return
+
+            # Import LLM components
+            from daedelus.llm.command_explainer import CommandExplainer
+            from daedelus.llm.command_generator import CommandGenerator
+            from daedelus.llm.llm_manager import LLMManager
+
+            # Get model path from config
+            model_path = Path(self.config.get("llm.model_path"))
+
+            if not model_path.exists():
+                logger.warning(f"LLM model not found at {model_path}, LLM features disabled")
+                return
+
+            logger.info("Initializing LLM components...")
+
+            # Initialize LLM manager
+            self.llm_manager = LLMManager(
+                model_path=model_path,
+                context_length=self.config.get("llm.context_length", 2048),
+                temperature=self.config.get("llm.temperature", 0.7),
+            )
+
+            # Initialize explainer and generator
+            self.command_explainer = CommandExplainer(self.llm_manager)
+            self.command_generator = CommandGenerator(self.llm_manager)
+            
+            # Initialize AI interpreter
+            from daedelus.llm.ai_interpreter import AIInterpreter
+            self.ai_interpreter = AIInterpreter(
+                self.llm_manager,
+                command_generator=self.command_generator,
+                cache_dir=self.config.data_dir / "interpreter_cache"
+            )
+
+            logger.info("LLM components initialized successfully")
+
+        except ImportError as e:
+            logger.warning(f"LLM dependencies not available: {e}")
+            self.llm_manager = None
+            self.command_explainer = None
+            self.command_generator = None
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM components: {e}", exc_info=True)
+            self.llm_manager = None
+            self.command_explainer = None
+            self.command_generator = None
 
     def _should_filter_command(self, command: str, cwd: str) -> bool:
         """
@@ -296,7 +388,7 @@ class DaedelusDaemon:
 
                     self.stats["requests_handled"] += 1
 
-                except socket.timeout:
+                except TimeoutError:
                     # Normal timeout, check if we should continue
                     continue
 
@@ -320,6 +412,10 @@ class DaedelusDaemon:
         Returns:
             Response with 'suggestions' list
         """
+        if not self.suggestion_engine:
+            logger.warning("Suggestion engine not available, returning empty suggestion list.")
+            return {"suggestions": []}
+
         partial = data.get("partial", "")
         cwd = data.get("cwd")
         history = data.get("history", [])
@@ -378,7 +474,12 @@ class DaedelusDaemon:
             )
 
             # Add to vector store if model is ready
-            if self.embedder.model and self.vector_store.is_built():
+            if (
+                self.embedder
+                and self.embedder.model
+                and self.vector_store
+                and self.vector_store.is_built()
+            ):
                 try:
                     self.embedder.encode_command(command)
                     # Note: Can't add to built index, will rebuild on shutdown
@@ -410,14 +511,47 @@ class DaedelusDaemon:
             data: Search query
 
         Returns:
-            Search results
+            Search results (list of command records or strings based on format parameter)
         """
-        query = data.get("query", "")
-        limit = data.get("limit", 20)
+        if not self.db:
+            logger.warning("Database not available, returning empty search results.")
+            return {"results": []}
 
-        results = self.db.search_commands(query, limit=limit)
+        query = (data.get("query", "") or "").strip()
+        limit = int(data.get("limit", 20) or 20)
+        format_type = data.get("format", "string")  # "string" or "full"
 
-        return {"results": results}
+        try:
+            if not query:
+                # When no query provided, return recent commands
+                rows = self.db.get_recent_commands(n=limit, successful_only=False)
+            else:
+                # Full-text search when query provided
+                rows = self.db.search_commands(query, limit=limit)
+
+            # Return based on requested format
+            if format_type == "full":
+                # Return full command records (for dashboard)
+                results = []
+                for r in rows:
+                    if isinstance(r, dict):
+                        results.append(r)
+                    elif isinstance(r, str):
+                        # Convert string to dict format
+                        results.append({"command": r})
+                return {"results": results[:limit]}
+            else:
+                # Normalize to list of command strings (for shell)
+                commands: list[str] = []
+                for r in rows:
+                    if isinstance(r, dict) and "command" in r:
+                        commands.append(r["command"])
+                    elif isinstance(r, str):
+                        commands.append(r)
+                return {"results": commands[:limit]}
+        except Exception as e:
+            logger.error(f"Search failed: {e}", exc_info=True)
+            return {"results": []}
 
     def handle_ping(self, data: dict[str, Any]) -> dict[str, Any]:
         """Handle ping request (health check)."""
@@ -447,6 +581,643 @@ class DaedelusDaemon:
         self.shutdown()
         return {"status": "shutting_down"}
 
+    def handle_get_analytics(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle analytics data request from GUI.
+
+        Returns:
+            Dictionary with comprehensive analytics data
+        """
+        self.stats["requests_handled"] += 1
+
+        if not self.db:
+            return {
+                "total_commands": 0,
+                "unique_commands": 0,
+                "successful_commands": 0,
+                "success_rate": 0.0,
+                "most_used_commands": [],
+                "total_sessions": 0,
+            }
+
+        try:
+            analytics = self.db.get_analytics_data()
+            return analytics
+        except Exception as e:
+            logger.error(f"Failed to get analytics: {e}", exc_info=True)
+            return {
+                "error": str(e),
+                "total_commands": 0,
+                "unique_commands": 0,
+                "successful_commands": 0,
+                "success_rate": 0.0,
+                "most_used_commands": [],
+                "total_sessions": 0,
+            }
+
+    def handle_get_config(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle configuration get request from GUI.
+
+        Args:
+            data: {"key": "config.key.path"}
+
+        Returns:
+            Dictionary with configuration value
+        """
+        self.stats["requests_handled"] += 1
+
+        key = data.get("key")
+        if not key:
+            return {"error": "No key specified"}
+
+        try:
+            value = self.config.get(key)
+            return {"key": key, "value": value}
+        except Exception as e:
+            logger.error(f"Failed to get config key '{key}': {e}")
+            return {"error": str(e), "key": key, "value": None}
+
+    def handle_set_config(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle configuration set request from GUI.
+
+        Args:
+            data: {"key": "config.key.path", "value": <new_value>}
+
+        Returns:
+            Dictionary with success status
+        """
+        self.stats["requests_handled"] += 1
+
+        key = data.get("key")
+        value = data.get("value")
+
+        if not key:
+            return {"error": "No key specified", "success": False}
+
+        try:
+            self.config.set(key, value)
+            self.config.save()
+            logger.info(f"Config updated: {key} = {value}")
+            return {"success": True, "key": key, "value": value}
+        except Exception as e:
+            logger.error(f"Failed to set config key '{key}': {e}")
+            return {"error": str(e), "success": False}
+
+    def handle_stream_logs(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle log streaming request from GUI.
+
+        Note: This is a placeholder. Full implementation would require
+        a different IPC mechanism (e.g., websocket, long-polling).
+
+        Returns:
+            Dictionary with recent log entries
+        """
+        self.stats["requests_handled"] += 1
+
+        # For now, return a message indicating this feature is not yet implemented
+        return {
+            "supported": False,
+            "message": "Log streaming requires enhanced IPC mechanism",
+            "suggestion": "Check daemon.log file directly for now",
+        }
+
+    def handle_explain(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle request to explain a command using LLM.
+
+        Args:
+            data: Request data with 'command' key
+
+        Returns:
+            Response with explanation or error
+        """
+        self.stats["requests_handled"] += 1
+        command = data.get("command", "").strip()
+
+        if not command:
+            return {"status": "error", "message": "No command provided"}
+
+        try:
+            # Check if LLM is available
+            if not hasattr(self, "llm_manager") or self.llm_manager is None:
+                return {
+                    "status": "unavailable",
+                    "message": "LLM is not available - enable in config",
+                    "explanation": "LLM features are disabled or not configured",
+                }
+
+            # Use command explainer if available
+            from daedelus.llm.command_explainer import CommandExplainer
+
+            explainer = CommandExplainer(self.llm_manager)
+            explanation = explainer.explain(command)
+
+            return {"status": "success", "command": command, "explanation": explanation}
+
+        except ImportError:
+            return {
+                "status": "unavailable",
+                "message": "LLM components not available",
+                "explanation": "Please install LLM dependencies",
+            }
+        except Exception as e:
+            logger.error(f"Failed to explain command: {e}")
+            return {
+                "status": "error",
+                "message": str(e),
+                "explanation": f"Error generating explanation: {e}",
+            }
+
+    def handle_explain_command(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle request to explain a command using LLM.
+
+        Args:
+            data: Request data with 'command' key
+
+        Returns:
+            Response with explanation or error
+        """
+        command = data.get("command", "").strip()
+
+        if not command:
+            return {"error": "No command provided"}
+
+        # Check if LLM components are available
+        if not self.command_explainer:
+            return {
+                "error": "LLM features not enabled",
+                "explanation": "LLM is not configured or model not found. Enable llm.enabled in config and ensure model is downloaded.",
+            }
+
+        try:
+            # Generate explanation
+            explanation = self.command_explainer.explain_command(command)
+            return {"explanation": explanation, "command": command}
+
+        except Exception as e:
+            logger.error(f"Failed to explain command: {e}", exc_info=True)
+            return {"error": str(e)}
+
+    def handle_generate_command(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle request to generate a command from natural language description.
+
+        Args:
+            data: Request data with 'description' key
+
+        Returns:
+            Response with generated command or error
+        """
+        description = data.get("description", "").strip()
+
+        if not description:
+            return {"error": "No description provided"}
+
+        # Check if LLM components are available
+        if not self.command_generator:
+            return {
+                "error": "LLM features not enabled",
+                "command": "",
+            }
+
+        try:
+            # Get optional parameters
+            return_multiple = data.get("return_multiple", False)
+            cwd = data.get("cwd")
+            history = data.get("history")
+
+            # Generate command(s)
+            result = self.command_generator.generate_command(
+                description=description,
+                cwd=cwd,
+                history=history,
+                return_multiple=return_multiple,
+            )
+
+            if return_multiple:
+                return {"commands": result}
+            else:
+                return {"command": result}
+
+        except Exception as e:
+            logger.error(f"Failed to generate command: {e}", exc_info=True)
+            return {"error": str(e), "command": ""}
+
+    def handle_get_stats(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle statistics request.
+
+        Returns command usage statistics in format expected by REPL.
+
+        Args:
+            data: Request data (unused)
+
+        Returns:
+            Statistics dictionary
+        """
+        if not self.db:
+            return {
+                "total_commands": 0,
+                "unique_commands": 0,
+                "success_rate": 0.0,
+                "most_used": "N/A",
+                "top_commands": [],
+            }
+
+        try:
+            # Get database statistics
+            db_stats = self.db.get_statistics()
+
+            # Get top commands
+            recent = self.db.get_recent_commands(n=1000, successful_only=True)
+
+            # Count command frequencies
+            from collections import Counter
+
+            command_counts = Counter([cmd["command"] for cmd in recent])
+            top_commands = command_counts.most_common(10)
+
+            # Calculate success rate
+            total = db_stats.get("total_commands", 0)
+            successful = db_stats.get("successful_commands", 0)
+            success_rate = (successful / total * 100) if total > 0 else 0.0
+
+            # Get most used command
+            most_used = top_commands[0][0] if top_commands else "N/A"
+
+            return {
+                "total_commands": total,
+                "unique_commands": db_stats.get("unique_commands", 0),
+                "success_rate": success_rate,
+                "most_used": most_used,
+                "top_commands": top_commands,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get stats: {e}", exc_info=True)
+            return {
+                "total_commands": 0,
+                "unique_commands": 0,
+                "success_rate": 0.0,
+                "most_used": "N/A",
+                "top_commands": [],
+            }
+
+    def handle_interpret_natural_language(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle natural language interpretation request.
+
+        Args:
+            data: Request with "text", "cwd", "session_id"
+
+        Returns:
+            Interpretation result with intent, action, commands, explanation
+        """
+        if not self.llm_manager:
+            return {
+                "status": "error",
+                "error": "LLM not enabled. Run 'daedelus model setup' to enable AI features."
+            }
+
+        text = data.get("text", "").strip()
+        if not text:
+            return {"status": "error", "error": "No text provided"}
+
+        try:
+            # Initialize AI interpreter if not already done
+            if not hasattr(self, 'ai_interpreter') or not self.ai_interpreter:
+                from daedelus.llm.ai_interpreter import AIInterpreter
+                self.ai_interpreter = AIInterpreter(
+                    self.llm_manager,
+                    command_generator=self.command_generator,
+                    cache_dir=self.config.data_dir / "interpreter_cache"
+                )
+
+            # Get context
+            cwd = data.get("cwd", os.getcwd())
+            history = []
+            if self.db:
+                recent = self.db.get_recent_commands(n=10, successful_only=True)
+                history = [cmd["command"] for cmd in recent]
+
+            # Interpret
+            result = self.ai_interpreter.interpret(
+                text,
+                cwd=cwd,
+                history=history,
+                session_id=data.get("session_id")
+            )
+
+            # Log prompt to database for training data collection
+            if self.db:
+                try:
+                    prompt_id = self.db.insert_nlp_prompt(
+                        prompt_text=text,
+                        intent=result.intent,
+                        intent_confidence=result.confidence,
+                        generated_commands=result.commands,
+                        cwd=cwd,
+                        session_id=data.get("session_id") or self.session_id,
+                    )
+                    logger.debug(f"Logged NLP prompt: {prompt_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to log NLP prompt: {e}")
+
+            return {
+                "status": "ok",
+                "intent": result.intent,
+                "action": result.action,
+                "commands": result.commands,
+                "explanation": result.explanation,
+                "confidence": result.confidence,
+            }
+
+        except Exception as e:
+            logger.error(f"Natural language interpretation failed: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_write_script(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle script writing request.
+
+        Args:
+            data: Request with "description", "cwd"
+
+        Returns:
+            Script path and content
+        """
+        if not self.llm_manager:
+            return {
+                "status": "error",
+                "error": "LLM not enabled. Run 'daedelus model setup' to enable AI features."
+            }
+
+        description = data.get("description", "").strip()
+        if not description:
+            return {"status": "error", "error": "No description provided"}
+
+        try:
+            # Initialize AI interpreter if not already done
+            if not hasattr(self, 'ai_interpreter') or not self.ai_interpreter:
+                from daedelus.llm.ai_interpreter import AIInterpreter
+                self.ai_interpreter = AIInterpreter(
+                    self.llm_manager,
+                    command_generator=self.command_generator,
+                    cache_dir=self.config.data_dir / "interpreter_cache"
+                )
+
+            cwd = data.get("cwd", os.getcwd())
+            result = self.ai_interpreter.write_script(description, cwd=cwd)
+
+            if result.script_path:
+                return {
+                    "status": "ok",
+                    "script_path": result.script_path,
+                    "script_content": result.script_content,
+                    "language": self.ai_interpreter._detect_script_language(description),
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": result.explanation
+                }
+
+        except Exception as e:
+            logger.error(f"Script writing failed: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_read_file(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle file reading request with optional AI analysis.
+
+        Args:
+            data: Request with "file_path", "analyze"
+
+        Returns:
+            File content and optional analysis
+        """
+        if not self.llm_manager:
+            return {
+                "status": "error",
+                "error": "LLM not enabled. Run 'daedelus model setup' to enable AI features."
+            }
+
+        file_path = data.get("file_path", "").strip()
+        if not file_path:
+            return {"status": "error", "error": "No file path provided"}
+
+        try:
+            # Initialize AI interpreter if not already done
+            if not hasattr(self, 'ai_interpreter') or not self.ai_interpreter:
+                from daedelus.llm.ai_interpreter import AIInterpreter
+                self.ai_interpreter = AIInterpreter(
+                    self.llm_manager,
+                    command_generator=self.command_generator,
+                    cache_dir=self.config.data_dir / "interpreter_cache"
+                )
+
+            analyze = data.get("analyze", True)
+            result = self.ai_interpreter.read_file(file_path, analyze=analyze)
+
+            if result.file_content is not None:
+                # Detect file type
+                from pathlib import Path
+                ext = Path(file_path).suffix.lstrip('.')
+                file_type = ext if ext else "text"
+                
+                return {
+                    "status": "ok",
+                    "content": result.file_content,
+                    "analysis": result.explanation if analyze else "",
+                    "file_type": file_type,
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": result.explanation
+                }
+
+        except Exception as e:
+            logger.error(f"File reading failed: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_write_file(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle file writing request with AI assistance.
+
+        Args:
+            data: Request with "file_path", "description", "cwd"
+
+        Returns:
+            Success status and written file path
+        """
+        if not self.llm_manager:
+            return {
+                "status": "error",
+                "error": "LLM not enabled. Run 'daedelus model setup' to enable AI features."
+            }
+
+        file_path = data.get("file_path", "").strip()
+        description = data.get("description", "").strip()
+        
+        if not file_path or not description:
+            return {"status": "error", "error": "File path and description required"}
+
+        try:
+            # Initialize AI interpreter if not already done
+            if not hasattr(self, 'ai_interpreter') or not self.ai_interpreter:
+                from daedelus.llm.ai_interpreter import AIInterpreter
+                self.ai_interpreter = AIInterpreter(
+                    self.llm_manager,
+                    command_generator=self.command_generator,
+                    cache_dir=self.config.data_dir / "interpreter_cache"
+                )
+
+            cwd = data.get("cwd", os.getcwd())
+            result = self.ai_interpreter.write_file(file_path, description, cwd=cwd)
+
+            if result.action == "create":
+                return {
+                    "status": "ok",
+                    "file_path": file_path,
+                    "message": result.explanation,
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": result.explanation
+                }
+
+        except Exception as e:
+            logger.error(f"File writing failed: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_get_prompt_history(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle request for NLP prompt history.
+
+        Args:
+            data: Request data with optional "limit", "feedback_filter", "intent_filter"
+
+        Returns:
+            List of prompts with metadata
+        """
+        if not self.db:
+            return {"status": "error", "error": "Database not available"}
+
+        try:
+            limit = data.get("limit", 100)
+            feedback_filter = data.get("feedback_filter")
+            intent_filter = data.get("intent_filter")
+
+            prompts = self.db.get_nlp_prompts(
+                limit=limit,
+                feedback_filter=feedback_filter,
+                intent_filter=intent_filter,
+            )
+
+            return {"status": "ok", "prompts": prompts}
+
+        except Exception as e:
+            logger.error(f"Failed to get prompt history: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_update_prompt_feedback(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle update of prompt feedback.
+
+        Args:
+            data: Request with "prompt_id", "feedback", optional "executed_command", "exit_code"
+
+        Returns:
+            Success status
+        """
+        if not self.db:
+            return {"status": "error", "error": "Database not available"}
+
+        try:
+            prompt_id = data.get("prompt_id")
+            if not prompt_id:
+                return {"status": "error", "error": "No prompt_id provided"}
+
+            feedback = data.get("feedback")
+            executed_command = data.get("executed_command")
+            exit_code = data.get("exit_code")
+
+            self.db.update_nlp_prompt_feedback(
+                prompt_id=prompt_id,
+                executed_command=executed_command,
+                exit_code=exit_code,
+                feedback=feedback,
+            )
+
+            return {"status": "ok"}
+
+        except Exception as e:
+            logger.error(f"Failed to update prompt feedback: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_export_prompt_training_data(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle export of training data to file.
+
+        Args:
+            data: Request data (optional "output_path")
+
+        Returns:
+            Export path and count
+        """
+        if not self.db:
+            return {"status": "error", "error": "Database not available"}
+
+        try:
+            output_path = data.get("output_path")
+            if not output_path:
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = self.config.data_dir / f"training_data_{timestamp}.json"
+            else:
+                output_path = Path(output_path)
+
+            count = self.db.export_training_data(output_path)
+
+            return {
+                "status": "ok",
+                "export_path": str(output_path),
+                "count": count,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to export training data: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_clear_prompt_history(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle clearing of prompt history.
+
+        Args:
+            data: Request data with optional "older_than_days"
+
+        Returns:
+            Number of prompts deleted
+        """
+        if not self.db:
+            return {"status": "error", "error": "Database not available"}
+
+        try:
+            older_than_days = data.get("older_than_days")
+            count = self.db.clear_nlp_prompts(older_than_days=older_than_days)
+
+            return {"status": "ok", "deleted": count}
+
+        except Exception as e:
+            logger.error(f"Failed to clear prompt history: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
     # ========================================
     # Shutdown & Learning
     # ========================================
@@ -458,6 +1229,14 @@ class DaedelusDaemon:
 
         logger.info("Shutting down daemon...")
         self.running = False
+
+        # Unload plugins
+        for plugin in self.plugins:
+            try:
+                logger.info(f"Unloading plugin '{plugin.api.plugin_name}'...")
+                plugin.unload()
+            except Exception as e:
+                logger.error(f"Error unloading plugin '{plugin.api.plugin_name}': {e}")
 
         # Stop accepting new connections
         if self.ipc_server:

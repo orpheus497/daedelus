@@ -14,9 +14,11 @@ License: MIT
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
+from textual import on
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import (
     Button,
@@ -27,8 +29,6 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
-from textual.binding import Binding
-from textual import on
 
 logger = logging.getLogger(__name__)
 
@@ -142,12 +142,7 @@ class EnhancedDashboardApp(App):
         Binding("ctrl+e", "export_data", "Export"),
     ]
 
-    def __init__(
-        self,
-        data_dir: Path,
-        config: Optional[Any] = None,
-        **kwargs: Any
-    ) -> None:
+    def __init__(self, data_dir: Path, config: Any | None = None, **kwargs: Any) -> None:
         """
         Initialize enhanced dashboard.
 
@@ -161,12 +156,7 @@ class EnhancedDashboardApp(App):
         self.config = config
 
         # Statistics storage
-        self.stats = {
-            'commands': {},
-            'files': {},
-            'tools': {},
-            'training': {}
-        }
+        self.stats = {"commands": {}, "files": {}, "tools": {}, "training": {}}
 
     def compose(self) -> ComposeResult:
         """Compose dashboard UI"""
@@ -413,7 +403,9 @@ class EnhancedDashboardApp(App):
 
         # Training controls
         with Horizontal(classes="button-row"):
-            container.mount(Button("Collect Training Data", id="collect_training", variant="primary"))
+            container.mount(
+                Button("Collect Training Data", id="collect_training", variant="primary")
+            )
             container.mount(Button("Ingest Document", id="ingest_doc", variant="default"))
             container.mount(Button("Export Training Data", id="export_training", variant="default"))
             container.mount(Button("Train Model", id="train_model", variant="success"))
@@ -486,11 +478,11 @@ class EnhancedDashboardApp(App):
     def load_overview_data(self):
         """Load overview tab data from databases"""
         try:
+
             from daedelus.core.database import CommandDatabase
             from daedelus.core.file_operations import FileOperationsManager
             from daedelus.core.tool_system import ToolRegistry
             from daedelus.llm.training_data_organizer import TrainingDataOrganizer
-            from datetime import datetime
 
             table = self.query_one("#overview_activity_table", DataTable)
             table.clear()
@@ -505,12 +497,14 @@ class EnhancedDashboardApp(App):
                     cmd_db = CommandDatabase(str(db_path))
                     recent_commands = cmd_db.get_recent_commands(limit=5)
                     for cmd in recent_commands:
-                        activities.append({
-                            'time': cmd.get('timestamp', ''),
-                            'type': 'Command',
-                            'operation': cmd.get('command', '')[:50],
-                            'status': 'Success' if cmd.get('exit_code') == 0 else 'Failed'
-                        })
+                        activities.append(
+                            {
+                                "time": cmd.get("timestamp", ""),
+                                "type": "Command",
+                                "operation": cmd.get("command", "")[:50],
+                                "status": "Success" if cmd.get("exit_code") == 0 else "Failed",
+                            }
+                        )
             except Exception as e:
                 logger.debug(f"Could not load commands: {e}")
 
@@ -519,12 +513,18 @@ class EnhancedDashboardApp(App):
                 file_ops = FileOperationsManager(str(self.data_dir))
                 recent_files = file_ops.memory_tracker.get_recent_operations(limit=5)
                 for op in recent_files:
-                    activities.append({
-                        'time': op.timestamp.strftime('%H:%M:%S') if hasattr(op, 'timestamp') else '',
-                        'type': 'File',
-                        'operation': f"{op.operation} {op.path.name if hasattr(op.path, 'name') else op.path}",
-                        'status': 'Success' if op.success else 'Failed'
-                    })
+                    activities.append(
+                        {
+                            "time": (
+                                op.timestamp.strftime("%H:%M:%S")
+                                if hasattr(op, "timestamp")
+                                else ""
+                            ),
+                            "type": "File",
+                            "operation": f"{op.operation} {op.path.name if hasattr(op.path, 'name') else op.path}",
+                            "status": "Success" if op.success else "Failed",
+                        }
+                    )
             except Exception as e:
                 logger.debug(f"Could not load file operations: {e}")
 
@@ -533,45 +533,44 @@ class EnhancedDashboardApp(App):
                 tool_registry = ToolRegistry(str(self.data_dir / "tools"))
                 recent_tools = tool_registry.get_recent_executions(limit=5)
                 for tool_exec in recent_tools:
-                    activities.append({
-                        'time': tool_exec.get('timestamp', ''),
-                        'type': 'Tool',
-                        'operation': tool_exec.get('tool_name', ''),
-                        'status': tool_exec.get('status', 'Unknown')
-                    })
+                    activities.append(
+                        {
+                            "time": tool_exec.get("timestamp", ""),
+                            "type": "Tool",
+                            "operation": tool_exec.get("tool_name", ""),
+                            "status": tool_exec.get("status", "Unknown"),
+                        }
+                    )
             except Exception as e:
                 logger.debug(f"Could not load tool executions: {e}")
 
             # Sort by time and take top 10
-            activities.sort(key=lambda x: x['time'], reverse=True)
+            activities.sort(key=lambda x: x["time"], reverse=True)
             for activity in activities[:10]:
                 table.add_row(
-                    activity['time'],
-                    activity['type'],
-                    activity['operation'],
-                    activity['status']
+                    activity["time"], activity["type"], activity["operation"], activity["status"]
                 )
 
             # Update stat cards
             try:
-                total_commands = len(cmd_db.get_all_commands()) if 'cmd_db' in locals() else 0
-                total_files = len(recent_files) if 'recent_files' in locals() else 0
-                total_tools = len(recent_tools) if 'recent_tools' in locals() else 0
+                total_commands = len(cmd_db.get_all_commands()) if "cmd_db" in locals() else 0
+                total_files = len(recent_files) if "recent_files" in locals() else 0
+                total_tools = len(recent_tools) if "recent_tools" in locals() else 0
 
                 try:
                     trainer = TrainingDataOrganizer(str(self.data_dir))
                     stats = trainer.get_statistics()
-                    total_training = stats.get('total_examples', 0)
+                    total_training = stats.get("total_examples", 0)
                 except Exception as e:
                     logger.debug(f"Could not get training statistics: {e}")
                     total_training = 0
 
                 # Store in stats dict for later use
-                self.stats['overview'] = {
-                    'commands': total_commands,
-                    'files': total_files,
-                    'tools': total_tools,
-                    'training': total_training
+                self.stats["overview"] = {
+                    "commands": total_commands,
+                    "files": total_files,
+                    "tools": total_tools,
+                    "training": total_training,
                 }
             except Exception as e:
                 logger.debug(f"Could not update stats: {e}")
@@ -595,16 +594,16 @@ class EnhancedDashboardApp(App):
 
             # Load statistics
             stats = cmd_db.get_statistics()
-            total_commands = stats.get('total_commands', 0)
-            successful_commands = stats.get('successful_commands', 0)
+            total_commands = stats.get("total_commands", 0)
+            successful_commands = stats.get("successful_commands", 0)
             success_rate = (successful_commands / total_commands * 100) if total_commands > 0 else 0
 
             # Store stats
-            self.stats['commands'] = {
-                'total': total_commands,
-                'success_rate': f"{success_rate:.1f}%",
-                'avg_duration': "0.0s",  # Can be calculated if duration data available
-                'most_used': "git"  # Can be calculated from command frequency
+            self.stats["commands"] = {
+                "total": total_commands,
+                "success_rate": f"{success_rate:.1f}%",
+                "avg_duration": "0.0s",  # Can be calculated if duration data available
+                "most_used": "git",  # Can be calculated from command frequency
             }
 
             # Load recent commands
@@ -614,11 +613,11 @@ class EnhancedDashboardApp(App):
             recent_commands = cmd_db.get_recent_commands(limit=20)
             for cmd in recent_commands:
                 cmd_table.add_row(
-                    str(cmd.get('timestamp', '')),
-                    cmd.get('command', '')[:50],
-                    str(cmd.get('exit_code', 'N/A')),
-                    f"{cmd.get('duration', 0.0):.2f}s" if 'duration' in cmd else 'N/A',
-                    cmd.get('cwd', '')[:30]
+                    str(cmd.get("timestamp", "")),
+                    cmd.get("command", "")[:50],
+                    str(cmd.get("exit_code", "N/A")),
+                    f"{cmd.get('duration', 0.0):.2f}s" if "duration" in cmd else "N/A",
+                    cmd.get("cwd", "")[:30],
                 )
 
             # Load most used commands
@@ -631,10 +630,10 @@ class EnhancedDashboardApp(App):
             command_success = {}
 
             for cmd_record in all_commands:
-                cmd_text = cmd_record.get('command', '')
+                cmd_text = cmd_record.get("command", "")
                 if cmd_text:
                     command_counts[cmd_text] = command_counts.get(cmd_text, 0) + 1
-                    if cmd_record.get('exit_code') == 0:
+                    if cmd_record.get("exit_code") == 0:
                         command_success[cmd_text] = command_success.get(cmd_text, 0) + 1
 
             # Sort by count and get top 10
@@ -643,12 +642,7 @@ class EnhancedDashboardApp(App):
             for rank, (cmd_text, count) in enumerate(sorted_commands, 1):
                 success_count = command_success.get(cmd_text, 0)
                 success_pct = (success_count / count * 100) if count > 0 else 0
-                most_used_table.add_row(
-                    str(rank),
-                    cmd_text[:40],
-                    str(count),
-                    f"{success_pct:.1f}%"
-                )
+                most_used_table.add_row(str(rank), cmd_text[:40], str(count), f"{success_pct:.1f}%")
 
         except Exception as e:
             logger.error(f"Error loading commands data: {e}")
@@ -664,9 +658,9 @@ class EnhancedDashboardApp(App):
             recent_ops = file_ops.memory_tracker.get_recent_operations(limit=100)
 
             total_ops = len(recent_ops)
-            read_ops = sum(1 for op in recent_ops if op.operation == 'read')
-            write_ops = sum(1 for op in recent_ops if op.operation == 'write')
-            total_bytes = sum(op.size for op in recent_ops if hasattr(op, 'size') and op.size)
+            read_ops = sum(1 for op in recent_ops if op.operation == "read")
+            write_ops = sum(1 for op in recent_ops if op.operation == "write")
+            total_bytes = sum(op.size for op in recent_ops if hasattr(op, "size") and op.size)
 
             # Format bytes
             if total_bytes >= 1024**3:
@@ -679,11 +673,11 @@ class EnhancedDashboardApp(App):
                 bytes_str = f"{total_bytes} B"
 
             # Store stats
-            self.stats['files'] = {
-                'total': total_ops,
-                'read': read_ops,
-                'write': write_ops,
-                'bytes': bytes_str
+            self.stats["files"] = {
+                "total": total_ops,
+                "read": read_ops,
+                "write": write_ops,
+                "bytes": bytes_str,
             }
 
             # Load file access history table
@@ -691,18 +685,22 @@ class EnhancedDashboardApp(App):
             files_table.clear()
 
             for op in recent_ops[:30]:
-                size_str = f"{op.size} B" if hasattr(op, 'size') and op.size else "N/A"
-                if hasattr(op, 'size') and op.size and op.size >= 1024:
+                size_str = f"{op.size} B" if hasattr(op, "size") and op.size else "N/A"
+                if hasattr(op, "size") and op.size and op.size >= 1024:
                     size_str = f"{op.size / 1024:.1f} KB"
-                if hasattr(op, 'size') and op.size and op.size >= 1024**2:
+                if hasattr(op, "size") and op.size and op.size >= 1024**2:
                     size_str = f"{op.size / 1024**2:.1f} MB"
 
                 files_table.add_row(
-                    op.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(op, 'timestamp') else 'N/A',
+                    (
+                        op.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(op, "timestamp")
+                        else "N/A"
+                    ),
                     op.operation,
                     str(op.path)[:50],
-                    'Success' if op.success else 'Failed',
-                    size_str
+                    "Success" if op.success else "Failed",
+                    size_str,
                 )
 
         except Exception as e:
@@ -722,19 +720,23 @@ class EnhancedDashboardApp(App):
             # Get execution history
             recent_executions = tool_registry.get_recent_executions(limit=100)
             total_executions = len(recent_executions)
-            successful_executions = sum(1 for ex in recent_executions if ex.get('status') == 'success')
-            success_rate = (successful_executions / total_executions * 100) if total_executions > 0 else 0
+            successful_executions = sum(
+                1 for ex in recent_executions if ex.get("status") == "success"
+            )
+            success_rate = (
+                (successful_executions / total_executions * 100) if total_executions > 0 else 0
+            )
 
             # Calculate average duration
-            durations = [ex.get('duration', 0) for ex in recent_executions if 'duration' in ex]
+            durations = [ex.get("duration", 0) for ex in recent_executions if "duration" in ex]
             avg_duration = sum(durations) / len(durations) if durations else 0
 
             # Store stats
-            self.stats['tools'] = {
-                'installed': total_tools,
-                'executions': total_executions,
-                'success_rate': f"{success_rate:.1f}%",
-                'avg_duration': f"{avg_duration:.2f}s"
+            self.stats["tools"] = {
+                "installed": total_tools,
+                "executions": total_executions,
+                "success_rate": f"{success_rate:.1f}%",
+                "avg_duration": f"{avg_duration:.2f}s",
             }
 
             # Load tools table
@@ -742,13 +744,15 @@ class EnhancedDashboardApp(App):
             tools_table.clear()
 
             for tool in tools:
-                usage_count = sum(1 for ex in recent_executions if ex.get('tool_name') == tool.get('name'))
+                usage_count = sum(
+                    1 for ex in recent_executions if ex.get("tool_name") == tool.get("name")
+                )
                 tools_table.add_row(
-                    tool.get('name', 'Unknown'),
-                    tool.get('version', '1.0.0'),
-                    tool.get('category', 'general'),
-                    'Active' if tool.get('enabled', True) else 'Disabled',
-                    str(usage_count)
+                    tool.get("name", "Unknown"),
+                    tool.get("version", "1.0.0"),
+                    tool.get("category", "general"),
+                    "Active" if tool.get("enabled", True) else "Disabled",
+                    str(usage_count),
                 )
 
             # Load execution history table
@@ -757,11 +761,11 @@ class EnhancedDashboardApp(App):
 
             for ex in recent_executions[:30]:
                 exec_table.add_row(
-                    ex.get('timestamp', 'N/A'),
-                    ex.get('tool_name', 'Unknown'),
-                    ex.get('status', 'Unknown').title(),
-                    f"{ex.get('duration', 0):.2f}s" if 'duration' in ex else 'N/A',
-                    ', '.join(ex.get('permissions', []))[:20] if ex.get('permissions') else 'None'
+                    ex.get("timestamp", "N/A"),
+                    ex.get("tool_name", "Unknown"),
+                    ex.get("status", "Unknown").title(),
+                    f"{ex.get('duration', 0):.2f}s" if "duration" in ex else "N/A",
+                    ", ".join(ex.get("permissions", []))[:20] if ex.get("permissions") else "None",
                 )
 
         except Exception as e:
@@ -770,30 +774,30 @@ class EnhancedDashboardApp(App):
     def load_training_data(self):
         """Load training tab data from training data organizer"""
         try:
-            from daedelus.llm.training_data_organizer import TrainingDataOrganizer
             from daedelus.llm.document_ingestion import DocumentParser
+            from daedelus.llm.training_data_organizer import TrainingDataOrganizer
 
             trainer = TrainingDataOrganizer(str(self.data_dir))
             stats = trainer.get_statistics()
 
             # Store stats
-            self.stats['training'] = {
-                'examples': stats.get('total_examples', 0),
-                'documents': stats.get('documents_ingested', 0),
-                'last_training': stats.get('last_training', 'Never'),
-                'model_version': stats.get('model_version', 'N/A')
+            self.stats["training"] = {
+                "examples": stats.get("total_examples", 0),
+                "documents": stats.get("documents_ingested", 0),
+                "last_training": stats.get("last_training", "Never"),
+                "model_version": stats.get("model_version", "N/A"),
             }
 
             # Load training sources table
             sources_table = self.query_one("#training_sources_table", DataTable)
             sources_table.clear()
 
-            for source_name, source_stats in stats.get('sources', {}).items():
+            for source_name, source_stats in stats.get("sources", {}).items():
                 sources_table.add_row(
                     source_name.title(),
-                    str(source_stats.get('count', 0)),
-                    source_stats.get('quality', 'Unknown'),
-                    source_stats.get('last_updated', 'N/A')
+                    str(source_stats.get("count", 0)),
+                    source_stats.get("quality", "Unknown"),
+                    source_stats.get("last_updated", "N/A"),
                 )
 
             # Load ingested documents table
@@ -803,10 +807,14 @@ class EnhancedDashboardApp(App):
             # Try to load ingested documents
             try:
                 parser = DocumentParser(str(self.data_dir / "documents"))
-                ingested_docs = parser.get_ingested_documents() if hasattr(parser, 'get_ingested_documents') else []
+                ingested_docs = (
+                    parser.get_ingested_documents()
+                    if hasattr(parser, "get_ingested_documents")
+                    else []
+                )
 
                 for doc in ingested_docs[:20]:
-                    doc_size = doc.get('size', 0)
+                    doc_size = doc.get("size", 0)
                     if doc_size >= 1024**2:
                         size_str = f"{doc_size / 1024**2:.2f} MB"
                     elif doc_size >= 1024:
@@ -815,11 +823,11 @@ class EnhancedDashboardApp(App):
                         size_str = f"{doc_size} B"
 
                     docs_table.add_row(
-                        doc.get('name', 'Unknown')[:30],
-                        doc.get('type', 'Unknown'),
+                        doc.get("name", "Unknown")[:30],
+                        doc.get("type", "Unknown"),
                         size_str,
-                        doc.get('status', 'Ingested'),
-                        doc.get('timestamp', 'N/A')
+                        doc.get("status", "Ingested"),
+                        doc.get("timestamp", "N/A"),
                     )
             except Exception as e:
                 logger.debug(f"Could not load ingested documents: {e}")
@@ -831,8 +839,9 @@ class EnhancedDashboardApp(App):
         """Load system tab data and system information"""
         try:
             import os
+            from datetime import datetime
+
             import psutil
-            from datetime import datetime, timedelta
 
             # Calculate database size
             db_size = 0
@@ -871,11 +880,11 @@ class EnhancedDashboardApp(App):
                 logger.error(f"Error calculating uptime: {e}")
 
             # Store stats
-            self.stats['system'] = {
-                'db_size': f"{db_size_mb:.2f} MB",
-                'cache_size': f"{cache_size} items",
-                'memory': f"{memory_mb:.2f} MB",
-                'uptime': uptime_str
+            self.stats["system"] = {
+                "db_size": f"{db_size_mb:.2f} MB",
+                "cache_size": f"{cache_size} items",
+                "memory": f"{memory_mb:.2f} MB",
+                "uptime": uptime_str,
             }
 
             # Load system information table
@@ -883,8 +892,8 @@ class EnhancedDashboardApp(App):
             info_table.clear()
 
             # Add system information rows
-            import sys
             import platform
+            import sys
 
             info_table.add_row("Python Version", "Active", sys.version.split()[0], sys.executable)
             info_table.add_row("Platform", "Active", platform.system(), platform.release())
@@ -894,7 +903,7 @@ class EnhancedDashboardApp(App):
             llm_status = "Disabled"
             llm_version = "N/A"
             try:
-                from daedelus.llm.llm_manager import LLMManager
+
                 llm_status = "Active"
                 llm_version = "llama.cpp"
             except Exception as e:
@@ -927,9 +936,10 @@ class EnhancedDashboardApp(App):
         """Open settings panel"""
         logger.info("Opening settings panel")
         try:
-            from daedelus.ui.settings_panel import run_settings_panel
+
             # Launch settings panel in subprocess or new terminal
             import subprocess
+
             subprocess.Popen(["python", "-m", "daedelus.ui.settings_panel"])
             self.notify("Settings panel launched", severity="information")
         except Exception as e:
@@ -940,9 +950,10 @@ class EnhancedDashboardApp(App):
         """Open memory and permissions panel"""
         logger.info("Opening memory and permissions panel")
         try:
-            from daedelus.ui.memory_and_permissions import run_memory_panel
+
             # Launch memory panel in subprocess or new terminal
             import subprocess
+
             subprocess.Popen(["python", "-m", "daedelus.ui.memory_and_permissions"])
             self.notify("Memory & Permissions panel launched", severity="information")
         except Exception as e:
@@ -960,10 +971,11 @@ class EnhancedDashboardApp(App):
 
             # Start training in background
             import threading
+
             def train_async():
                 try:
                     result = coordinator.train_model()
-                    if result.get('success'):
+                    if result.get("success"):
                         self.notify("Training completed successfully!", severity="information")
                     else:
                         self.notify(f"Training failed: {result.get('error')}", severity="error")
@@ -983,8 +995,9 @@ class EnhancedDashboardApp(App):
         """Export all data"""
         logger.info("Exporting data")
         try:
-            from daedelus.llm.training_data_organizer import TrainingDataOrganizer
             from datetime import datetime
+
+            from daedelus.llm.training_data_organizer import TrainingDataOrganizer
 
             trainer = TrainingDataOrganizer(str(self.data_dir))
 
@@ -994,12 +1007,13 @@ class EnhancedDashboardApp(App):
 
             # Export training data
             export_path = export_dir / "training_data.jsonl"
-            trainer.export_training_data(str(export_path), format='jsonl')
+            trainer.export_training_data(str(export_path), format="jsonl")
 
             # Export statistics
             stats_path = export_dir / "statistics.json"
             import json
-            with open(stats_path, 'w') as f:
+
+            with open(stats_path, "w") as f:
                 json.dump(self.stats, f, indent=2)
 
             self.notify(f"Data exported to {export_dir}", severity="information")
@@ -1044,7 +1058,7 @@ class EnhancedDashboardApp(App):
         self.action_quit()
 
 
-def run_enhanced_dashboard(data_dir: Path, config: Optional[Any] = None) -> None:
+def run_enhanced_dashboard(data_dir: Path, config: Any | None = None) -> None:
     """
     Run the enhanced dashboard.
 

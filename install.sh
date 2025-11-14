@@ -60,15 +60,48 @@ fi
 
 echo "✓ Build tools found"
 echo ""
+
+# Pre-installation cleanup
+echo "=========================================="
+echo "Pre-Installation Cleanup"
+echo "=========================================="
+echo ""
+
+if [ -f "./scripts/cleanup-daemon.sh" ]; then
+    echo "Running cleanup script..."
+    bash ./scripts/cleanup-daemon.sh
+else
+    echo "⚠️  Cleanup script not found, performing basic cleanup..."
+    # Inline cleanup if script doesn't exist
+    if command -v daedelus &> /dev/null; then
+        daedelus stop 2>/dev/null || true
+    fi
+    if command -v deus &> /dev/null; then
+        deus stop 2>/dev/null || true
+    fi
+    pkill -9 -f "daedelus.daemon.daemon" 2>/dev/null || true
+    
+    # Remove deprecated dependencies
+    if command -v pip3 &> /dev/null; then
+        pip3 uninstall -y thefuzz python-Levenshtein 2>/dev/null || true
+    elif command -v pip &> /dev/null; then
+        pip uninstall -y thefuzz python-Levenshtein 2>/dev/null || true
+    fi
+    echo "✓ Basic cleanup complete"
+fi
+
+echo ""
+echo "=========================================="
 echo "Installing Daedelus..."
+echo "=========================================="
 echo ""
 
 # Upgrade pip first
-echo "[1/3] Upgrading pip and build tools..."
+echo "[1/4] Upgrading pip and build tools..."
 $PYTHON_CMD -m pip install --upgrade pip setuptools wheel
 
 # Install with all dependencies
-echo "[2/3] Installing Daedelus with all dependencies..."
+echo "[2/4] Installing Daedelus with all dependencies..."
 $PYTHON_CMD -m pip install -e . || {
     echo ""
     echo "❌ Installation failed."
@@ -82,8 +115,39 @@ $PYTHON_CMD -m pip install -e . || {
 }
 
 # Verify installation
-echo "[3/3] Verifying installation..."
+echo "[3/4] Verifying installation..."
 if command -v daedelus &> /dev/null; then
+    echo ""
+    
+    # Post-installation verification
+    echo "[4/4] Post-installation verification..."
+    
+    # Verify deprecated dependencies are gone
+    if command -v pip3 &> /dev/null; then
+        PIP_CMD=pip3
+    elif command -v pip &> /dev/null; then
+        PIP_CMD=pip
+    fi
+    
+    THEFUZZ_CHECK=$($PIP_CMD list 2>/dev/null | grep -i "^thefuzz " | wc -l)
+    RAPIDFUZZ_CHECK=$($PIP_CMD list 2>/dev/null | grep -i "^rapidfuzz " | wc -l)
+    
+    if [ "$THEFUZZ_CHECK" -gt 0 ]; then
+        echo "⚠️  Warning: Deprecated 'thefuzz' still installed (will be auto-removed on next run)"
+    fi
+    
+    if [ "$RAPIDFUZZ_CHECK" -eq 0 ]; then
+        echo "⚠️  Warning: 'rapidfuzz' not installed (installation may have failed)"
+    else
+        echo "✓ Dependencies verified (rapidfuzz installed)"
+    fi
+    
+    # Verify no daemons running
+    DAEMON_COUNT=$(pgrep -f "daedelus.daemon.daemon" | wc -l)
+    if [ "$DAEMON_COUNT" -gt 0 ]; then
+        echo "✓ Clean environment (no stale daemons)"
+    fi
+    
     echo ""
     echo "=========================================="
     echo "✅ Installation Complete!"

@@ -1,14 +1,17 @@
-# Daedalus Troubleshooting Guide
+# Daedelus Troubleshooting Guide
 
-**Version**: 0.2.0
-**Last Updated**: 2025-11-09
+**Version**: 0.3.0
+**Last Updated**: 2025-11-14
+**Created by**: orpheus497
 
-This guide helps you diagnose and fix common issues with Daedalus.
+This guide helps you diagnose and fix common issues with Daedelus, especially GPU/CUDA-related problems.
 
 ---
 
 ## Table of Contents
 
+- [CUDA/GPU Issues](#cudagpu-issues) ⭐ NEW
+- [Training Issues](#training-issues) ⭐ NEW
 - [Installation Issues](#installation-issues)
 - [Daemon Issues](#daemon-issues)
 - [Shell Integration Issues](#shell-integration-issues)
@@ -19,6 +22,128 @@ This guide helps you diagnose and fix common issues with Daedalus.
 - [Configuration Issues](#configuration-issues)
 - [Log Analysis](#log-analysis)
 - [Emergency Procedures](#emergency-procedures)
+
+---
+
+## CUDA/GPU Issues
+
+### Problem: "CUDA not available" or GPU not detected
+
+**Symptoms:**
+```
+ℹ️  No GPU detected - training will use CPU
+⚠️  CPU training is 10-30x slower than GPU
+```
+
+**Quick Diagnosis:**
+
+Run the automatic diagnostic script:
+```bash
+./scripts/fix_cuda_pytorch.sh
+```
+
+This script will:
+- Check CUDA installation
+- Verify PyTorch CUDA compatibility
+- Test GPU accessibility
+- Provide specific fix recommendations
+
+**Common Causes & Solutions:**
+
+#### 1. PyTorch CUDA Version Mismatch (Most Common)
+
+**Check versions:**
+```bash
+nvcc --version  # System CUDA
+python -c "import torch; print(f'PyTorch CUDA: {torch.version.cuda}')"
+```
+
+**If they don't match**, reinstall PyTorch with correct CUDA version:
+
+```bash
+# Uninstall current PyTorch
+pip3 uninstall torch torchvision torchaudio -y
+
+# For CUDA 11.8 (most stable, recommended)
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# For CUDA 12.1
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# For CPU-only (if no GPU)
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+#### 2. Missing CUDA in PATH
+
+**Add to ~/.bashrc or ~/.zshrc:**
+```bash
+export CUDA_HOME=/usr/local/cuda
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+```
+
+Then reload: `source ~/.bashrc`
+
+#### 3. Forward Compatibility Error
+
+**Error:** `forward compatibility was attempted on non supported HW`
+
+**Solution:** Install PyTorch with CUDA 11.8 (most compatible):
+```bash
+pip3 install torch --index-url https://download.pytorch.org/whl/cu118 --force-reinstall
+```
+
+---
+
+## Training Issues
+
+### Problem: "PEFT dependencies not found" but they ARE installed
+
+**Cause:** Misleading error message - dependencies exist but import failed.
+
+**Solution:**
+
+1. Verify actual installation:
+```bash
+python -c "import peft, transformers, datasets; print('✅ All installed')"
+```
+
+2. If imports work, the issue is elsewhere (see CUDA issues above)
+
+3. If imports fail, reinstall:
+```bash
+pip install --upgrade --force-reinstall peft transformers datasets accelerate torch
+```
+
+### Problem: Training is extremely slow (30+ minutes)
+
+**Cause:** Using CPU instead of GPU.
+
+**Solutions:**
+
+1. **Fix GPU access** (see CUDA/GPU Issues above)
+
+2. **Check if GPU is actually being used:**
+```bash
+watch -n 1 nvidia-smi  # Monitor GPU usage during training
+```
+
+3. **Reduce training load for CPU:**
+```bash
+daedelus train --force --epochs 1  # Train for fewer epochs
+```
+
+### Problem: Out of memory during training
+
+**For GPU OOM:**
+- Reduce batch size in `src/daedelus/cli/model_commands.py` (change `batch_size=4` to `2`)
+- Use 8-bit quantization (already default)
+
+**For CPU OOM:**
+- Use smaller model (Phi-2 instead of Phi-3)
+- Limit training samples (--min-commands 100)
+- Increase system swap space
 
 ---
 

@@ -25,6 +25,18 @@ class MessageType(Enum):
     COMPLETE = "complete"  # Request completion options
     SEARCH = "search"  # Search command history
 
+    # Dashboard -> Daemon (GUI)
+    GET_ANALYTICS = "get_analytics"  # Get analytics data
+    GET_CONFIG = "get_config"  # Get configuration value
+    SET_CONFIG = "set_config"  # Set configuration value
+    STREAM_LOGS = "stream_logs"  # Subscribe to log stream
+
+    # LLM operations
+    EXPLAIN_COMMAND = "explain_command"  # Explain a command using LLM
+    GENERATE_COMMAND = "generate_command"  # Generate command from description
+    INTERPRET_NATURAL_LANGUAGE = "interpret_natural_language"  # Interpret natural language
+    GET_STATS = "get_stats"  # Get command usage statistics
+
     # Control messages
     PING = "ping"  # Health check
     STATUS = "status"  # Get daemon status
@@ -150,10 +162,27 @@ class IPCServer:
             addr: Client address (unused for Unix sockets)
         """
         try:
-            # Receive message (max 4KB)
-            data = conn.recv(4096)
-            if not data:
+            # Receive message with chunked reading for large messages
+            chunks = []
+            while True:
+                chunk = conn.recv(8192)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                # Check if we have a complete JSON message
+                try:
+                    data = b"".join(chunks)
+                    # Try to parse to see if complete
+                    IPCMessage.from_json(data.decode("utf-8"))
+                    break  # Successfully parsed, message is complete
+                except (ValueError, json.JSONDecodeError):
+                    # Not complete yet, continue reading
+                    continue
+            
+            if not chunks:
                 return
+
+            data = b"".join(chunks)
 
             # Parse message
             try:
@@ -206,6 +235,14 @@ class IPCServer:
             MessageType.PING: "handle_ping",
             MessageType.STATUS: "handle_status",
             MessageType.SHUTDOWN: "handle_shutdown",
+            MessageType.GET_ANALYTICS: "handle_get_analytics",
+            MessageType.GET_CONFIG: "handle_get_config",
+            MessageType.SET_CONFIG: "handle_set_config",
+            MessageType.STREAM_LOGS: "handle_stream_logs",
+            MessageType.EXPLAIN_COMMAND: "handle_explain_command",
+            MessageType.GENERATE_COMMAND: "handle_generate_command",
+            MessageType.INTERPRET_NATURAL_LANGUAGE: "handle_interpret_natural_language",
+            MessageType.GET_STATS: "handle_get_stats",
         }
 
         handler_name = handlers.get(msg.type)
@@ -222,7 +259,11 @@ class IPCServer:
 
             return IPCMessage(MessageType.SUCCESS, result)
 
-        except AttributeError:
+        except AttributeError as e:
+            # Debug: Log what methods the handler actually has
+            available_methods = [m for m in dir(self.handler) if m.startswith("handle_")]
+            logger.error(f"Handler {handler_name} not found. Available: {available_methods[:5]}...")
+            logger.error(f"AttributeError details: {e}")
             return IPCMessage(
                 MessageType.ERROR,
                 {"error": f"Handler not implemented: {handler_name}"},
@@ -257,7 +298,7 @@ class IPCClient:
     Used by shell plugins to communicate with daemon.
     """
 
-    def __init__(self, socket_path: str, timeout: float = 1.0) -> None:
+    def __init__(self, socket_path: str, timeout: float = 30.0) -> None:
         """
         Initialize IPC client.
 
@@ -292,15 +333,40 @@ class IPCClient:
             # Send message
             sock.sendall(msg.to_json().encode("utf-8"))
 
-            # Receive response
-            data = sock.recv(4096)
-            if not data:
+            # Receive response with chunked reading for large responses
+            chunks = []
+            while True:
+                chunk = sock.recv(8192)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                # Check if we have a complete JSON message
+                try:
+                    data = b"".join(chunks)
+                    # Try to parse to see if complete
+                    IPCMessage.from_json(data.decode("utf-8"))
+                    break  # Successfully parsed, message is complete
+                except (ValueError, json.JSONDecodeError):
+                    # Not complete yet, continue reading
+                    continue
+            
+            if not chunks:
                 raise ConnectionError("Daemon closed connection")
+
+            data = b"".join(chunks)
 
             # Parse response
             response = IPCMessage.from_json(data.decode("utf-8"))
             return response
 
+        except FileNotFoundError as e:
+            raise ConnectionError(
+                f"Daemon is not running (socket not found: {self.socket_path})"
+            ) from e
+        except ConnectionRefusedError as e:
+            raise ConnectionError(f"Daemon refused connection (socket: {self.socket_path})") from e
+        except TimeoutError as e:
+            raise TimeoutError(f"Request timed out after {self.timeout}s") from e
         finally:
             sock.close()
 
@@ -423,13 +489,12 @@ class IPCClient:
             "log_command": MessageType.LOG_COMMAND,
             "complete": MessageType.COMPLETE,
             "search": MessageType.SEARCH,
-
-            # Convenience aliases for REPL
+            # LLM operations
+            "explain_command": MessageType.EXPLAIN_COMMAND,
+            "generate_command": MessageType.GENERATE_COMMAND,
+            # Statistics and analytics
+            "get_stats": MessageType.GET_STATS,
             "get_recent_commands": MessageType.SEARCH,
-            "get_stats": MessageType.STATUS,
-            "explain_command": MessageType.COMPLETE,
-            "generate_command": MessageType.COMPLETE,
-
             # Control
             "ping": MessageType.PING,
             "status": MessageType.STATUS,
@@ -442,10 +507,7 @@ class IPCClient:
             try:
                 msg_type = MessageType(request_type)
             except ValueError:
-                return {
-                    "status": "error",
-                    "error": f"Unknown request type: {request_type}"
-                }
+                return {"status": "error", "error": f"Unknown request type: {request_type}"}
 
         try:
             msg = IPCMessage(msg_type, data or {})
@@ -461,16 +523,11 @@ class IPCClient:
             return result
 
         except (ConnectionError, TimeoutError) as e:
-            return {
-                "status": "error",
-                "error": f"Communication error: {str(e)}"
-            }
+            logger.debug(f"Communication error: {e}")
+            return {"status": "error", "error": str(e)}
         except Exception as e:
             logger.error(f"Request error: {e}", exc_info=True)
-            return {
-                "status": "error",
-                "error": f"Internal error: {str(e)}"
-            }
+            return {"status": "error", "error": f"Internal error: {str(e)}"}
 
 
 # Example usage

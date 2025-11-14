@@ -5,7 +5,6 @@ Created by: orpheus497
 """
 
 import tempfile
-from pathlib import Path
 
 import pytest
 

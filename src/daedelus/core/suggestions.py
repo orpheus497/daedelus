@@ -70,16 +70,15 @@ class UserPreferences:
         Returns:
             Adjusted score with preferences applied
         """
-        score = base_score
 
         # Apply weighting preferences
         # Recalculate with user weights
         adjusted_score = (
             base_score
-            * (recency_factor ** self.recency_weight)
-            * (frequency_factor ** self.frequency_weight)
-            * (success_factor ** self.success_weight)
-            * (directory_boost ** self.directory_weight)
+            * (recency_factor**self.recency_weight)
+            * (frequency_factor**self.frequency_weight)
+            * (success_factor**self.success_weight)
+            * (directory_boost**self.directory_weight)
         )
 
         # Short command preference (fewer tokens = faster to type)
@@ -154,7 +153,9 @@ class SuggestionEngine:
         self.preferences = preferences or UserPreferences()
 
         # Learning loop tracking
-        self._suggestion_feedback: dict[str, list[bool]] = {}  # command -> [accepted, rejected, ...]
+        self._suggestion_feedback: dict[str, list[bool]] = (
+            {}
+        )  # command -> [accepted, rejected, ...]
 
         logger.info(
             f"SuggestionEngine initialized with learning loop "
@@ -801,9 +802,7 @@ class SuggestionEngine:
 
         self._suggestion_feedback[command].append(accepted)
 
-        logger.debug(
-            f"Feedback recorded: '{command}' {'accepted' if accepted else 'rejected'}"
-        )
+        logger.debug(f"Feedback recorded: '{command}' {'accepted' if accepted else 'rejected'}")
 
         # Update pattern statistics if we have context
         if context and accepted:

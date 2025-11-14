@@ -6,9 +6,9 @@ Tests FastText command embeddings with subword support.
 Created by: orpheus497
 """
 
+
 import numpy as np
 import pytest
-from pathlib import Path
 
 from daedelus.core.embeddings import CommandEmbedder
 

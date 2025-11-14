@@ -112,6 +112,22 @@ peft_*/
 ~/.config/daedelus/
 ~/.cache/daedelus/
 
+# Ingested documents (may contain personal data)
+ingested_documents/
+*.ingested
+training_data/
+
+# Cache files (may contain personal interpretations)
+*_cache/
+*.pkl
+*.pickle
+
+# Script outputs (user-generated)
+script_*.sh
+script_*.py
+generated_*.sh
+generated_*.py
+
 # ===========================
 # Temporary Files
 # ===========================
@@ -123,3 +139,4 @@ peft_*/
 # CI/CD
 # ===========================
 .github/workflows/secrets/
+.devdocs/

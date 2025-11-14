@@ -1,0 +1,112 @@
+# Daedelus Privacy Configuration
+# ==============================
+# This file defines what data should NEVER be logged, uploaded, or shared
+# All patterns are applied automatically to protect your privacy
+
+# CRITICAL: These settings are enforced at the system level
+# No data matching these patterns will ever leave your local machine
+
+# Excluded Directories (absolute paths or ~/ for home relative)
+# Commands executed in these directories will NOT be logged
+excluded_paths:
+  # Personal & sensitive directories
+  - ~/.ssh
+  - ~/.gnupg
+  - ~/.password-store
+  - ~/Documents/Private
+  - ~/Documents/Personal
+  - ~/Private
+  - ~/.config/secrets
+  - ~/.aws
+  - ~/.kube
+  
+  # Development credentials
+  - ~/.*credentials
+  - ~/.*secrets
+  - ~/.env
+
+# Excluded Patterns (regex patterns to filter commands)
+# Commands matching these patterns will NOT be logged
+excluded_patterns:
+  # Authentication & credentials
+  - ".*password.*"
+  - ".*passwd.*"
+  - ".*api[_-]?key.*"
+  - ".*secret.*"
+  - ".*token.*"
+  - ".*credential.*"
+  - ".*auth.*"
+  
+  # SSH & Keys
+  - ".*ssh.*private.*"
+  - ".*id_rsa.*"
+  - ".*id_ed25519.*"
+  - ".*\.pem"
+  - ".*\.key"
+  
+  # Environment variables with sensitive data
+  - "export.*PASSWORD.*"
+  - "export.*SECRET.*"
+  - "export.*TOKEN.*"
+  - "export.*KEY.*"
+  
+  # Package manager with passwords
+  - ".*sudo.*apt.*"
+  - ".*sudo.*dnf.*"
+  - ".*sudo.*yum.*"
+  
+  # Database connections
+  - ".*mysql.*-p.*"
+  - ".*psql.*password.*"
+  - ".*mongo.*password.*"
+  
+  # Git with credentials in URL
+  - "git.*https://.*:.*@.*"
+  - "git.*http://.*:.*@.*"
+  
+  # Private/personal file indicators
+  - ".*[Pp]rivate.*"
+  - ".*[Pp]ersonal.*"
+  - ".*[Cc]onfidential.*"
+
+# File Extensions to Never Ingest
+# These files will be excluded from document ingestion
+excluded_file_types:
+  - ".key"
+  - ".pem"
+  - ".p12"
+  - ".pfx"
+  - ".keystore"
+  - ".jks"
+  - ".crt"
+  - ".cer"
+  - ".der"
+  - ".gpg"
+  - ".asc"
+  - ".enc"
+
+# Privacy Policy
+# --------------
+# 1. ALL data stays local - nothing is ever uploaded
+# 2. No telemetry, no tracking, no external calls
+# 3. Models are trained 100% offline
+# 4. Command history is encrypted at rest (optional)
+# 5. You can clear all data at any time with: daedelus clear --all
+
+# Data Storage Locations
+# ----------------------
+# All data is stored locally in:
+# - ~/.local/share/daedelus/    (or $XDG_DATA_HOME/daedelus/)
+# - Command history: history.db
+# - Models: models/
+# - Logs: daemon.log
+# 
+# To completely remove all data:
+# rm -rf ~/.local/share/daedelus
+
+# Additional Security
+# -------------------
+# Consider setting these environment variables:
+# export DAEDELUS_ENCRYPTION=1        # Enable command history encryption
+# export DAEDELUS_NO_NETWORK=1        # Disable all network features
+# export DAEDELUS_PARANOID_MODE=1     # Maximum privacy (logs nothing)

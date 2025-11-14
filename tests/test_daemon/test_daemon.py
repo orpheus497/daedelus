@@ -110,6 +110,7 @@ def test_privacy_filter_integration(test_config):
 def test_concurrent_request_handling(test_config):
     """Test multi-client support."""
     import threading
+
     from daedelus.daemon.ipc import IPCClient
 
     daemon = DaedelusDaemon(test_config)

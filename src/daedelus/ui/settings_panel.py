@@ -13,14 +13,15 @@ License: MIT
 """
 
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from textual import on
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
+from textual.binding import Binding
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
+from textual.reactive import reactive
 from textual.widgets import (
     Button,
-    Checkbox,
     DataTable,
     Footer,
     Header,
@@ -32,9 +33,6 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
-from textual.reactive import reactive
-from textual.binding import Binding
-from textual import on
 
 from ..utils.config import Config
 
@@ -51,8 +49,8 @@ class SettingItem(Container):
         description: str,
         value: Any,
         setting_type: str = "text",
-        options: Optional[List[Any]] = None,
-        **kwargs
+        options: list[Any] | None = None,
+        **kwargs,
     ):
         """
         Initialize setting item.
@@ -86,7 +84,7 @@ class SettingItem(Container):
                 yield Select(
                     options=[(str(opt), opt) for opt in self.setting_options],
                     value=self.setting_value,
-                    id=f"setting_{self.setting_name}"
+                    id=f"setting_{self.setting_name}",
                 )
 
             elif self.setting_type == "number":
@@ -94,14 +92,14 @@ class SettingItem(Container):
                     value=str(self.setting_value),
                     placeholder="Enter number",
                     type="integer" if isinstance(self.setting_value, int) else "number",
-                    id=f"setting_{self.setting_name}"
+                    id=f"setting_{self.setting_name}",
                 )
 
             else:  # text
                 yield Input(
                     value=str(self.setting_value),
                     placeholder="Enter value",
-                    id=f"setting_{self.setting_name}"
+                    id=f"setting_{self.setting_name}",
                 )
 
 
@@ -116,7 +114,9 @@ class FilePermissionsTab(ScrollableContainer):
     def compose(self) -> ComposeResult:
         """Compose file permissions UI"""
         yield Static("# File Operation Permissions", classes="tab-header")
-        yield Static("Configure which file operations require permission prompts", classes="tab-description")
+        yield Static(
+            "Configure which file operations require permission prompts", classes="tab-description"
+        )
 
         # Permission settings
         yield SettingItem(
@@ -124,7 +124,7 @@ class FilePermissionsTab(ScrollableContainer):
             "Require Read Permission",
             "Prompt before reading files",
             self.config.get("file_operations.require_read_permission", False),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -132,7 +132,7 @@ class FilePermissionsTab(ScrollableContainer):
             "Require Write Permission",
             "Prompt before writing files",
             self.config.get("file_operations.require_write_permission", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -140,12 +140,14 @@ class FilePermissionsTab(ScrollableContainer):
             "Require Delete Permission",
             "Prompt before deleting files",
             self.config.get("file_operations.require_delete_permission", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         # Excluded paths
         yield Static("\n## Excluded Paths", classes="section-header")
-        yield Static("Files and directories that should never be accessed:", classes="section-description")
+        yield Static(
+            "Files and directories that should never be accessed:", classes="section-description"
+        )
 
         yield DataTable(id="excluded_paths_table")
 
@@ -161,7 +163,7 @@ class FilePermissionsTab(ScrollableContainer):
             "Maximum File Size (MB)",
             "Maximum size of files that can be read",
             self.config.get("file_operations.max_file_size_mb", 10),
-            setting_type="number"
+            setting_type="number",
         )
 
 
@@ -184,7 +186,7 @@ class CommandExecutionTab(ScrollableContainer):
             "Enable Safety Analysis",
             "Analyze commands for dangerous patterns before execution",
             self.config.get("command_execution.enable_safety_analysis", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -192,7 +194,7 @@ class CommandExecutionTab(ScrollableContainer):
             "Block Dangerous Commands",
             "Automatically block commands flagged as dangerous",
             self.config.get("command_execution.block_dangerous_commands", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -200,7 +202,7 @@ class CommandExecutionTab(ScrollableContainer):
             "Prompt for Warning Commands",
             "Prompt user confirmation for commands with warnings",
             self.config.get("command_execution.prompt_for_warnings", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         # Execution settings
@@ -211,7 +213,7 @@ class CommandExecutionTab(ScrollableContainer):
             "Default Timeout (seconds)",
             "Maximum execution time for commands",
             self.config.get("command_execution.default_timeout", 300),
-            setting_type="number"
+            setting_type="number",
         )
 
         yield SettingItem(
@@ -219,7 +221,7 @@ class CommandExecutionTab(ScrollableContainer):
             "Capture Output",
             "Capture stdout/stderr from executed commands",
             self.config.get("command_execution.capture_output", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -227,7 +229,7 @@ class CommandExecutionTab(ScrollableContainer):
             "Log All Executions",
             "Log all command executions to database",
             self.config.get("command_execution.log_all_executions", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
 
@@ -250,7 +252,7 @@ class ToolPermissionsTab(ScrollableContainer):
             "Require Permission Approval",
             "Prompt for approval before executing tools with permissions",
             self.config.get("tools.require_permission_approval", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -258,7 +260,7 @@ class ToolPermissionsTab(ScrollableContainer):
             "Enable Sandboxing",
             "Execute tools in sandboxed environment when possible",
             self.config.get("tools.enable_sandboxing", False),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -266,7 +268,7 @@ class ToolPermissionsTab(ScrollableContainer):
             "Auto-Discover Tools",
             "Automatically discover and load tools from plugins directory",
             self.config.get("tools.auto_discover", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         # Tool permissions table
@@ -291,7 +293,10 @@ class TrainingDataTab(ScrollableContainer):
     def compose(self) -> ComposeResult:
         """Compose training data UI"""
         yield Static("# Training Data Configuration", classes="tab-header")
-        yield Static("Configure how data is collected and organized for model training", classes="tab-description")
+        yield Static(
+            "Configure how data is collected and organized for model training",
+            classes="tab-description",
+        )
 
         # Data collection settings
         yield SettingItem(
@@ -299,7 +304,7 @@ class TrainingDataTab(ScrollableContainer):
             "Collect Command History",
             "Include command history in training data",
             self.config.get("training.collect_command_history", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -307,7 +312,7 @@ class TrainingDataTab(ScrollableContainer):
             "Collect File Operations",
             "Include file operations in training data",
             self.config.get("training.collect_file_operations", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -315,7 +320,7 @@ class TrainingDataTab(ScrollableContainer):
             "Collect Tool Executions",
             "Include tool executions in training data",
             self.config.get("training.collect_tool_executions", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -323,7 +328,7 @@ class TrainingDataTab(ScrollableContainer):
             "Collect Ingested Documents",
             "Include ingested documents in training data",
             self.config.get("training.collect_documents", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         # Training triggers
@@ -334,7 +339,7 @@ class TrainingDataTab(ScrollableContainer):
             "Automatic Training",
             "Automatically trigger training when threshold is reached",
             self.config.get("training.auto_train", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -342,7 +347,7 @@ class TrainingDataTab(ScrollableContainer):
             "Command Threshold",
             "Number of new commands before triggering training",
             self.config.get("training.command_threshold", 500),
-            setting_type="number"
+            setting_type="number",
         )
 
         # Data quality
@@ -354,7 +359,7 @@ class TrainingDataTab(ScrollableContainer):
             "Minimum quality level for training data",
             self.config.get("training.min_quality", "medium"),
             setting_type="select",
-            options=["high", "medium", "low"]
+            options=["high", "medium", "low"],
         )
 
         yield SettingItem(
@@ -362,7 +367,7 @@ class TrainingDataTab(ScrollableContainer):
             "Exclude Sensitive Data",
             "Automatically exclude sensitive data from training",
             self.config.get("training.exclude_sensitive", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
 
@@ -386,7 +391,7 @@ class SystemPreferencesTab(ScrollableContainer):
             "Logging verbosity level",
             self.config.get("system.log_level", "INFO"),
             setting_type="select",
-            options=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+            options=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         )
 
         yield SettingItem(
@@ -394,7 +399,7 @@ class SystemPreferencesTab(ScrollableContainer):
             "Enable Telemetry",
             "Send anonymous usage statistics (100% local, no external calls)",
             self.config.get("system.enable_telemetry", False),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         # Performance settings
@@ -405,7 +410,7 @@ class SystemPreferencesTab(ScrollableContainer):
             "Cache Size",
             "Number of items to keep in cache",
             self.config.get("performance.cache_size", 1000),
-            setting_type="number"
+            setting_type="number",
         )
 
         yield SettingItem(
@@ -413,7 +418,7 @@ class SystemPreferencesTab(ScrollableContainer):
             "Lazy Loading",
             "Load models and resources on-demand to save memory",
             self.config.get("performance.lazy_loading", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         # Backup settings
@@ -424,7 +429,7 @@ class SystemPreferencesTab(ScrollableContainer):
             "Automatic Backups",
             "Automatically backup databases daily",
             self.config.get("backup.enabled", True),
-            setting_type="bool"
+            setting_type="bool",
         )
 
         yield SettingItem(
@@ -432,7 +437,7 @@ class SystemPreferencesTab(ScrollableContainer):
             "Backup Retention (days)",
             "Number of days to keep backups",
             self.config.get("backup.retention_days", 7),
-            setting_type="number"
+            setting_type="number",
         )
 
         yield SettingItem(
@@ -440,7 +445,7 @@ class SystemPreferencesTab(ScrollableContainer):
             "History Retention (days)",
             "Number of days to keep command history",
             self.config.get("privacy.history_retention_days", 90),
-            setting_type="number"
+            setting_type="number",
         )
 
 
@@ -541,7 +546,7 @@ class SettingsPanel(Container):
                     continue
 
                 # Parse setting name and update config
-                parts = item.setting_name.split('.')
+                parts = item.setting_name.split(".")
                 if len(parts) == 2:
                     section, key = parts
                     if section not in settings_to_save:

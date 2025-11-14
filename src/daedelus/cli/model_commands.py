@@ -43,15 +43,46 @@ def train(ctx: click.Context, force: bool, epochs: int, min_commands: int) -> No
         return
 
     try:
+        import torch
+
         from daedelus.core.database import CommandDatabase
         from daedelus.llm.model_manager import ModelManager
         from daedelus.llm.peft_trainer import PEFTTrainer
 
         click.echo("🎓 Starting manual training session...")
+        click.echo("")
+
+        # Check GPU availability
+        try:
+            cuda_available = torch.cuda.is_available()
+            if cuda_available:
+                gpu_name = torch.cuda.get_device_name(0)
+                click.echo(f"✅ GPU Detected: {gpu_name}")
+                click.echo("   Training will use GPU acceleration")
+            else:
+                click.echo("ℹ️  No GPU detected - training will use CPU")
+                click.echo("   ⚠️  CPU training is 10-30x slower than GPU")
+                click.echo("   Expected time: 10-30 minutes (vs 1-3 min on GPU)")
+                click.echo("")
+                click.echo("💡 To enable GPU acceleration:")
+                click.echo("   Run: ./scripts/fix_cuda_pytorch.sh")
+                click.echo("")
+                if not click.confirm("Continue with CPU training?", default=True):
+                    click.echo("Training cancelled.")
+                    return
+        except Exception as e:
+            click.echo(f"⚠️  GPU check failed: {e}")
+            click.echo("   Continuing with CPU mode...")
+
+        click.echo("")
 
         # Initialize components
         db = CommandDatabase(config.get("database.path"))
-        models_dir = Path(config.get("llm.model_path")).parent
+        models_dir = (
+            Path(config.get("llm.model_path")).parent
+            if config.get("llm.model_path")
+            else Path.home() / ".local" / "share" / "models"
+        )
         model_manager = ModelManager(models_dir)
 
         # Check if we have commands to train on
@@ -83,7 +114,9 @@ def train(ctx: click.Context, force: bool, epochs: int, min_commands: int) -> No
         )
 
         # Train
-        click.echo(f"Training for {epochs} epochs (this may take 5-10 minutes)...")
+        click.echo(f"Training for {epochs} epochs...")
+        click.echo("This may take a while - please be patient...")
+        click.echo("")
         trainer.train_adapter(
             training_data=training_data,
             output_dir=adapter_path,
@@ -92,6 +125,7 @@ def train(ctx: click.Context, force: bool, epochs: int, min_commands: int) -> No
             learning_rate=1e-4,
         )
 
+        click.echo("")
         click.echo("✅ Training complete!")
 
         # Ask if user wants to forge new model version
@@ -115,10 +149,21 @@ def train(ctx: click.Context, force: bool, epochs: int, min_commands: int) -> No
             click.echo(f"Adapter path: {adapter_path}")
 
     except ImportError as e:
-        click.echo(f"❌ PEFT dependencies not found: {e}")
-        click.echo("Try reinstalling daedelus: pip install --upgrade --force-reinstall daedelus")
+        click.echo(f"❌ Import error: {e}")
+        click.echo("")
+        click.echo("This usually means PEFT dependencies are not properly installed.")
+        click.echo("Try running:")
+        click.echo("  pip install --upgrade torch transformers peft datasets accelerate")
+        click.echo("")
+        click.echo("For GPU support, run:")
+        click.echo("  ./scripts/fix_cuda_pytorch.sh")
     except Exception as e:
         click.echo(f"❌ Error: {e}")
+        click.echo("")
+        click.echo("💡 Troubleshooting tips:")
+        click.echo("  1. Check GPU/CUDA setup: ./scripts/fix_cuda_pytorch.sh")
+        click.echo("  2. Ensure enough disk space (~2GB required)")
+        click.echo("  3. Check logs: tail -f ~/.local/share/daedelus/daemon.log")
         logger.error(f"Training failed: {e}", exc_info=True)
 
 
@@ -142,17 +187,21 @@ def model_download(ctx: click.Context, model: str) -> None:
     try:
         from daedelus.llm.model_manager import ModelManager
 
-        models_dir = Path(config.get("llm.model_path")).parent
+        models_dir = (
+            Path(config.get("llm.model_path")).parent
+            if config.get("llm.model_path")
+            else Path.home() / ".local" / "share" / "models"
+        )
         manager = ModelManager(models_dir)
 
         click.echo(f"📥 Downloading {model}...")
-        click.echo(f"This may take a while (model is ~669MB for TinyLlama)")
+        click.echo("This may take a while (model is ~669MB for TinyLlama)")
 
         path = manager.download_model(model)
 
         click.echo(f"✅ Downloaded: {path}")
-        click.echo(f"\nTo initialize Daedelus model, run:")
-        click.echo(f"  daedelus model init")
+        click.echo("\nTo initialize Daedelus model, run:")
+        click.echo("  daedelus model init")
 
     except ImportError as e:
         click.echo(f"❌ Dependencies not found: {e}")
@@ -175,7 +224,11 @@ def model_init(ctx: click.Context, base_model: str) -> None:
     try:
         from daedelus.llm.model_manager import ModelManager
 
-        models_dir = Path(config.get("llm.model_path")).parent
+        models_dir = (
+            Path(config.get("llm.model_path")).parent
+            if config.get("llm.model_path")
+            else Path.home() / ".local" / "share" / "models"
+        )
         manager = ModelManager(models_dir)
 
         click.echo(f"🔧 Initializing Daedelus from {base_model}...")
@@ -183,8 +236,8 @@ def model_init(ctx: click.Context, base_model: str) -> None:
         path = manager.initialize_daedelus(base_model)
 
         click.echo(f"✅ Initialized: {path}")
-        click.echo(f"\nDaedelus is ready to learn from your commands!")
-        click.echo(f"Start the daemon: daedelus start")
+        click.echo("\nDaedelus is ready to learn from your commands!")
+        click.echo("Start the daemon: daedelus start")
 
     except Exception as e:
         click.echo(f"❌ Error: {e}")
@@ -237,7 +290,11 @@ def model_versions(ctx: click.Context) -> None:
     try:
         from daedelus.llm.model_manager import ModelManager
 
-        models_dir = Path(config.get("llm.model_path")).parent
+        models_dir = (
+            Path(config.get("llm.model_path")).parent
+            if config.get("llm.model_path")
+            else Path.home() / ".local" / "share" / "models"
+        )
         manager = ModelManager(models_dir)
 
         models = manager.list_models()
@@ -252,7 +309,9 @@ def model_versions(ctx: click.Context) -> None:
         for m in models:
             size_gb = m.size_bytes / (1024**3)
             marker = "→" if m == manager.get_current_model() else " "
-            click.echo(f"{marker} {m.name:20s} v{m.version:2d}  {size_gb:5.2f}GB  {m.training_commands:5d} cmds")
+            click.echo(
+                f"{marker} {m.name:20s} v{m.version:2d}  {size_gb:5.2f}GB  {m.training_commands:5d} cmds"
+            )
 
     except Exception as e:
         click.echo(f"❌ Error: {e}")

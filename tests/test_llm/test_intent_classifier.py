@@ -7,7 +7,6 @@ Created by: orpheus497
 import pytest
 
 from daedelus.llm.intent_classifier import (
-    Intent,
     IntentClassifier,
     IntentType,
     Urgency,
@@ -203,7 +202,9 @@ def test_keyword_extraction(classifier):
 
     keywords = intent.keywords
     assert len(keywords) > 0
-    assert any(kw in ["search", "configuration", "files", "database", "settings"] for kw in keywords)
+    assert any(
+        kw in ["search", "configuration", "files", "database", "settings"] for kw in keywords
+    )
 
 
 def test_needs_decomposition_simple(classifier):

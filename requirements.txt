@@ -70,6 +70,8 @@ apsw>=3.40.0                     # Zlib - Advanced SQLite wrapper
 # ========================================
 # Phase 2: PEFT Fine-Tuning
 # ========================================
+torch>=2.0.0                     # BSD - PyTorch deep learning framework
+datasets>=2.14.0                 # Apache 2.0 - HuggingFace datasets library
 peft>=0.7.0                      # Apache 2.0 - Parameter-efficient fine-tuning
 transformers>=4.36.0             # Apache 2.0 - Hugging Face transformers
 accelerate>=0.25.0               # Apache 2.0 - Training acceleration
@@ -78,10 +80,10 @@ bitsandbytes>=0.41.0             # MIT - 8-bit optimizers for quantization
 # ========================================
 # FOSS Compliance Summary
 # ========================================
-# All 38+ dependencies are 100% FOSS with permissive licenses:
-# - MIT: 20 packages
-# - Apache 2.0: 11 packages
-# - BSD (2-Clause, 3-Clause): 9 packages
+# All 40+ dependencies are 100% FOSS with permissive licenses:
+# - MIT: 21 packages
+# - Apache 2.0: 12 packages
+# - BSD (2-Clause, 3-Clause): 10 packages
 # - ISC: 1 package (ptyprocess)
 # - Zlib: 1 package (apsw)
 # - MPL-2.0: 1 package (tqdm, dual-licensed MIT/MPL)

@@ -196,9 +196,7 @@ class ModelDownloader:
                 )
 
             self.console.print()
-            self.console.print(
-                f"[bold green]✓ Download complete![/bold green] {model_path}"
-            )
+            self.console.print(f"[bold green]✓ Download complete![/bold green] {model_path}")
             self.console.print()
 
             return model_path
@@ -226,12 +224,8 @@ class ModelDownloader:
             Suggested model name, or None
         """
         self.console.print()
-        self.console.print(
-            "[yellow]The deus.gguf model is not available.[/yellow]"
-        )
-        self.console.print(
-            "[dim]Would you like to download a base model to get started?[/dim]"
-        )
+        self.console.print("[yellow]The deus.gguf model is not available.[/yellow]")
+        self.console.print("[dim]Would you like to download a base model to get started?[/dim]")
         self.console.print()
 
         should_download = Confirm.ask(

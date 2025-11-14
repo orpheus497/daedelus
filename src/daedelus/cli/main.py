@@ -36,26 +36,66 @@ def cli(ctx: click.Context, config: str | None, verbose: int) -> None:
     Daedelus - Self-Learning Terminal Assistant
 
     A privacy-first, offline AI assistant that learns from your command usage
-    and builds its own intelligence locally. Formal name: Daedelus, Nickname: Deus
+    and builds its own intelligence locally.
 
-    Features:
-      • 🧠 Self-learning AI that builds from your usage patterns
-      • ⚡ Ultra-fast suggestions (<50ms)
-      • 🔒 100% offline, privacy-first (no data ever leaves your machine)
-      • 🎯 Context-aware command completion
-      • 🤖 LLM-powered explanations and command generation
-      • 🔄 Continuous learning and model fine-tuning
-
-    Quick Start:
-      daedelus setup    # Initialize configuration
-      daedelus start    # Start the daemon
-      daedelus repl     # Launch interactive mode (all features active)
-
-    Quick alias: deus (works exactly the same as daedelus)
-      Example: deus start, deus repl, deus status
-
-    Created and Designed by: orpheus497
-    License: MIT | 100% FOSS
+    \b
+    🧠 COMMAND STRUCTURE:
+      • daedelus [command]  - Full command (primary)
+      • deus [command]      - Quick alias (same functionality)
+    
+    \b
+    🚀 QUICK START:
+      daedelus              # Start interactive REPL (default mode)
+      deus                  # Same as above (using alias)
+      daedelus setup        # Configuration wizard
+      daedelus start        # Start background daemon
+      daedelus status       # Check system status
+    
+    \b
+    📚 MAIN FEATURES:
+      • Interactive REPL shell with AI assistance
+      • Natural language command generation
+      • Script writing from descriptions
+      • Document ingestion for training
+      • File operations with AI analysis
+      • Self-learning from usage patterns
+      • 100% offline, privacy-first
+    
+    \b
+    💡 EXAMPLES:
+      # Start REPL and use natural language
+      daedelus
+      > Tell me what's in this directory
+      > Create a backup script for my documents
+      > /generate find all large files
+    
+      # Ingest documents for AI training
+      deus ingest document ./docs/tutorial.md
+      
+      # View statistics and analytics
+      deus dashboard
+      deus training stats
+    
+    \b
+    🔧 COMMAND CATEGORIES:
+      • daemon     - Daemon management (start, stop, status)
+      • model      - AI model management
+      • llm        - LLM-powered features
+      • ingest     - Document ingestion for training
+      • training   - Training data management
+      • files      - File operations tracking
+      • tools      - Plugin/tool management
+      • dashboard  - Launch TUI dashboard
+      • settings   - Configuration panel
+    
+    \b
+    📖 MORE HELP:
+      daedelus --help            # This message
+      daedelus <command> --help  # Command-specific help
+      daedelus repl              # Start interactive mode
+    
+    Created by: orpheus497
+    License: MIT | 100% FOSS | Privacy-First
     """
     # Set up logging
     log_level = logging.WARNING
@@ -69,6 +109,7 @@ def cli(ctx: click.Context, config: str | None, verbose: int) -> None:
     # Load configuration
     ctx.ensure_object(dict)
     from pathlib import Path
+
     ctx.obj["config"] = Config(Path(config)) if config else Config()
 
 
@@ -78,40 +119,112 @@ def cli(ctx: click.Context, config: str | None, verbose: int) -> None:
 
 # Daemon management commands
 from daedelus.cli.daemon_commands import register_daemon_commands
+
 register_daemon_commands(cli)
 
 # LLM-powered commands
 from daedelus.cli.llm_commands import register_llm_commands
+
 register_llm_commands(cli)
 
 # Model and training commands
 from daedelus.cli.model_commands import register_model_commands
+
 register_model_commands(cli)
 
 # Configuration commands
 from daedelus.cli.config_commands import register_config_commands
+
 register_config_commands(cli)
 
 # Interactive mode and history commands
 from daedelus.cli.interactive_commands import register_interactive_commands
+
 register_interactive_commands(cli)
 
 # Integration and diagnostics commands
 from daedelus.cli.integration_commands import register_integration_commands
+
 register_integration_commands(cli)
 
 # Extended commands registration (files, tools, ingest, training, dashboard, settings, memory)
 try:
     from daedelus.cli.extended_commands import register_extended_commands
+
     register_extended_commands(cli)
 except ImportError:
     logger.warning("Extended commands not available")
 
 
+def load_plugin_commands(cli_group: click.Group):
+    """Dynamically loads CLI commands from plugins via a cache file."""
+    import importlib
+    import json
+    import sys
+    from pathlib import Path
+
+    try:
+        config = Config()
+        cache_path = config.data_dir / "cli_commands.json"
+
+        if not cache_path.exists():
+            logger.debug("Plugin CLI command cache not found. Skipping.")
+            return
+
+        with open(cache_path) as f:
+            commands_to_load = json.load(f)
+
+        for name, info in commands_to_load.items():
+            plugin_path_str = None
+            try:
+                module_name = info["module"]
+                function_name = info["function"]
+                plugin_path_str = info.get("path")
+
+                if not plugin_path_str:
+                    logger.warning(
+                        f"Plugin command '{name}' is missing path information. Skipping."
+                    )
+                    continue
+
+                plugin_path = Path(plugin_path_str)
+                if not plugin_path.is_dir():
+                    logger.warning(
+                        f"Path for plugin command '{name}' does not exist: {plugin_path_str}. Skipping."
+                    )
+                    continue
+
+                # Add to path and import
+                sys.path.insert(0, str(plugin_path))
+
+                module = importlib.import_module(module_name)
+                command_func = getattr(module, function_name)
+                cli_group.add_command(command_func, name)
+                logger.debug(f"Loaded plugin command '{name}'")
+
+            except Exception as e:
+                logger.warning(f"Failed to load plugin command '{name}': {e}")
+            finally:
+                # Clean up sys.path
+                if plugin_path_str and plugin_path_str in sys.path:
+                    sys.path.remove(plugin_path_str)
+
+    except Exception as e:
+        logger.error(f"Failed to load plugin commands: {e}", exc_info=True)
+
+
+# Register plugin commands
+load_plugin_commands(cli)
+
 
 def main() -> int:
     """Main entry point."""
+    import sys
+
     try:
+        # If no arguments provided, start REPL mode by default
+        if len(sys.argv) == 1:
+            sys.argv.append("repl")
         cli(obj={})
         return 0
     except Exception as e:
@@ -121,4 +234,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

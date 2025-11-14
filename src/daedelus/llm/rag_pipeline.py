@@ -239,6 +239,7 @@ class RAGPipeline:
         # Factor 2: Recency (if timestamp available)
         if "timestamp" in item:
             import time
+
             age_hours = (time.time() - item["timestamp"]) / 3600
             # Decay over time: recent = higher score
             recency_score = max(0, 1.0 - (age_hours / (24 * 30)))  # Decay over 30 days
@@ -373,7 +374,9 @@ class RAGPipeline:
         # Final token check and truncation
         total_tokens = self.count_tokens(formatted)
         if total_tokens > max_tokens:
-            logger.warning(f"Context exceeded budget ({total_tokens} > {max_tokens}), truncating...")
+            logger.warning(
+                f"Context exceeded budget ({total_tokens} > {max_tokens}), truncating..."
+            )
             # Simple truncation: cut to max_tokens * 4 characters
             formatted = formatted[: max_tokens * 4]
             formatted += "\n[... context truncated ...]"
@@ -410,7 +413,9 @@ class RAGPipeline:
 
         # Build prompt based on task type
         if task_type == "explain":
-            system_prompt = "You are a helpful Linux command expert. Explain commands clearly and concisely."
+            system_prompt = (
+                "You are a helpful Linux command expert. Explain commands clearly and concisely."
+            )
             prompt_template = f"""Context:
 {{context}}
 
@@ -428,7 +433,9 @@ Task: {query}
 Generate the appropriate shell command to accomplish this task. Provide only the command, no explanation."""
 
         elif task_type == "suggest":
-            system_prompt = "You are a helpful Linux command expert. Suggest the best command to use."
+            system_prompt = (
+                "You are a helpful Linux command expert. Suggest the best command to use."
+            )
             prompt_template = f"""Context:
 {{context}}
 

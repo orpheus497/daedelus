@@ -6,7 +6,6 @@ Tests dangerous pattern detection and safety levels.
 Created by: orpheus497
 """
 
-import pytest
 from daedelus.core.safety import SafetyAnalyzer
 
 
@@ -78,10 +77,7 @@ def test_safety_level_block():
 
 def test_whitelist_patterns():
     """Test user whitelist."""
-    analyzer = SafetyAnalyzer(
-        level="warn",
-        whitelist=["rm -rf ./build"]
-    )
+    analyzer = SafetyAnalyzer(level="warn", whitelist=["rm -rf ./build"])
 
     result = analyzer.check("rm -rf ./build")
 

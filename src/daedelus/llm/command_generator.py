@@ -115,6 +115,27 @@ class CommandGenerator:
             logger.error(f"Failed to generate command: {e}")
             return [] if return_multiple else ""
 
+    def generate(
+        self,
+        description: str,
+        cwd: str | None = None,
+        history: list[str] | None = None,
+        return_multiple: bool = False,
+    ) -> str | list[str]:
+        """
+        Alias for generate_command() for backward compatibility.
+
+        Args:
+            description: Natural language description of desired action
+            cwd: Current working directory
+            history: Recent command history for context
+            return_multiple: Return multiple alternatives if True
+
+        Returns:
+            Generated command string, or list of alternatives
+        """
+        return self.generate_command(description, cwd, history, return_multiple)
+
     def generate_with_explanation(
         self,
         description: str,
@@ -408,7 +429,16 @@ You are a helpful Linux command expert. Generate only valid shell commands, noth
                 # Check if the remaining text starts with a typical command word
                 remaining_first = remaining.split()[0].lower() if remaining.split() else ""
                 # If it's still explanatory (like "command lists..."), filter it
-                if remaining_first in ["command", "will", "can", "should", "would", "lists", "shows", "displays"]:
+                if remaining_first in [
+                    "command",
+                    "will",
+                    "can",
+                    "should",
+                    "would",
+                    "lists",
+                    "shows",
+                    "displays",
+                ]:
                     return ""
                 text = remaining.strip()
             else:
@@ -416,8 +446,22 @@ You are a helpful Linux command expert. Generate only valid shell commands, noth
 
         # Additional check: if text looks like natural language explanation, filter it
         # Commands typically don't have common English words like "lists", "shows", "displays" as the command name
-        if first_word.lower() in ["lists", "shows", "displays", "prints", "creates", "removes", "deletes",
-                                  "will", "can", "should", "would", "could", "might", "may"]:
+        if first_word.lower() in [
+            "lists",
+            "shows",
+            "displays",
+            "prints",
+            "creates",
+            "removes",
+            "deletes",
+            "will",
+            "can",
+            "should",
+            "would",
+            "could",
+            "might",
+            "may",
+        ]:
             return ""
 
         return text

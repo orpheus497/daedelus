@@ -8,7 +8,10 @@ Created by: orpheus497
 """
 
 import logging
-import sys
+import os
+import subprocess
+import time
+import uuid
 from typing import Any
 
 from prompt_toolkit import PromptSession
@@ -22,11 +25,12 @@ from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table
 
 from daedelus.daemon.ipc import IPCClient
 from daedelus.utils.fuzzy import get_matcher
-from daedelus.utils.highlighting import get_highlighter
+from daedelus.utils.os_detection import get_os_detector
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +109,18 @@ class DaedelusREPL:
         """
         self.ipc_client = ipc_client
         self.console = Console()
-        self.highlighter = get_highlighter()
         self.fuzzy = get_matcher()
+        self.session_id = str(uuid.uuid4())
+        self.current_dir = os.getcwd()  # Track current directory
+        self.os_detector = get_os_detector()  # OS detection for system-specific commands
 
         # Create custom key bindings
         self.kb = KeyBindings()
 
         @self.kb.add("c-d")  # Ctrl+D to exit
         def _(event: Any) -> None:
-            event.app.exit()
+            # Raise EOFError to exit gracefully
+            raise EOFError()
 
         @self.kb.add("c-c")  # Ctrl+C to clear input
         def _(event: Any) -> None:
@@ -141,41 +148,81 @@ class DaedelusREPL:
     def print_welcome(self) -> None:
         """Print welcome message."""
         welcome = """
-# Daedelus Interactive Shell
+# 🧠 Daedelus Interactive Shell
 
-Welcome to Daedelus - your intelligent terminal assistant!
-(Quick alias: `deus`)
+**Welcome to Daedelus** - Your self-learning AI terminal assistant
+*Alias: `deus` | 100% offline & privacy-first*
 
-**Commands:**
-- Type any shell command to see suggestions
-- Use Tab for auto-completion
-- Use ↑/↓ arrows to navigate history
-- `/help` - Show this help
+## 🎯 Quick Start
+Type any shell command to execute it. The AI learns from your usage patterns.
+Use `/help` anytime for this message.
+
+## 📋 REPL Commands
+- `/help` - Show this help message
 - `/search <query>` - Fuzzy search command history
-- `/explain <command>` - Explain a command
-- `/generate <description>` - Generate command from description
-- `/stats` - Show usage statistics
-- `/recent` - Show recent commands
-- `/quit` or Ctrl+D - Exit
+- `/explain <command>` - AI explanation of any command
+- `/generate <description>` - Generate command from natural language
+- `/write-script <description>` - Create executable script from description
+- `/read <file>` - Read and analyze file contents
+- `/write <file>` - Write content to file with AI assistance
+- `/stats` - Usage statistics and analytics
+- `/recent [n]` - Show recent commands (default: 20)
+- `/quit`, `/exit`, `/q` - Exit REPL
 
-**Active Features:**
-✨ Syntax highlighting
-🔍 Fuzzy search
-🤖 AI-powered suggestions
-📊 Command analytics
+## 🤖 AI Capabilities
+The AI can interpret natural language and:
+- **Generate commands** from plain English descriptions
+- **Write scripts** (bash, python, etc.) based on your requirements
+- **Read/analyze documents** and provide insights
+- **Execute complex workflows** by chaining commands
+- **Build tools** dynamically as needed
+- **Learn continuously** from your usage patterns
+
+**Examples:**
+```bash
+/generate find all python files larger than 1MB
+/write-script backup my home directory to external drive
+/explain tar -xzf archive.tar.gz
+Tell me what's in the config file  # Natural language
+Create a script to monitor CPU usage  # Natural language
+```
+
+## ⌨️ Keyboard Shortcuts
+- `Tab` - Auto-complete from history
+- `↑/↓` - Navigate command history  
+- `Ctrl+C` - Clear current line
+- `Ctrl+D` - Exit REPL
+
+## 🚀 External Commands
+Run from your regular terminal:
+- `daedelus` or `deus` - Start REPL (default)
+- `daedelus start` - Start background daemon
+- `daedelus stop` - Stop daemon
+- `daedelus status` - Check system status
+- `daedelus ingest document <file>` - Add training data
+- `daedelus training stats` - View training data statistics
+- `daedelus dashboard` - Launch TUI dashboard
+- `daedelus setup` - Configuration wizard
+
+*Note: Full command reference: `daedelus --help` | Quick: `deus --help`*
         """
-        self.console.print(Panel(Markdown(welcome), title="Daedelus", border_style="cyan"))
+        self.console.print(
+            Panel(Markdown(welcome), title="🧠 Daedelus Interactive REPL", border_style="cyan")
+        )
 
-    def handle_command(self, text: str) -> bool:
+    def handle_command(self, text: str | None) -> bool:
         """
         Handle REPL command.
 
         Args:
-            text: Command text
+            text: Command text (can be None if prompt was interrupted)
 
         Returns:
             True to continue, False to exit
         """
+        if text is None:
+            return True
+
         text = text.strip()
 
         if not text:
@@ -207,15 +254,158 @@ Welcome to Daedelus - your intelligent terminal assistant!
             description = text[10:].strip()
             self._generate_command(description)
 
-        else:
-            # Highlight the command
-            highlighted = self.highlighter.highlight_shell(text)
-            self.console.print(f"[dim]→[/dim] {highlighted}")
+        elif text.startswith("/write-script "):
+            description = text[14:].strip()
+            self._write_script(description)
 
-            # Show suggestion
-            self._show_suggestion(text)
+        elif text.startswith("/read "):
+            file_path = text[6:].strip()
+            self._read_file(file_path)
+
+        elif text.startswith("/write "):
+            file_path = text[7:].strip()
+            self._write_file(file_path)
+
+        else:
+            # Check if it's natural language (no shell command structure)
+            if self._is_natural_language(text):
+                self._handle_natural_language(text)
+            else:
+                # Execute shell command
+                self._execute_command(text)
 
         return True
+
+    def _execute_command(self, command: str) -> None:
+        """
+        Execute shell command and log to daemon.
+
+        Args:
+            command: Shell command to execute
+        """
+        # Handle cd command specially to change REPL's working directory
+        stripped_cmd = command.strip()
+        if stripped_cmd == "cd" or stripped_cmd.startswith("cd "):
+            self._handle_cd_command(command)
+            return
+
+        # Display the command with syntax highlighting
+        self.console.print("[dim]→[/dim] ", end="")
+        self.console.print(Syntax(command, "bash", theme="monokai", background_color="default"))
+
+        # Execute the command
+        start_time = time.time()
+        try:
+            # Use shell=True to handle pipes, redirects, etc.
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=False,  # Show output in real-time
+                text=True,
+                cwd=self.current_dir,  # Use tracked directory
+            )
+            exit_code = result.returncode
+            duration = time.time() - start_time
+
+            # Log to daemon
+            try:
+                self.ipc_client.log_command(
+                    command=command,
+                    exit_code=exit_code,
+                    duration=duration,
+                    cwd=self.current_dir,
+                    session_id=self.session_id,
+                )
+            except Exception as e:
+                logger.debug(f"Failed to log command: {e}")
+
+            # Show status
+            if exit_code == 0:
+                self.console.print(f"[dim green]✓ Exit code: {exit_code}[/dim green]")
+            else:
+                self.console.print(f"[dim red]✗ Exit code: {exit_code}[/dim red]")
+
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow]Command interrupted[/yellow]")
+            duration = time.time() - start_time
+            # Log interrupted command
+            try:
+                self.ipc_client.log_command(
+                    command=command,
+                    exit_code=130,  # Standard exit code for SIGINT
+                    duration=duration,
+                    cwd=self.current_dir,
+                    session_id=self.session_id,
+                )
+            except Exception as e:
+                logger.debug(f"Failed to log interrupted command: {e}")
+
+        except Exception as e:
+            self.console.print(f"[red]Error executing command: {e}[/red]")
+            duration = time.time() - start_time
+            # Log failed command
+            try:
+                self.ipc_client.log_command(
+                    command=command,
+                    exit_code=1,
+                    duration=duration,
+                    cwd=self.current_dir,
+                    session_id=self.session_id,
+                )
+            except Exception as e:
+                logger.debug(f"Failed to log failed command: {e}")
+
+        # Show suggestions after command execution
+        self._show_suggestion(command)
+
+    def _handle_cd_command(self, command: str) -> None:
+        """
+        Handle cd command to change working directory.
+
+        Args:
+            command: cd command to execute
+        """
+        # Parse the cd command
+        parts = command.strip().split(maxsplit=1)
+        if len(parts) == 1:
+            # cd with no argument goes to home
+            target_dir = os.path.expanduser("~")
+        else:
+            target_dir = os.path.expanduser(parts[1])
+
+        # Change directory
+        try:
+            # Resolve relative to current directory
+            if not os.path.isabs(target_dir):
+                target_dir = os.path.join(self.current_dir, target_dir)
+            
+            # Normalize the path
+            target_dir = os.path.normpath(target_dir)
+            
+            # Change directory
+            os.chdir(target_dir)
+            self.current_dir = target_dir
+            
+            self.console.print(f"[dim green]→ {self.current_dir}[/dim green]")
+            
+            # Log to daemon
+            try:
+                self.ipc_client.log_command(
+                    command=command,
+                    exit_code=0,
+                    duration=0.0,
+                    cwd=self.current_dir,
+                    session_id=self.session_id,
+                )
+            except Exception as e:
+                logger.debug(f"Failed to log cd command: {e}")
+                
+        except FileNotFoundError:
+            self.console.print(f"[red]cd: {parts[1] if len(parts) > 1 else '~'}: No such file or directory[/red]")
+        except PermissionError:
+            self.console.print(f"[red]cd: {parts[1] if len(parts) > 1 else '~'}: Permission denied[/red]")
+        except Exception as e:
+            self.console.print(f"[red]cd: {e}[/red]")
 
     def _show_stats(self) -> None:
         """Show command usage statistics."""
@@ -248,8 +438,7 @@ Welcome to Daedelus - your intelligent terminal assistant!
                 if commands:
                     self.console.print("\n[cyan]Recent Commands:[/cyan]")
                     for i, cmd in enumerate(commands, 1):
-                        highlighted = self.highlighter.highlight_shell(cmd)
-                        self.console.print(f"{i:2d}. {highlighted}")
+                        self.console.print(f"{i:2d}. [green]{cmd}[/green]")
                 else:
                     self.console.print("[dim]No recent commands[/dim]")
         except Exception as e:
@@ -271,8 +460,7 @@ Welcome to Daedelus - your intelligent terminal assistant!
                 if matches:
                     self.console.print(f"\n[cyan]Search results for '{query}':[/cyan]")
                     for cmd, score in matches:
-                        highlighted = self.highlighter.highlight_shell(cmd)
-                        self.console.print(f"[dim]{score:3d}%[/dim] {highlighted}")
+                        self.console.print(f"[dim]{score:3d}%[/dim] [green]{cmd}[/green]")
                 else:
                     self.console.print(f"[dim]No matches for '{query}'[/dim]")
         except Exception as e:
@@ -289,7 +477,9 @@ Welcome to Daedelus - your intelligent terminal assistant!
             response = self.ipc_client.send_request("explain_command", {"command": command})
             if response.get("status") == "ok":
                 explanation = response.get("explanation", "")
-                self.console.print(Panel(Markdown(explanation), title="Explanation", border_style="green"))
+                self.console.print(
+                    Panel(Markdown(explanation), title="Explanation", border_style="green")
+                )
             else:
                 error = response.get("error", "Unknown error")
                 self.console.print(f"[red]Error: {error}[/red]")
@@ -304,11 +494,13 @@ Welcome to Daedelus - your intelligent terminal assistant!
             description: Natural language description
         """
         try:
-            response = self.ipc_client.send_request("generate_command", {"description": description})
+            response = self.ipc_client.send_request(
+                "generate_command", {"description": description}
+            )
             if response.get("status") == "ok":
                 command = response.get("command", "")
-                highlighted = self.highlighter.highlight_shell(command)
-                self.console.print(f"\n[cyan]Generated command:[/cyan]\n{highlighted}")
+                self.console.print("\n[cyan]Generated command:[/cyan]")
+                self.console.print(f"[green]{command}[/green]\n")
             else:
                 error = response.get("error", "Unknown error")
                 self.console.print(f"[red]Error: {error}[/red]")
@@ -331,10 +523,265 @@ Welcome to Daedelus - your intelligent terminal assistant!
                     for i, sugg in enumerate(suggestions[:5], 1):
                         cmd = sugg.get("command", "")
                         score = sugg.get("score", 0)
-                        highlighted = self.highlighter.highlight_shell(cmd)
-                        self.console.print(f"{i}. [dim]{score:.2f}[/dim] {highlighted}")
+                        self.console.print(f"{i}. [dim]{score:.2f}[/dim] [green]{cmd}[/green]")
         except Exception:
             pass  # Silently ignore suggestion errors
+
+    def _write_script(self, description: str) -> None:
+        """
+        Write a script based on natural language description.
+
+        Args:
+            description: What the script should do
+        """
+        try:
+            self.console.print(f"[cyan]🔧 Creating script:[/cyan] {description}")
+            response = self.ipc_client.send_request(
+                "write_script", {"description": description, "cwd": self.current_dir}
+            )
+            if response.get("status") == "ok":
+                script_path = response.get("script_path", "")
+                script_content = response.get("script_content", "")
+                language = response.get("language", "bash")
+                
+                self.console.print(f"\n[green]✅ Script created:[/green] {script_path}")
+                self.console.print(f"\n[cyan]Script content:[/cyan]")
+                self.console.print(Syntax(script_content, language, theme="monokai", line_numbers=True))
+                
+                # Ask if user wants to execute
+                self.console.print("\n[yellow]Execute this script? (y/N):[/yellow]", end=" ")
+                import sys
+                response_input = sys.stdin.readline().strip().lower()
+                if response_input == 'y':
+                    self._execute_command(f"bash {script_path}")
+            else:
+                error = response.get("error", "Unknown error")
+                self.console.print(f"[red]Error: {error}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Error writing script: {e}[/red]")
+
+    def _read_file(self, file_path: str) -> None:
+        """
+        Read and analyze file with AI.
+
+        Args:
+            file_path: Path to file to read
+        """
+        try:
+            import os
+            full_path = os.path.join(self.current_dir, file_path) if not os.path.isabs(file_path) else file_path
+            
+            if not os.path.exists(full_path):
+                self.console.print(f"[red]File not found:[/red] {file_path}")
+                return
+                
+            self.console.print(f"[cyan]📖 Reading file:[/cyan] {file_path}")
+            response = self.ipc_client.send_request(
+                "read_file", {"file_path": full_path, "analyze": True}
+            )
+            if response.get("status") == "ok":
+                content = response.get("content", "")
+                analysis = response.get("analysis", "")
+                file_type = response.get("file_type", "text")
+                
+                # Show file content
+                self.console.print(f"\n[cyan]Content:[/cyan]")
+                self.console.print(Syntax(content[:2000], file_type, theme="monokai", line_numbers=True))
+                if len(content) > 2000:
+                    self.console.print("[dim]... (content truncated)[/dim]")
+                
+                # Show AI analysis
+                if analysis:
+                    self.console.print(f"\n[cyan]AI Analysis:[/cyan]")
+                    self.console.print(Panel(Markdown(analysis), border_style="green"))
+            else:
+                error = response.get("error", "Unknown error")
+                self.console.print(f"[red]Error: {error}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Error reading file: {e}[/red]")
+
+    def _write_file(self, file_path: str) -> None:
+        """
+        Write content to file with AI assistance.
+
+        Args:
+            file_path: Path to file to write
+        """
+        try:
+            self.console.print(f"[cyan]📝 What should I write to {file_path}?[/cyan]")
+            self.console.print("[dim]Describe the content or paste it directly:[/dim]")
+            
+            import sys
+            content_description = sys.stdin.readline().strip()
+            
+            if not content_description:
+                self.console.print("[yellow]Cancelled[/yellow]")
+                return
+                
+            response = self.ipc_client.send_request(
+                "write_file", 
+                {
+                    "file_path": file_path, 
+                    "description": content_description,
+                    "cwd": self.current_dir
+                }
+            )
+            if response.get("status") == "ok":
+                written_path = response.get("file_path", file_path)
+                self.console.print(f"[green]✅ File written:[/green] {written_path}")
+            else:
+                error = response.get("error", "Unknown error")
+                self.console.print(f"[red]Error: {error}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Error writing file: {e}[/red]")
+
+    def _is_natural_language(self, text: str) -> bool:
+        """
+        Detect if input is natural language vs shell command.
+
+        Args:
+            text: User input
+
+        Returns:
+            True if likely natural language
+        """
+        # Natural language indicators
+        nl_indicators = [
+            "tell me", "show me", "what is", "how do i", "how to",
+            "can you", "could you", "would you", "please",
+            "i want", "i need", "help me", "explain",
+            "create a", "make a", "write a", "build a",
+            "find out", "check if", "list all",
+            "i am using", "i'm using", "i have", "i'm",
+            "what's the", "whats the", "which command"
+        ]
+        
+        text_lower = text.lower()
+        
+        # Check for natural language indicators
+        if any(indicator in text_lower for indicator in nl_indicators):
+            return True
+            
+        # Check if it starts with common question words or conversational starters
+        first_words = text_lower.split()
+        if first_words and first_words[0] in ["what", "how", "why", "when", "where", "who", "which", "i"]:
+            return True
+            
+        # If it contains only words and spaces (no shell syntax)
+        import re
+        if re.match(r'^[a-zA-Z\s,\']+$', text) and len(text.split()) > 3:
+            return True
+            
+        return False
+
+    def _handle_natural_language(self, text: str) -> None:
+        """
+        Handle natural language input with AI interpretation.
+
+        Args:
+            text: Natural language input
+        """
+        try:
+            # Check for OS-specific package manager questions
+            text_lower = text.lower()
+            if any(word in text_lower for word in ["update", "upgrade", "install", "package"]):
+                if any(word in text_lower for word in ["fedora", "debian", "ubuntu", "command", "what", "which"]):
+                    self._handle_os_package_question(text)
+                    return
+            
+            self.console.print(f"[dim]🤖 Interpreting:[/dim] {text}")
+            response = self.ipc_client.send_request(
+                "interpret_natural_language",
+                {
+                    "text": text,
+                    "cwd": self.current_dir,
+                    "session_id": self.session_id
+                }
+            )
+            
+            if response.get("status") == "ok":
+                intent = response.get("intent", "")
+                action = response.get("action", "")
+                commands = response.get("commands", [])
+                explanation = response.get("explanation", "")
+                
+                if explanation:
+                    self.console.print(f"\n[cyan]Understanding:[/cyan] {explanation}")
+                
+                if commands:
+                    self.console.print(f"\n[cyan]Suggested commands:[/cyan]")
+                    for i, cmd in enumerate(commands, 1):
+                        self.console.print(f"{i}. [green]{cmd}[/green]")
+                    
+                    # Execute first command automatically if high confidence
+                    if action == "execute" and len(commands) > 0:
+                        self.console.print(f"\n[yellow]Execute command 1? (Y/n):[/yellow]", end=" ")
+                        import sys
+                        response_input = sys.stdin.readline().strip().lower()
+                        if response_input in ['', 'y', 'yes']:
+                            self._execute_command(commands[0])
+                elif action:
+                    self.console.print(f"[yellow]Action:[/yellow] {action}")
+            else:
+                error = response.get("error", "Unknown error")
+                self.console.print(f"[yellow]I'm not sure how to help with that. Try a command or /help[/yellow]")
+                logger.debug(f"Natural language interpretation error: {error}")
+                
+        except Exception as e:
+            self.console.print(f"[yellow]I'm not sure how to help with that. Try a command or /help[/yellow]")
+            logger.debug(f"Error handling natural language: {e}")
+    
+    def _handle_os_package_question(self, text: str) -> None:
+        """
+        Handle OS-specific package manager questions.
+
+        Args:
+            text: Natural language question about package management
+        """
+        os_info = self.os_detector.get_os_info()
+        text_lower = text.lower()
+        
+        self.console.print(f"\n[cyan]System Information:[/cyan]")
+        self.console.print(f"  OS: [green]{os_info.distribution or os_info.os_type.value}[/green]")
+        self.console.print(f"  Package Manager: [green]{os_info.package_manager.value}[/green]")
+        self.console.print()
+        
+        if "update" in text_lower or "upgrade" in text_lower:
+            cmd = self.os_detector.get_update_command()
+            self.console.print(f"[cyan]To update your system:[/cyan]")
+            self.console.print(f"  [green]{cmd}[/green]")
+            self.console.print()
+            
+            self.console.print(f"[yellow]Execute this command? (y/N):[/yellow]", end=" ")
+            import sys
+            response_input = sys.stdin.readline().strip().lower()
+            if response_input == 'y':
+                self._execute_command(cmd)
+        
+        elif "install" in text_lower:
+            # Extract package name if mentioned
+            words = text.split()
+            package = None
+            for i, word in enumerate(words):
+                if word.lower() == "install" and i + 1 < len(words):
+                    package = words[i + 1]
+                    break
+            
+            if package:
+                cmd = self.os_detector.get_install_command(package)
+                self.console.print(f"[cyan]To install {package}:[/cyan]")
+                self.console.print(f"  [green]{cmd}[/green]")
+            else:
+                self.console.print(f"[cyan]Package install command format:[/cyan]")
+                self.console.print(f"  [green]{self.os_detector.get_install_command('<package_name>')}[/green]")
+                self.console.print()
+                self.console.print(f"[dim]Example: {self.os_detector.get_install_command('python3-pip')}[/dim]")
+        
+        else:
+            self.console.print(f"[cyan]Common commands for {os_info.package_manager.value}:[/cyan]")
+            self.console.print(f"  Update system: [green]{self.os_detector.get_update_command()}[/green]")
+            self.console.print(f"  Install package: [green]{self.os_detector.get_install_command('<package>')}[/green]")
+            self.console.print(f"  Search packages: [green]{self.os_detector.get_search_command('<query>')}[/green]")
 
     def run(self) -> None:
         """Run the REPL loop."""
@@ -342,10 +789,9 @@ Welcome to Daedelus - your intelligent terminal assistant!
 
         while True:
             try:
-                # Show prompt
-                text = self.session.prompt(
-                    HTML("<ansicyan><b>daedelus></b></ansicyan> "),
-                )
+                # Show prompt with current directory
+                prompt_text = HTML(f"<ansicyan><b>daedelus</b></ansicyan>:<ansigreen>{self.current_dir}</ansigreen>$ ")
+                text = self.session.prompt(prompt_text)
 
                 # Handle command
                 if not self.handle_command(text):

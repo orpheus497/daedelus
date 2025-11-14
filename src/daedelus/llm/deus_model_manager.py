@@ -113,7 +113,9 @@ class DeusModelManager:
         self._detect_models()
 
         logger.info(f"DeusModelManager initialized (models_dir={self.models_dir})")
-        logger.info(f"Deus identity: {_DEUS_IDENTITY['formal_name']} (aka {_DEUS_IDENTITY['social_name']}) by {_DEUS_IDENTITY['creator']}")
+        logger.info(
+            f"Deus identity: {_DEUS_IDENTITY['formal_name']} (aka {_DEUS_IDENTITY['social_name']}) by {_DEUS_IDENTITY['creator']}"
+        )
 
     @staticmethod
     def get_model_identity() -> dict[str, str]:
@@ -161,9 +163,7 @@ class DeusModelManager:
             return
 
         # Filter out deus.gguf for fallback search
-        fallback_candidates = [
-            f for f in all_gguf_files if f.name != self.DEUS_MODEL_NAME
-        ]
+        fallback_candidates = [f for f in all_gguf_files if f.name != self.DEUS_MODEL_NAME]
 
         if not fallback_candidates:
             logger.info("No fallback models found (deus.gguf is the only model)")
@@ -391,12 +391,14 @@ class DeusModelManager:
 
         # List all .gguf files
         for gguf_file in self.models_dir.glob("*.gguf"):
-            models["all_models"].append({
-                "path": str(gguf_file),
-                "name": gguf_file.name,
-                "size_mb": gguf_file.stat().st_size / (1024**2),
-                "is_deus": gguf_file.name == self.DEUS_MODEL_NAME,
-            })
+            models["all_models"].append(
+                {
+                    "path": str(gguf_file),
+                    "name": gguf_file.name,
+                    "size_mb": gguf_file.stat().st_size / (1024**2),
+                    "is_deus": gguf_file.name == self.DEUS_MODEL_NAME,
+                }
+            )
 
         return models
 
@@ -420,18 +422,18 @@ if __name__ == "__main__":
 
     manager = DeusModelManager(models_dir)
 
-    print(f"\nModel detection:")
+    print("\nModel detection:")
     print(f"  Deus model: {manager.deus_model_path}")
     print(f"  Fallback model: {manager.fallback_model_path}")
 
     print(f"\nPriority model: {manager.get_model_path()}")
 
-    print(f"\nTraining progress:")
+    print("\nTraining progress:")
     progress = manager.get_training_progress()
     print(f"  Commands since training: {progress['commands_since_training']}")
     print(f"  Progress: {progress['progress_percentage']}%")
 
-    print(f"\nAvailable models:")
+    print("\nAvailable models:")
     models = manager.list_available_models()
     for model in models["all_models"]:
         print(f"  - {model['name']} ({model['size_mb']:.1f} MB)")

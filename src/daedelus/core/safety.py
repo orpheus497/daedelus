@@ -374,9 +374,9 @@ class SafetyAnalyzer:
         # Calculate overall risk (weighted average)
         # Destructiveness: 40%, Reversibility (inverted): 35%, Scope: 25%
         overall_risk = (
-            destructiveness * 0.40 +
-            (1.0 - reversibility) * 0.35 +  # Invert reversibility
-            scope * 0.25
+            destructiveness * 0.40
+            + (1.0 - reversibility) * 0.35  # Invert reversibility
+            + scope * 0.25
         )
 
         return RiskScore(

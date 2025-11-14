@@ -16,21 +16,20 @@ License: MIT
 import hashlib
 import json
 import logging
-import mimetypes
-import os
 import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentType(Enum):
     """Types of documents that can be ingested"""
+
     TEXT = "text"
     MARKDOWN = "markdown"
     CODE = "code"
@@ -44,6 +43,7 @@ class DocumentType(Enum):
 
 class IngestionStatus(Enum):
     """Status of document ingestion"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -54,6 +54,7 @@ class IngestionStatus(Enum):
 @dataclass
 class DocumentMetadata:
     """Metadata about an ingested document"""
+
     file_path: str
     document_type: DocumentType
     file_size: int
@@ -62,31 +63,33 @@ class DocumentMetadata:
     modified: float
     ingested: float
     char_count: int
-    token_count: Optional[int] = None
-    language: Optional[str] = None
+    token_count: int | None = None
+    language: str | None = None
     encoding: str = "utf-8"
-    tags: List[str] = field(default_factory=list)
-    category: Optional[str] = None
+    tags: list[str] = field(default_factory=list)
+    category: str | None = None
     source: str = "manual"
 
 
 @dataclass
 class IngestedDocument:
     """Representation of an ingested document"""
+
     metadata: DocumentMetadata
     content: str
     extracted_text: str
-    structured_data: Optional[Dict[str, Any]] = None
-    chunks: List[Dict[str, Any]] = field(default_factory=list)
+    structured_data: dict[str, Any] | None = None
+    chunks: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
 class TrainingDataFormat:
     """Formatted training data ready for model training"""
+
     instruction: str
     input: str
     output: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class DocumentParser:
@@ -121,37 +124,37 @@ class DocumentParser:
 
         # Map extensions to types
         extension_map = {
-            '.txt': DocumentType.TEXT,
-            '.md': DocumentType.MARKDOWN,
-            '.markdown': DocumentType.MARKDOWN,
-            '.pdf': DocumentType.PDF,
-            '.html': DocumentType.HTML,
-            '.htm': DocumentType.HTML,
-            '.json': DocumentType.JSON,
-            '.xml': DocumentType.XML,
-            '.yaml': DocumentType.YAML,
-            '.yml': DocumentType.YAML,
+            ".txt": DocumentType.TEXT,
+            ".md": DocumentType.MARKDOWN,
+            ".markdown": DocumentType.MARKDOWN,
+            ".pdf": DocumentType.PDF,
+            ".html": DocumentType.HTML,
+            ".htm": DocumentType.HTML,
+            ".json": DocumentType.JSON,
+            ".xml": DocumentType.XML,
+            ".yaml": DocumentType.YAML,
+            ".yml": DocumentType.YAML,
             # Code files
-            '.py': DocumentType.CODE,
-            '.js': DocumentType.CODE,
-            '.ts': DocumentType.CODE,
-            '.java': DocumentType.CODE,
-            '.cpp': DocumentType.CODE,
-            '.c': DocumentType.CODE,
-            '.h': DocumentType.CODE,
-            '.sh': DocumentType.CODE,
-            '.bash': DocumentType.CODE,
-            '.zsh': DocumentType.CODE,
-            '.fish': DocumentType.CODE,
-            '.rs': DocumentType.CODE,
-            '.go': DocumentType.CODE,
-            '.rb': DocumentType.CODE,
-            '.php': DocumentType.CODE,
+            ".py": DocumentType.CODE,
+            ".js": DocumentType.CODE,
+            ".ts": DocumentType.CODE,
+            ".java": DocumentType.CODE,
+            ".cpp": DocumentType.CODE,
+            ".c": DocumentType.CODE,
+            ".h": DocumentType.CODE,
+            ".sh": DocumentType.CODE,
+            ".bash": DocumentType.CODE,
+            ".zsh": DocumentType.CODE,
+            ".fish": DocumentType.CODE,
+            ".rs": DocumentType.CODE,
+            ".go": DocumentType.CODE,
+            ".rb": DocumentType.CODE,
+            ".php": DocumentType.CODE,
         }
 
         return extension_map.get(ext, DocumentType.UNKNOWN)
 
-    def parse_document(self, file_path: Path) -> Optional[IngestedDocument]:
+    def parse_document(self, file_path: Path) -> IngestedDocument | None:
         """
         Parse a document and extract content.
 
@@ -187,7 +190,7 @@ class DocumentParser:
                 modified=stat.st_mtime,
                 ingested=datetime.now().timestamp(),
                 char_count=len(extracted_text),
-                encoding='utf-8'
+                encoding="utf-8",
             )
 
             # Detect language for code files
@@ -198,7 +201,7 @@ class DocumentParser:
                 metadata=metadata,
                 content=content,
                 extracted_text=extracted_text,
-                structured_data=structured_data
+                structured_data=structured_data,
             )
 
         except Exception as e:
@@ -208,64 +211,61 @@ class DocumentParser:
     def _compute_file_hash(self, file_path: Path) -> str:
         """Compute SHA-256 hash of file"""
         sha256 = hashlib.sha256()
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def _parse_text(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_text(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse plain text file"""
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
         return content, content, None
 
-    def _parse_markdown(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_markdown(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse markdown file"""
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         # Extract structured information
         structured = {
-            'headers': re.findall(r'^#+\s+(.+)$', content, re.MULTILINE),
-            'code_blocks': re.findall(r'```[\w]*\n(.*?)\n```', content, re.DOTALL),
-            'links': re.findall(r'\[([^\]]+)\]\(([^\)]+)\)', content)
+            "headers": re.findall(r"^#+\s+(.+)$", content, re.MULTILINE),
+            "code_blocks": re.findall(r"```[\w]*\n(.*?)\n```", content, re.DOTALL),
+            "links": re.findall(r"\[([^\]]+)\]\(([^\)]+)\)", content),
         }
 
         return content, content, structured
 
-    def _parse_code(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_code(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse code file"""
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         # Extract structured information
         structured = {
-            'functions': self._extract_functions(content, file_path.suffix),
-            'classes': self._extract_classes(content, file_path.suffix),
-            'imports': self._extract_imports(content, file_path.suffix),
-            'comments': self._extract_comments(content, file_path.suffix)
+            "functions": self._extract_functions(content, file_path.suffix),
+            "classes": self._extract_classes(content, file_path.suffix),
+            "imports": self._extract_imports(content, file_path.suffix),
+            "comments": self._extract_comments(content, file_path.suffix),
         }
 
         return content, content, structured
 
-    def _parse_pdf(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_pdf(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse PDF file"""
         try:
             import PyPDF2
 
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
 
                 text_parts = []
                 for page in reader.pages:
                     text_parts.append(page.extract_text())
 
-                text = '\n\n'.join(text_parts)
+                text = "\n\n".join(text_parts)
 
-                structured = {
-                    'page_count': len(reader.pages),
-                    'metadata': reader.metadata
-                }
+                structured = {"page_count": len(reader.pages), "metadata": reader.metadata}
 
                 return text, text, structured
 
@@ -273,18 +273,18 @@ class DocumentParser:
             logger.warning("PyPDF2 not installed, falling back to text extraction")
             return self._parse_text(file_path)
 
-    def _parse_html(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_html(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse HTML file"""
         try:
             from bs4 import BeautifulSoup
 
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(file_path, encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
-            soup = BeautifulSoup(content, 'html.parser')
+            soup = BeautifulSoup(content, "html.parser")
 
             # Remove script and style elements
-            for script in soup(['script', 'style']):
+            for script in soup(["script", "style"]):
                 script.decompose()
 
             # Get text
@@ -293,12 +293,16 @@ class DocumentParser:
             # Clean up whitespace
             lines = (line.strip() for line in text.splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = '\n'.join(chunk for chunk in chunks if chunk)
+            text = "\n".join(chunk for chunk in chunks if chunk)
 
             structured = {
-                'title': soup.title.string if soup.title else None,
-                'headings': [h.get_text() for h in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])],
-                'links': [{'text': a.get_text(), 'href': a.get('href')} for a in soup.find_all('a')]
+                "title": soup.title.string if soup.title else None,
+                "headings": [
+                    h.get_text() for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
+                ],
+                "links": [
+                    {"text": a.get_text(), "href": a.get("href")} for a in soup.find_all("a")
+                ],
             }
 
             return content, text, structured
@@ -307,9 +311,9 @@ class DocumentParser:
             logger.warning("BeautifulSoup not installed, falling back to text extraction")
             return self._parse_text(file_path)
 
-    def _parse_json(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_json(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse JSON file"""
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         data = json.loads(content)
@@ -319,23 +323,20 @@ class DocumentParser:
 
         return content, text, data
 
-    def _parse_xml(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_xml(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse XML file"""
         import xml.etree.ElementTree as ET
 
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         try:
             tree = ET.fromstring(content)
 
             # Extract text
-            text = ET.tostring(tree, encoding='unicode', method='text')
+            text = ET.tostring(tree, encoding="unicode", method="text")
 
-            structured = {
-                'root_tag': tree.tag,
-                'children': [child.tag for child in tree]
-            }
+            structured = {"root_tag": tree.tag, "children": [child.tag for child in tree]}
 
             return content, text, structured
 
@@ -343,12 +344,12 @@ class DocumentParser:
             logger.error(f"XML parse error: {e}")
             return content, content, None
 
-    def _parse_yaml(self, file_path: Path) -> Tuple[str, str, Optional[Dict]]:
+    def _parse_yaml(self, file_path: Path) -> tuple[str, str, dict | None]:
         """Parse YAML file"""
         try:
             import yaml
 
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             data = yaml.safe_load(content)
@@ -365,31 +366,31 @@ class DocumentParser:
     def _detect_code_language(self, file_path: Path) -> str:
         """Detect programming language from file extension"""
         ext_map = {
-            '.py': 'python',
-            '.js': 'javascript',
-            '.ts': 'typescript',
-            '.java': 'java',
-            '.cpp': 'cpp',
-            '.c': 'c',
-            '.h': 'c',
-            '.sh': 'bash',
-            '.bash': 'bash',
-            '.zsh': 'zsh',
-            '.fish': 'fish',
-            '.rs': 'rust',
-            '.go': 'go',
-            '.rb': 'ruby',
-            '.php': 'php',
+            ".py": "python",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".java": "java",
+            ".cpp": "cpp",
+            ".c": "c",
+            ".h": "c",
+            ".sh": "bash",
+            ".bash": "bash",
+            ".zsh": "zsh",
+            ".fish": "fish",
+            ".rs": "rust",
+            ".go": "go",
+            ".rb": "ruby",
+            ".php": "php",
         }
-        return ext_map.get(file_path.suffix.lower(), 'unknown')
+        return ext_map.get(file_path.suffix.lower(), "unknown")
 
-    def _extract_functions(self, content: str, ext: str) -> List[str]:
+    def _extract_functions(self, content: str, ext: str) -> list[str]:
         """Extract function definitions (basic pattern matching)"""
         patterns = {
-            '.py': r'def\s+(\w+)\s*\(',
-            '.js': r'function\s+(\w+)\s*\(',
-            '.ts': r'function\s+(\w+)\s*\(',
-            '.java': r'\w+\s+(\w+)\s*\([^)]*\)\s*\{',
+            ".py": r"def\s+(\w+)\s*\(",
+            ".js": r"function\s+(\w+)\s*\(",
+            ".ts": r"function\s+(\w+)\s*\(",
+            ".java": r"\w+\s+(\w+)\s*\([^)]*\)\s*\{",
         }
 
         pattern = patterns.get(ext)
@@ -397,13 +398,13 @@ class DocumentParser:
             return re.findall(pattern, content)
         return []
 
-    def _extract_classes(self, content: str, ext: str) -> List[str]:
+    def _extract_classes(self, content: str, ext: str) -> list[str]:
         """Extract class definitions"""
         patterns = {
-            '.py': r'class\s+(\w+)[\s\(:]',
-            '.js': r'class\s+(\w+)[\s\{]',
-            '.ts': r'class\s+(\w+)[\s\{]',
-            '.java': r'class\s+(\w+)[\s\{]',
+            ".py": r"class\s+(\w+)[\s\(:]",
+            ".js": r"class\s+(\w+)[\s\{]",
+            ".ts": r"class\s+(\w+)[\s\{]",
+            ".java": r"class\s+(\w+)[\s\{]",
         }
 
         pattern = patterns.get(ext)
@@ -411,13 +412,13 @@ class DocumentParser:
             return re.findall(pattern, content)
         return []
 
-    def _extract_imports(self, content: str, ext: str) -> List[str]:
+    def _extract_imports(self, content: str, ext: str) -> list[str]:
         """Extract import statements"""
         patterns = {
-            '.py': r'(?:from\s+[\w.]+\s+)?import\s+([\w,\s.]+)',
-            '.js': r'import\s+.*?from\s+["\'](.+?)["\']',
-            '.ts': r'import\s+.*?from\s+["\'](.+?)["\']',
-            '.java': r'import\s+([\w.]+);',
+            ".py": r"(?:from\s+[\w.]+\s+)?import\s+([\w,\s.]+)",
+            ".js": r'import\s+.*?from\s+["\'](.+?)["\']',
+            ".ts": r'import\s+.*?from\s+["\'](.+?)["\']',
+            ".java": r"import\s+([\w.]+);",
         }
 
         pattern = patterns.get(ext)
@@ -425,13 +426,13 @@ class DocumentParser:
             return re.findall(pattern, content)
         return []
 
-    def _extract_comments(self, content: str, ext: str) -> List[str]:
+    def _extract_comments(self, content: str, ext: str) -> list[str]:
         """Extract comments"""
         # Single-line comments
-        if ext in ['.py', '.sh', '.bash', '.zsh', '.fish']:
-            return re.findall(r'#\s*(.+)$', content, re.MULTILINE)
-        elif ext in ['.js', '.ts', '.java', '.cpp', '.c']:
-            return re.findall(r'//\s*(.+)$', content, re.MULTILINE)
+        if ext in [".py", ".sh", ".bash", ".zsh", ".fish"]:
+            return re.findall(r"#\s*(.+)$", content, re.MULTILINE)
+        elif ext in [".js", ".ts", ".java", ".cpp", ".c"]:
+            return re.findall(r"//\s*(.+)$", content, re.MULTILINE)
         return []
 
 
@@ -451,7 +452,7 @@ class DocumentChunker:
         self.max_chunk_size = max_chunk_size
         self.overlap = overlap
 
-    def chunk_document(self, document: IngestedDocument) -> List[Dict[str, Any]]:
+    def chunk_document(self, document: IngestedDocument) -> list[dict[str, Any]]:
         """
         Chunk document into smaller pieces.
 
@@ -478,10 +479,10 @@ class DocumentChunker:
             if end < len(text):
                 # Look for sentence endings
                 sentence_end = max(
-                    text.rfind('. ', start, end),
-                    text.rfind('! ', start, end),
-                    text.rfind('? ', start, end),
-                    text.rfind('\n', start, end)
+                    text.rfind(". ", start, end),
+                    text.rfind("! ", start, end),
+                    text.rfind("? ", start, end),
+                    text.rfind("\n", start, end),
                 )
 
                 if sentence_end > start:
@@ -490,13 +491,15 @@ class DocumentChunker:
             chunk_text = text[start:end].strip()
 
             if chunk_text:
-                chunks.append({
-                    'text': chunk_text,
-                    'start_char': start,
-                    'end_char': end,
-                    'chunk_index': len(chunks),
-                    'source_file': document.metadata.file_path
-                })
+                chunks.append(
+                    {
+                        "text": chunk_text,
+                        "start_char": start,
+                        "end_char": end,
+                        "chunk_index": len(chunks),
+                        "source_file": document.metadata.file_path,
+                    }
+                )
 
             start = end - char_overlap
 
@@ -509,7 +512,7 @@ class TrainingDataFormatter:
     Formats ingested documents into training data for the model.
     """
 
-    def format_for_training(self, document: IngestedDocument) -> List[TrainingDataFormat]:
+    def format_for_training(self, document: IngestedDocument) -> list[TrainingDataFormat]:
         """
         Format document into training data.
 
@@ -533,79 +536,91 @@ class TrainingDataFormatter:
 
         return training_data
 
-    def _format_code_document(self, document: IngestedDocument) -> List[TrainingDataFormat]:
+    def _format_code_document(self, document: IngestedDocument) -> list[TrainingDataFormat]:
         """Format code document for training"""
         entries = []
 
         # Code explanation task
-        entries.append(TrainingDataFormat(
-            instruction="Explain what this code does:",
-            input=document.content[:2000],  # Limit size
-            output=f"This is {document.metadata.language} code that implements various functions and classes.",
-            metadata={
-                'type': 'code_explanation',
-                'language': document.metadata.language,
-                'source': document.metadata.file_path
-            }
-        ))
+        entries.append(
+            TrainingDataFormat(
+                instruction="Explain what this code does:",
+                input=document.content[:2000],  # Limit size
+                output=f"This is {document.metadata.language} code that implements various functions and classes.",
+                metadata={
+                    "type": "code_explanation",
+                    "language": document.metadata.language,
+                    "source": document.metadata.file_path,
+                },
+            )
+        )
 
         # Code-related Q&A from structured data
         if document.structured_data:
-            functions = document.structured_data.get('functions', [])
+            functions = document.structured_data.get("functions", [])
             if functions:
-                entries.append(TrainingDataFormat(
-                    instruction="What functions are defined in this code?",
-                    input=document.content[:2000],
-                    output=f"The following functions are defined: {', '.join(functions)}",
-                    metadata={'type': 'code_analysis', 'source': document.metadata.file_path}
-                ))
+                entries.append(
+                    TrainingDataFormat(
+                        instruction="What functions are defined in this code?",
+                        input=document.content[:2000],
+                        output=f"The following functions are defined: {', '.join(functions)}",
+                        metadata={"type": "code_analysis", "source": document.metadata.file_path},
+                    )
+                )
 
-            classes = document.structured_data.get('classes', [])
+            classes = document.structured_data.get("classes", [])
             if classes:
-                entries.append(TrainingDataFormat(
-                    instruction="What classes are defined in this code?",
-                    input=document.content[:2000],
-                    output=f"The following classes are defined: {', '.join(classes)}",
-                    metadata={'type': 'code_analysis', 'source': document.metadata.file_path}
-                ))
+                entries.append(
+                    TrainingDataFormat(
+                        instruction="What classes are defined in this code?",
+                        input=document.content[:2000],
+                        output=f"The following classes are defined: {', '.join(classes)}",
+                        metadata={"type": "code_analysis", "source": document.metadata.file_path},
+                    )
+                )
 
         return entries
 
-    def _format_markdown_document(self, document: IngestedDocument) -> List[TrainingDataFormat]:
+    def _format_markdown_document(self, document: IngestedDocument) -> list[TrainingDataFormat]:
         """Format markdown document for training"""
         entries = []
 
         # Summarization task
-        entries.append(TrainingDataFormat(
-            instruction="Summarize this documentation:",
-            input=document.content[:2000],
-            output="This documentation covers various topics and provides detailed information.",
-            metadata={'type': 'summarization', 'source': document.metadata.file_path}
-        ))
+        entries.append(
+            TrainingDataFormat(
+                instruction="Summarize this documentation:",
+                input=document.content[:2000],
+                output="This documentation covers various topics and provides detailed information.",
+                metadata={"type": "summarization", "source": document.metadata.file_path},
+            )
+        )
 
         # Q&A from headers
-        if document.structured_data and document.structured_data.get('headers'):
-            headers = document.structured_data['headers']
-            entries.append(TrainingDataFormat(
-                instruction="What topics are covered in this documentation?",
-                input=document.content[:2000],
-                output=f"The documentation covers: {', '.join(headers[:10])}",
-                metadata={'type': 'content_analysis', 'source': document.metadata.file_path}
-            ))
+        if document.structured_data and document.structured_data.get("headers"):
+            headers = document.structured_data["headers"]
+            entries.append(
+                TrainingDataFormat(
+                    instruction="What topics are covered in this documentation?",
+                    input=document.content[:2000],
+                    output=f"The documentation covers: {', '.join(headers[:10])}",
+                    metadata={"type": "content_analysis", "source": document.metadata.file_path},
+                )
+            )
 
         return entries
 
-    def _format_generic_document(self, document: IngestedDocument) -> List[TrainingDataFormat]:
+    def _format_generic_document(self, document: IngestedDocument) -> list[TrainingDataFormat]:
         """Format generic document for training"""
         entries = []
 
         # Generic comprehension task
-        entries.append(TrainingDataFormat(
-            instruction="What is this document about?",
-            input=document.extracted_text[:2000],
-            output="This document contains information and text content.",
-            metadata={'type': 'comprehension', 'source': document.metadata.file_path}
-        ))
+        entries.append(
+            TrainingDataFormat(
+                instruction="What is this document about?",
+                input=document.extracted_text[:2000],
+                output="This document contains information and text content.",
+                metadata={"type": "comprehension", "source": document.metadata.file_path},
+            )
+        )
 
         return entries
 
@@ -636,7 +651,8 @@ class DocumentIngestionManager:
     def _init_database(self):
         """Initialize database schema"""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS ingested_documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     file_path TEXT NOT NULL UNIQUE,
@@ -655,9 +671,11 @@ class DocumentIngestionManager:
                     status TEXT,
                     error_message TEXT
                 )
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS training_data (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     document_id INTEGER,
@@ -668,15 +686,20 @@ class DocumentIngestionManager:
                     created REAL,
                     FOREIGN KEY (document_id) REFERENCES ingested_documents(id)
                 )
-            """)
+            """
+            )
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_doc_hash ON ingested_documents(file_hash)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_doc_type ON ingested_documents(document_type)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_doc_type ON ingested_documents(document_type)"
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_doc_status ON ingested_documents(status)")
 
             conn.commit()
 
-    def ingest_document(self, file_path: Path, category: Optional[str] = None, tags: Optional[List[str]] = None) -> bool:
+    def ingest_document(
+        self, file_path: Path, category: str | None = None, tags: list[str] | None = None
+    ) -> bool:
         """
         Ingest a document into the system.
 
@@ -694,8 +717,7 @@ class DocumentIngestionManager:
 
             with sqlite3.connect(self.db_path) as conn:
                 existing = conn.execute(
-                    "SELECT id FROM ingested_documents WHERE file_hash = ?",
-                    (file_hash,)
+                    "SELECT id FROM ingested_documents WHERE file_hash = ?", (file_hash,)
                 ).fetchone()
 
                 if existing:
@@ -721,47 +743,55 @@ class DocumentIngestionManager:
 
             # Store in database
             with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     INSERT INTO ingested_documents (
                         file_path, file_hash, document_type, file_size, char_count,
                         language, category, tags, source, created, modified, ingested, status
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    document.metadata.file_path,
-                    document.metadata.file_hash,
-                    document.metadata.document_type.value,
-                    document.metadata.file_size,
-                    document.metadata.char_count,
-                    document.metadata.language,
-                    document.metadata.category,
-                    json.dumps(document.metadata.tags),
-                    document.metadata.source,
-                    document.metadata.created,
-                    document.metadata.modified,
-                    document.metadata.ingested,
-                    IngestionStatus.COMPLETED.value
-                ))
+                """,
+                    (
+                        document.metadata.file_path,
+                        document.metadata.file_hash,
+                        document.metadata.document_type.value,
+                        document.metadata.file_size,
+                        document.metadata.char_count,
+                        document.metadata.language,
+                        document.metadata.category,
+                        json.dumps(document.metadata.tags),
+                        document.metadata.source,
+                        document.metadata.created,
+                        document.metadata.modified,
+                        document.metadata.ingested,
+                        IngestionStatus.COMPLETED.value,
+                    ),
+                )
 
                 document_id = cursor.lastrowid
 
                 # Store training data
                 for entry in training_data:
-                    conn.execute("""
+                    conn.execute(
+                        """
                         INSERT INTO training_data (
                             document_id, instruction, input, output, metadata, created
                         ) VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        document_id,
-                        entry.instruction,
-                        entry.input,
-                        entry.output,
-                        json.dumps(entry.metadata),
-                        datetime.now().timestamp()
-                    ))
+                    """,
+                        (
+                            document_id,
+                            entry.instruction,
+                            entry.input,
+                            entry.output,
+                            json.dumps(entry.metadata),
+                            datetime.now().timestamp(),
+                        ),
+                    )
 
                 conn.commit()
 
-            logger.info(f"Successfully ingested document: {file_path} ({len(training_data)} training entries)")
+            logger.info(
+                f"Successfully ingested document: {file_path} ({len(training_data)} training entries)"
+            )
             return True
 
         except Exception as e:
@@ -769,22 +799,27 @@ class DocumentIngestionManager:
 
             # Record failure
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO ingested_documents (
                         file_path, file_hash, status, error_message, ingested
                     ) VALUES (?, ?, ?, ?, ?)
-                """, (
-                    str(file_path),
-                    file_hash if 'file_hash' in locals() else '',
-                    IngestionStatus.FAILED.value,
-                    str(e),
-                    datetime.now().timestamp()
-                ))
+                """,
+                    (
+                        str(file_path),
+                        file_hash if "file_hash" in locals() else "",
+                        IngestionStatus.FAILED.value,
+                        str(e),
+                        datetime.now().timestamp(),
+                    ),
+                )
                 conn.commit()
 
             return False
 
-    def ingest_directory(self, dir_path: Path, recursive: bool = True, pattern: str = "*") -> Dict[str, int]:
+    def ingest_directory(
+        self, dir_path: Path, recursive: bool = True, pattern: str = "*"
+    ) -> dict[str, int]:
         """
         Ingest all documents in a directory.
 
@@ -796,7 +831,7 @@ class DocumentIngestionManager:
         Returns:
             Dictionary with statistics
         """
-        stats = {'success': 0, 'failed': 0, 'skipped': 0}
+        stats = {"success": 0, "failed": 0, "skipped": 0}
 
         if recursive:
             files = dir_path.rglob(pattern)
@@ -806,13 +841,13 @@ class DocumentIngestionManager:
         for file_path in files:
             if file_path.is_file():
                 if self.ingest_document(file_path):
-                    stats['success'] += 1
+                    stats["success"] += 1
                 else:
-                    stats['failed'] += 1
+                    stats["failed"] += 1
 
         return stats
 
-    def export_training_data(self, output_path: Path, format: str = 'jsonl') -> bool:
+    def export_training_data(self, output_path: Path, format: str = "jsonl") -> bool:
         """
         Export training data to file.
 
@@ -826,32 +861,36 @@ class DocumentIngestionManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT instruction, input, output, metadata
                     FROM training_data
                     ORDER BY created
-                """)
+                """
+                )
 
-                if format == 'jsonl':
-                    with open(output_path, 'w') as f:
+                if format == "jsonl":
+                    with open(output_path, "w") as f:
                         for row in cursor:
                             entry = {
-                                'instruction': row['instruction'],
-                                'input': row['input'],
-                                'output': row['output']
+                                "instruction": row["instruction"],
+                                "input": row["input"],
+                                "output": row["output"],
                             }
-                            f.write(json.dumps(entry) + '\n')
+                            f.write(json.dumps(entry) + "\n")
 
-                elif format == 'json':
+                elif format == "json":
                     entries = []
                     for row in cursor:
-                        entries.append({
-                            'instruction': row['instruction'],
-                            'input': row['input'],
-                            'output': row['output']
-                        })
+                        entries.append(
+                            {
+                                "instruction": row["instruction"],
+                                "input": row["input"],
+                                "output": row["output"],
+                            }
+                        )
 
-                    with open(output_path, 'w') as f:
+                    with open(output_path, "w") as f:
                         json.dump(entries, f, indent=2)
 
                 else:
@@ -864,24 +903,28 @@ class DocumentIngestionManager:
             logger.error(f"Failed to export training data: {e}")
             return False
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get ingestion statistics"""
         with sqlite3.connect(self.db_path) as conn:
             total_docs = conn.execute("SELECT COUNT(*) FROM ingested_documents").fetchone()[0]
 
             by_type = {}
-            for row in conn.execute("SELECT document_type, COUNT(*) as count FROM ingested_documents GROUP BY document_type"):
+            for row in conn.execute(
+                "SELECT document_type, COUNT(*) as count FROM ingested_documents GROUP BY document_type"
+            ):
                 by_type[row[0]] = row[1]
 
             by_status = {}
-            for row in conn.execute("SELECT status, COUNT(*) as count FROM ingested_documents GROUP BY status"):
+            for row in conn.execute(
+                "SELECT status, COUNT(*) as count FROM ingested_documents GROUP BY status"
+            ):
                 by_status[row[0]] = row[1]
 
             total_training = conn.execute("SELECT COUNT(*) FROM training_data").fetchone()[0]
 
             return {
-                'total_documents': total_docs,
-                'by_type': by_type,
-                'by_status': by_status,
-                'total_training_entries': total_training
+                "total_documents": total_docs,
+                "by_type": by_type,
+                "by_status": by_status,
+                "total_training_entries": total_training,
             }

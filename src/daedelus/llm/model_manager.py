@@ -226,7 +226,9 @@ class ModelManager:
                         check=False,
                     )
                     if result.returncode == 0 or "usage:" in result.stdout.decode().lower():
-                        logger.info(f"Found and verified llama.cpp scripts in PATH: {llama_cpp_path}")
+                        logger.info(
+                            f"Found and verified llama.cpp scripts in PATH: {llama_cpp_path}"
+                        )
                         return llama_cpp_path, True
                 except Exception:
                     pass
@@ -563,7 +565,9 @@ class ModelManager:
         # Determine base model name (from metadata or parameter)
         if base_model_name is None:
             # Try to get from current model metadata
-            base_model_name = current.metadata.get("base_model_hf", "microsoft/Phi-3-mini-4k-instruct")
+            base_model_name = current.metadata.get(
+                "base_model_hf", "microsoft/Phi-3-mini-4k-instruct"
+            )
             logger.info(f"Using base model from metadata: {base_model_name}")
         else:
             logger.info(f"Using custom base model: {base_model_name}")
@@ -643,15 +647,9 @@ class ModelManager:
             llama_cpp_path, verified = self._find_llama_cpp()
 
             if llama_cpp_path is None or not verified:
-                logger.error(
-                    "llama.cpp not found or not working. Cannot convert to GGUF."
-                )
-                logger.error(
-                    "Install llama.cpp from: https://github.com/ggerganov/llama.cpp"
-                )
-                logger.error(
-                    "Without llama.cpp, model forging cannot proceed."
-                )
+                logger.error("llama.cpp not found or not working. Cannot convert to GGUF.")
+                logger.error("Install llama.cpp from: https://github.com/ggerganov/llama.cpp")
+                logger.error("Without llama.cpp, model forging cannot proceed.")
                 raise RuntimeError(
                     "llama.cpp is required for GGUF conversion but was not found. "
                     "Install it and ensure convert.py or convert-hf-to-gguf.py is in PATH."

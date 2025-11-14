@@ -4,7 +4,6 @@ Tests for Privacy Manager.
 Created by: orpheus497
 """
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -13,8 +12,6 @@ from daedelus.core.privacy_manager import (
     PrivacyConfig,
     PrivacyLevel,
     PrivacyManager,
-    PrivacyPattern,
-    PrivacyViolation,
 )
 
 

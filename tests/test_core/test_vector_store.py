@@ -6,9 +6,9 @@ Tests Annoy approximate nearest neighbor search.
 Created by: orpheus497
 """
 
+
 import numpy as np
 import pytest
-from pathlib import Path
 
 from daedelus.core.vector_store import VectorStore
 

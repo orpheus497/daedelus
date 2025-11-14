@@ -21,12 +21,11 @@ Created by: orpheus497
 import json
 import logging
 import os
-import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +35,11 @@ class GitContext:
     """Git repository context information."""
 
     is_repo: bool
-    branch: Optional[str] = None
+    branch: str | None = None
     has_uncommitted: bool = False
     has_unpushed: bool = False
-    remote_url: Optional[str] = None
-    root_path: Optional[Path] = None
+    remote_url: str | None = None
+    root_path: Path | None = None
     is_detached: bool = False
 
 
@@ -48,10 +47,10 @@ class GitContext:
 class ProjectContext:
     """Project type and configuration context."""
 
-    project_type: Optional[str] = None  # python, nodejs, rust, go, java, etc.
-    build_tool: Optional[str] = None  # pip, npm, cargo, go, maven, gradle
-    test_framework: Optional[str] = None  # pytest, jest, cargo test, go test
-    config_files: List[str] = None  # pyproject.toml, package.json, Cargo.toml
+    project_type: str | None = None  # python, nodejs, rust, go, java, etc.
+    build_tool: str | None = None  # pip, npm, cargo, go, maven, gradle
+    test_framework: str | None = None  # pytest, jest, cargo test, go test
+    config_files: list[str] = None  # pyproject.toml, package.json, Cargo.toml
     has_tests: bool = False
     has_ci: bool = False  # .github/workflows, .gitlab-ci.yml, etc.
 
@@ -64,9 +63,9 @@ class ProjectContext:
 class FileContext:
     """File system context information."""
 
-    recently_modified: List[Path]  # Files modified in last 5 minutes
-    recently_created: List[Path]  # Files created in last 5 minutes
-    file_types: Set[str]  # Extensions present in directory
+    recently_modified: list[Path]  # Files modified in last 5 minutes
+    recently_created: list[Path]  # Files created in last 5 minutes
+    file_types: set[str]  # Extensions present in directory
     total_files: int
 
 
@@ -84,11 +83,11 @@ class TimeContext:
 class EnvironmentContext:
     """Environment and system context."""
 
-    virtual_env: Optional[str] = None  # Active virtual environment
-    conda_env: Optional[str] = None  # Active conda environment
+    virtual_env: str | None = None  # Active virtual environment
+    conda_env: str | None = None  # Active conda environment
     docker_container: bool = False  # Running inside Docker
     ssh_connection: bool = False  # Connected via SSH
-    shell: Optional[str] = None  # bash, zsh, fish
+    shell: str | None = None  # bash, zsh, fish
 
 
 class ContextEngine:
@@ -115,10 +114,10 @@ class ContextEngine:
 
     def __init__(self) -> None:
         """Initialize the context engine."""
-        self.cache: Dict[str, Any] = {}
+        self.cache: dict[str, Any] = {}
         self.cache_timeout = 5.0  # Cache context for 5 seconds
 
-    def analyze_context(self, cwd: str) -> Dict[str, Any]:
+    def analyze_context(self, cwd: str) -> dict[str, Any]:
         """
         Analyze the current context for a given directory.
 
@@ -223,9 +222,7 @@ class ContextEngine:
                 text=True,
                 timeout=2.0,
             )
-            root_path = (
-                Path(root_result.stdout.strip()) if root_result.returncode == 0 else None
-            )
+            root_path = Path(root_result.stdout.strip()) if root_result.returncode == 0 else None
 
             return GitContext(
                 is_repo=True,
@@ -457,7 +454,15 @@ class ContextEngine:
 
         return context
 
-    def get_context_score(self, command: str, context: Dict[str, Any]) -> float:
+    def _get_ctx_value(self, ctx: Any, key: str, default: Any = None) -> Any:
+        """Helper to get value from context (dict or dataclass)."""
+        if ctx is None:
+            return default
+        if isinstance(ctx, dict):
+            return ctx.get(key, default)
+        return getattr(ctx, key, default)
+
+    def get_context_score(self, command: str, context: dict[str, Any]) -> float:
         """
         Calculate relevance score for a command based on context.
 
@@ -475,23 +480,26 @@ class ContextEngine:
         env_ctx = context.get("environment")
 
         # Git command scoring
-        if git_ctx and git_ctx.get("is_repo"):
+        if git_ctx and self._get_ctx_value(git_ctx, "is_repo"):
             if command.startswith("git"):
                 score += 0.3
 
                 # Boost specific git commands based on state
-                if git_ctx.get("has_uncommitted"):
+                has_uncommitted = self._get_ctx_value(git_ctx, "has_uncommitted", False)
+                has_unpushed = self._get_ctx_value(git_ctx, "has_unpushed", False)
+
+                if has_uncommitted:
                     if "git add" in command or "git commit" in command:
                         score += 0.2
 
-                if git_ctx.get("has_unpushed"):
+                if has_unpushed:
                     if "git push" in command:
                         score += 0.2
 
         # Project-specific command scoring
         if project_ctx:
-            project_type = project_ctx.get("project_type")
-            build_tool = project_ctx.get("build_tool")
+            project_type = self._get_ctx_value(project_ctx, "project_type")
+            self._get_ctx_value(project_ctx, "build_tool")
 
             if project_type == "python":
                 if any(cmd in command for cmd in ["python", "pip", "pytest", "poetry"]):
@@ -507,21 +515,24 @@ class ContextEngine:
                     score += 0.3
 
             # Boost test commands in projects with tests
-            if project_ctx.get("has_tests"):
+            has_tests = self._get_ctx_value(project_ctx, "has_tests", False)
+            if has_tests:
                 test_keywords = ["test", "pytest", "jest", "mocha", "cargo test", "go test"]
                 if any(kw in command for kw in test_keywords):
                     score += 0.2
 
         # Virtual environment scoring
         if env_ctx:
-            if env_ctx.get("virtual_env") or env_ctx.get("conda_env"):
+            if self._get_ctx_value(env_ctx, "virtual_env") or self._get_ctx_value(
+                env_ctx, "conda_env"
+            ):
                 if any(cmd in command for cmd in ["pip", "python", "conda"]):
                     score += 0.1
 
         # Clamp score to [0.0, 1.0]
         return max(0.0, min(1.0, score))
 
-    def get_suggestions_for_context(self, context: Dict[str, Any]) -> List[str]:
+    def get_suggestions_for_context(self, context: dict[str, Any]) -> list[str]:
         """
         Generate context-aware command suggestions.
 
@@ -537,22 +548,24 @@ class ContextEngine:
         project_ctx = context.get("project")
 
         # Git suggestions
-        if git_ctx and git_ctx.get("is_repo"):
-            if git_ctx.get("has_uncommitted"):
+        if git_ctx and self._get_ctx_value(git_ctx, "is_repo"):
+            if self._get_ctx_value(git_ctx, "has_uncommitted"):
                 suggestions.append("git status")
                 suggestions.append("git diff")
                 suggestions.append("git add .")
                 suggestions.append("git commit -m 'Update'")
 
-            if git_ctx.get("has_unpushed"):
+            if self._get_ctx_value(git_ctx, "has_unpushed"):
                 suggestions.append("git push")
 
-            if not git_ctx.get("has_uncommitted") and not git_ctx.get("has_unpushed"):
+            if not self._get_ctx_value(git_ctx, "has_uncommitted") and not self._get_ctx_value(
+                git_ctx, "has_unpushed"
+            ):
                 suggestions.append("git pull")
 
         # Project-specific suggestions
         if project_ctx:
-            project_type = project_ctx.get("project_type")
+            project_type = self._get_ctx_value(project_ctx, "project_type")
 
             if project_type == "python":
                 suggestions.extend(
@@ -561,24 +574,24 @@ class ContextEngine:
                         "python -m pip install -r requirements.txt",
                     ]
                 )
-                if project_ctx.get("has_tests"):
+                if self._get_ctx_value(project_ctx, "has_tests"):
                     suggestions.append("pytest")
                     suggestions.append("pytest -v")
 
             elif project_type == "nodejs":
-                build_tool = project_ctx.get("build_tool", "npm")
+                build_tool = self._get_ctx_value(project_ctx, "build_tool", "npm")
                 suggestions.extend([f"{build_tool} install", f"{build_tool} run dev"])
-                if project_ctx.get("has_tests"):
+                if self._get_ctx_value(project_ctx, "has_tests"):
                     suggestions.append(f"{build_tool} test")
 
             elif project_type == "rust":
                 suggestions.extend(["cargo build", "cargo run"])
-                if project_ctx.get("has_tests"):
+                if self._get_ctx_value(project_ctx, "has_tests"):
                     suggestions.append("cargo test")
 
             elif project_type == "go":
                 suggestions.extend(["go build", "go run ."])
-                if project_ctx.get("has_tests"):
+                if self._get_ctx_value(project_ctx, "has_tests"):
                     suggestions.append("go test ./...")
 
         return suggestions[:5]  # Limit to top 5 suggestions

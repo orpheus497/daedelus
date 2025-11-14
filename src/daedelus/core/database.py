@@ -86,12 +86,33 @@ class CommandDatabase:
         UNIQUE(sequence)
     );
 
+    -- Natural language prompts and interpretations (for training data)
+    CREATE TABLE IF NOT EXISTS nlp_prompts (
+        id TEXT PRIMARY KEY,
+        timestamp REAL NOT NULL,
+        prompt_text TEXT NOT NULL,
+        intent TEXT,
+        intent_confidence REAL,
+        generated_commands TEXT,
+        selected_command TEXT,
+        executed_command TEXT,
+        exit_code INTEGER,
+        feedback TEXT,
+        cwd TEXT,
+        session_id TEXT,
+        embedding_vector TEXT,
+        FOREIGN KEY (session_id) REFERENCES sessions(id)
+    );
+
     -- Indexes for performance
     CREATE INDEX IF NOT EXISTS idx_timestamp ON command_history(timestamp);
     CREATE INDEX IF NOT EXISTS idx_command ON command_history(command);
     CREATE INDEX IF NOT EXISTS idx_session ON command_history(session_id);
     CREATE INDEX IF NOT EXISTS idx_exit_code ON command_history(exit_code);
     CREATE INDEX IF NOT EXISTS idx_cwd ON command_history(cwd);
+    CREATE INDEX IF NOT EXISTS idx_nlp_timestamp ON nlp_prompts(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_nlp_intent ON nlp_prompts(intent);
+    CREATE INDEX IF NOT EXISTS idx_nlp_feedback ON nlp_prompts(feedback);
 
     -- FTS5 virtual table for full-text search
     CREATE VIRTUAL TABLE IF NOT EXISTS command_fts USING fts5(
@@ -543,13 +564,15 @@ class CommandDatabase:
             for 3x better performance on large databases.
         """
         # Optimized: Single query with aggregation instead of 3 separate queries
-        cursor = self.conn.execute("""
+        cursor = self.conn.execute(
+            """
             SELECT
                 COUNT(*) as total_commands,
                 SUM(CASE WHEN exit_code = 0 THEN 1 ELSE 0 END) as successful_commands,
                 (SELECT COUNT(*) FROM sessions) as total_sessions
             FROM command_history
-        """)
+        """
+        )
 
         row = cursor.fetchone()
         total_commands = row[0]
@@ -613,10 +636,12 @@ class CommandDatabase:
         Returns:
             List of session records with metadata
         """
-        cursor = self.conn.execute("""
+        cursor = self.conn.execute(
+            """
             SELECT * FROM sessions
             ORDER BY start_time DESC
-        """)
+        """
+        )
         return [dict(row) for row in cursor.fetchall()]
 
     def batch_insert_commands(self, commands: list[dict[str, Any]]) -> int:
@@ -645,25 +670,23 @@ class CommandDatabase:
 
             # Ensure session exists
             session_id = cmd["session_id"]
-            self.ensure_session_exists(
-                session_id,
-                shell=cmd.get("shell"),
-                cwd=cmd.get("cwd")
-            )
+            self.ensure_session_exists(session_id, shell=cmd.get("shell"), cwd=cmd.get("cwd"))
 
-            data.append((
-                command_id,
-                timestamp,
-                cmd["command"],
-                cmd["cwd"],
-                cmd["exit_code"],
-                cmd.get("duration"),
-                cmd.get("output_length"),
-                session_id,
-                cmd.get("shell"),
-                cmd.get("user"),
-                cmd.get("hostname"),
-            ))
+            data.append(
+                (
+                    command_id,
+                    timestamp,
+                    cmd["command"],
+                    cmd["cwd"],
+                    cmd["exit_code"],
+                    cmd.get("duration"),
+                    cmd.get("output_length"),
+                    session_id,
+                    cmd.get("shell"),
+                    cmd.get("user"),
+                    cmd.get("hostname"),
+                )
+            )
 
         # Batch insert
         self.conn.executemany(
@@ -673,7 +696,7 @@ class CommandDatabase:
              session_id, shell, user, hostname)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            data
+            data,
         )
 
         self.conn.commit()
@@ -748,9 +771,7 @@ class CommandDatabase:
         )
         return [dict(row) for row in cursor.fetchall()]
 
-    def get_commands_by_exit_code(
-        self, exit_code: int, n: int = 100
-    ) -> list[dict[str, Any]]:
+    def get_commands_by_exit_code(self, exit_code: int, n: int = 100) -> list[dict[str, Any]]:
         """Get commands with specific exit code."""
         cursor = self.conn.execute(
             """
@@ -785,9 +806,7 @@ class CommandDatabase:
             }
         return None
 
-    def get_command_sequences(
-        self, min_length: int = 2, n: int = 100
-    ) -> list[list[str]]:
+    def get_command_sequences(self, min_length: int = 2, n: int = 100) -> list[list[str]]:
         """Get command sequences from session history."""
         cursor = self.conn.execute(
             """
@@ -831,9 +850,58 @@ class CommandDatabase:
         """Alias for optimize_database()."""
         self.optimize_database()
 
+    def get_most_used_commands(self, limit: int = 20) -> list[tuple[str, int]]:
+        """
+        Get most frequently used commands.
+
+        Args:
+            limit: Maximum number of commands to return
+
+        Returns:
+            List of (command, count) tuples ordered by frequency
+        """
+        cursor = self.conn.execute(
+            """
+            SELECT command, COUNT(*) as count
+            FROM command_history
+            GROUP BY command
+            ORDER BY count DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def get_analytics_data(self) -> dict[str, Any]:
+        """
+        Get comprehensive analytics data for dashboard.
+
+        Returns:
+            Dictionary with analytics metrics
+        """
+        # Get basic stats
+        stats = self.get_statistics()
+
+        # Get most used commands
+        most_used = self.get_most_used_commands(limit=10)
+
+        # Get unique command count
+        cursor = self.conn.execute("SELECT COUNT(DISTINCT command) FROM command_history")
+        unique_commands = cursor.fetchone()[0]
+
+        return {
+            "total_commands": stats["total_commands"],
+            "unique_commands": unique_commands,
+            "successful_commands": stats["successful_commands"],
+            "success_rate": stats["success_rate"],
+            "most_used_commands": most_used,
+            "total_sessions": stats["total_sessions"],
+        }
+
     def backup(self, backup_path: Path) -> None:
         """Create a backup of the database."""
         import shutil
+
         backup_path = Path(backup_path)
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         # Close connection, copy file, reopen
@@ -848,6 +916,260 @@ class CommandDatabase:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         logger.info(f"Database backed up to {backup_path}")
+
+    # ========================================
+    # NLP Prompts & Training Data
+    # ========================================
+
+    def insert_nlp_prompt(
+        self,
+        prompt_text: str,
+        intent: str | None = None,
+        intent_confidence: float | None = None,
+        generated_commands: list[str] | None = None,
+        selected_command: str | None = None,
+        cwd: str | None = None,
+        session_id: str | None = None,
+        embedding_vector: list[float] | None = None,
+    ) -> str:
+        """
+        Insert a natural language prompt for training data collection.
+
+        Args:
+            prompt_text: The user's natural language prompt
+            intent: Classified intent type
+            intent_confidence: Confidence score for intent classification
+            generated_commands: List of commands generated from the prompt
+            selected_command: Command selected by user (if any)
+            cwd: Current working directory
+            session_id: Session ID
+            embedding_vector: Optional embedding vector for the prompt
+
+        Returns:
+            Prompt ID
+        """
+        prompt_id = str(uuid.uuid4())
+        timestamp = datetime.now().timestamp()
+
+        # Serialize commands list to JSON string
+        import json
+        commands_json = json.dumps(generated_commands) if generated_commands else None
+        embedding_json = json.dumps(embedding_vector) if embedding_vector else None
+
+        self.conn.execute(
+            """
+            INSERT INTO nlp_prompts (
+                id, timestamp, prompt_text, intent, intent_confidence,
+                generated_commands, selected_command, cwd, session_id, embedding_vector
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                prompt_id,
+                timestamp,
+                prompt_text,
+                intent,
+                intent_confidence,
+                commands_json,
+                selected_command,
+                cwd,
+                session_id,
+                embedding_json,
+            ),
+        )
+        self.conn.commit()
+
+        logger.debug(f"Inserted NLP prompt: {prompt_id}")
+        return prompt_id
+
+    def update_nlp_prompt_feedback(
+        self,
+        prompt_id: str,
+        executed_command: str | None = None,
+        exit_code: int | None = None,
+        feedback: str | None = None,
+    ) -> None:
+        """
+        Update feedback for an NLP prompt after execution.
+
+        Args:
+            prompt_id: Prompt ID
+            executed_command: The actual command that was executed
+            exit_code: Exit code of executed command
+            feedback: User feedback ("accepted", "rejected", "modified")
+        """
+        self.conn.execute(
+            """
+            UPDATE nlp_prompts
+            SET executed_command = ?,
+                exit_code = ?,
+                feedback = ?
+            WHERE id = ?
+            """,
+            (executed_command, exit_code, feedback, prompt_id),
+        )
+        self.conn.commit()
+
+        logger.debug(f"Updated NLP prompt feedback: {prompt_id}")
+
+    def get_nlp_prompts(
+        self,
+        limit: int = 100,
+        feedback_filter: str | None = None,
+        intent_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Get NLP prompts for training data analysis.
+
+        Args:
+            limit: Maximum number of prompts to return
+            feedback_filter: Filter by feedback type ("accepted", "rejected", "pending", etc.)
+            intent_filter: Filter by intent type
+
+        Returns:
+            List of prompt records
+        """
+        import json
+
+        query = "SELECT * FROM nlp_prompts WHERE 1=1"
+        params = []
+
+        if feedback_filter:
+            if feedback_filter == "pending":
+                query += " AND (feedback IS NULL OR feedback = '')"
+            else:
+                query += " AND feedback = ?"
+                params.append(feedback_filter)
+
+        if intent_filter:
+            query += " AND intent = ?"
+            params.append(intent_filter)
+
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self.conn.execute(query, tuple(params))
+        prompts = []
+
+        for row in cursor.fetchall():
+            prompt = dict(row)
+            # Parse JSON fields
+            if prompt.get("generated_commands"):
+                try:
+                    prompt["commands"] = json.loads(prompt["generated_commands"])
+                except json.JSONDecodeError:
+                    prompt["commands"] = []
+            else:
+                prompt["commands"] = []
+
+            if prompt.get("embedding_vector"):
+                try:
+                    prompt["embedding"] = json.loads(prompt["embedding_vector"])
+                except json.JSONDecodeError:
+                    prompt["embedding"] = None
+            else:
+                prompt["embedding"] = None
+
+            # Set feedback to "pending" if None
+            if not prompt.get("feedback"):
+                prompt["feedback"] = "pending"
+
+            # Add confidence field for consistency
+            prompt["confidence"] = prompt.get("intent_confidence", 0.0)
+
+            # Add text field for consistency
+            prompt["text"] = prompt.get("prompt_text", "")
+
+            prompts.append(prompt)
+
+        return prompts
+
+    def get_nlp_training_data(
+        self, min_confidence: float = 0.5, only_accepted: bool = True
+    ) -> list[dict[str, Any]]:
+        """
+        Get high-quality training data from NLP prompts.
+
+        Args:
+            min_confidence: Minimum confidence threshold
+            only_accepted: Only return accepted prompts
+
+        Returns:
+            List of training examples
+        """
+        import json
+
+        query = """
+            SELECT * FROM nlp_prompts
+            WHERE intent_confidence >= ?
+        """
+        params = [min_confidence]
+
+        if only_accepted:
+            query += " AND feedback = 'accepted'"
+
+        query += " ORDER BY timestamp DESC"
+
+        cursor = self.conn.execute(query, tuple(params))
+        training_data = []
+
+        for row in cursor.fetchall():
+            example = dict(row)
+            # Parse JSON fields
+            if example.get("generated_commands"):
+                try:
+                    example["commands"] = json.loads(example["generated_commands"])
+                except json.JSONDecodeError:
+                    example["commands"] = []
+
+            training_data.append(example)
+
+        logger.info(f"Retrieved {len(training_data)} training examples")
+        return training_data
+
+    def export_training_data(self, output_path: Path) -> int:
+        """
+        Export all training data to JSON file.
+
+        Args:
+            output_path: Path to output JSON file
+
+        Returns:
+            Number of examples exported
+        """
+        import json
+
+        training_data = self.get_nlp_training_data(min_confidence=0.0, only_accepted=False)
+
+        with open(output_path, "w") as f:
+            json.dump(training_data, f, indent=2)
+
+        logger.info(f"Exported {len(training_data)} training examples to {output_path}")
+        return len(training_data)
+
+    def clear_nlp_prompts(self, older_than_days: int | None = None) -> int:
+        """
+        Clear NLP prompt history.
+
+        Args:
+            older_than_days: Only clear prompts older than N days (None = all)
+
+        Returns:
+            Number of prompts deleted
+        """
+        if older_than_days:
+            cutoff = datetime.now().timestamp() - (older_than_days * 86400)
+            cursor = self.conn.execute(
+                "DELETE FROM nlp_prompts WHERE timestamp < ?", (cutoff,)
+            )
+        else:
+            cursor = self.conn.execute("DELETE FROM nlp_prompts")
+
+        deleted = cursor.rowcount
+        self.conn.commit()
+
+        logger.info(f"Deleted {deleted} NLP prompts")
+        return deleted
 
     def close(self) -> None:
         """Close database connection."""

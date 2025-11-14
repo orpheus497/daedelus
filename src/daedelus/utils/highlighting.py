@@ -9,7 +9,7 @@ Created by: orpheus497
 from pathlib import Path
 
 from pygments import highlight
-from pygments.formatters import TerminalFormatter, Terminal256Formatter
+from pygments.formatters import Terminal256Formatter, TerminalFormatter
 from pygments.lexers import (
     BashLexer,
     BashSessionLexer,
@@ -18,7 +18,6 @@ from pygments.lexers import (
     get_lexer_by_name,
     guess_lexer,
 )
-from pygments.styles import get_style_by_name
 from pygments.util import ClassNotFound
 from rich.console import Console
 from rich.syntax import Syntax

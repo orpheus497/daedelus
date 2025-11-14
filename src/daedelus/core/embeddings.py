@@ -105,7 +105,9 @@ class CommandEmbedder:
         self.model: fasttext.FastText._FastText | None = None
 
         logger.info(f"CommandEmbedder initialized (dim={embedding_dim})")
-        logger.info(f"Model identity: {_MODEL_IDENTITY['formal_name']} (aka {_MODEL_IDENTITY['social_name']}) by {_MODEL_IDENTITY['creator']}")
+        logger.info(
+            f"Model identity: {_MODEL_IDENTITY['formal_name']} (aka {_MODEL_IDENTITY['social_name']}) by {_MODEL_IDENTITY['creator']}"
+        )
 
     @staticmethod
     def get_model_identity() -> dict[str, str]:
@@ -506,7 +508,7 @@ class CommandEmbedder:
                     f"Corpus size ({len(combined)}) exceeds max ({self.max_corpus_size}), "
                     "keeping most recent commands"
                 )
-                combined = combined[-self.max_corpus_size:]
+                combined = combined[-self.max_corpus_size :]
 
             logger.info(f"Combined corpus size: {len(combined)} commands")
 

@@ -9,29 +9,23 @@ License: MIT
 """
 
 import logging
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from rich.text import Text
+from textual import on
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer, Grid
+from textual.binding import Binding
+from textual.containers import Container, Grid, Horizontal, ScrollableContainer, Vertical
 from textual.widgets import (
     Button,
     DataTable,
     Footer,
     Header,
     Label,
-    ProgressBar,
     Static,
     TabbedContent,
     TabPane,
     Tree,
 )
-from textual.widgets.tree import TreeNode
-from textual.reactive import reactive
-from textual.binding import Binding
-from textual import on
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +104,10 @@ class MemoryOverviewTab(ScrollableContainer):
 
         # Load actual data from databases
         try:
-            from pathlib import Path
-            from ..core.database import CommandDatabase
-            from ..core.file_operations import FileMemoryTracker
             from datetime import datetime
+            from pathlib import Path
+
+            from ..core.database import CommandDatabase
 
             # Try to load from command database
             data_dir = Path.home() / ".local/share/daedelus"
@@ -128,15 +122,12 @@ class MemoryOverviewTab(ScrollableContainer):
                     db = CommandDatabase(db_path)
                     recent_commands = db.get_recent_commands(n=10)
                     for cmd in recent_commands:
-                        timestamp = datetime.fromtimestamp(cmd.get('timestamp', 0))
+                        timestamp = datetime.fromtimestamp(cmd.get("timestamp", 0))
                         time_str = timestamp.strftime("%H:%M:%S")
-                        status = "Success" if cmd.get('exit_code', 1) == 0 else "Failed"
-                        activity_data.append((
-                            time_str,
-                            "Command",
-                            cmd.get('command', 'Unknown'),
-                            status
-                        ))
+                        status = "Success" if cmd.get("exit_code", 1) == 0 else "Failed"
+                        activity_data.append(
+                            (time_str, "Command", cmd.get("command", "Unknown"), status)
+                        )
                     db.close()
                 except Exception as e:
                     logger.warning(f"Could not load command history: {e}")
@@ -145,24 +136,22 @@ class MemoryOverviewTab(ScrollableContainer):
             if file_ops_db.exists():
                 try:
                     import sqlite3
+
                     conn = sqlite3.connect(file_ops_db)
                     cursor = conn.cursor()
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT timestamp, operation, file_path, success
                         FROM file_access
                         ORDER BY timestamp DESC
                         LIMIT 5
-                    """)
+                    """
+                    )
                     for row in cursor.fetchall():
                         timestamp = datetime.fromtimestamp(row[0])
                         time_str = timestamp.strftime("%H:%M:%S")
                         status = "Success" if row[3] else "Failed"
-                        activity_data.append((
-                            time_str,
-                            f"File {row[1].title()}",
-                            row[2],
-                            status
-                        ))
+                        activity_data.append((time_str, f"File {row[1].title()}", row[2], status))
                     conn.close()
                 except Exception as e:
                     logger.warning(f"Could not load file operations: {e}")
@@ -189,8 +178,7 @@ class MemoryOverviewTab(ScrollableContainer):
         # Update stat cards with current session data
         try:
             # Count activity items from loaded data
-            table = self.query_one("#recent_activity_table", DataTable)
-            row_count = table.row_count
+            self.query_one("#recent_activity_table", DataTable)
 
             # Update stat cards if they exist
             stats_grid = self.query_one(".stats-grid")
@@ -245,14 +233,15 @@ class CommandHistoryTab(ScrollableContainer):
         # Load data
         self.load_command_history()
 
-    def load_command_history(self, filters: Optional[Dict[str, Any]] = None):
+    def load_command_history(self, filters: dict[str, Any] | None = None):
         """Load command history with optional filters from database"""
         table = self.query_one("#command_history_table", DataTable)
         table.clear()
 
         try:
-            from daedelus.core.database import CommandDatabase
             from pathlib import Path
+
+            from daedelus.core.database import CommandDatabase
 
             data_dir = Path.home() / ".local" / "share" / "daedelus"
             db_path = data_dir / "history.db"
@@ -266,11 +255,11 @@ class CommandHistoryTab(ScrollableContainer):
 
             for cmd in recent_commands:
                 table.add_row(
-                    str(cmd.get('timestamp', 'N/A')),
-                    cmd.get('command', '')[:50],
-                    str(cmd.get('exit_code', 'N/A')),
-                    f"{cmd.get('duration', 0.0):.2f}s" if 'duration' in cmd else 'N/A',
-                    cmd.get('cwd', '')[:40]
+                    str(cmd.get("timestamp", "N/A")),
+                    cmd.get("command", "")[:50],
+                    str(cmd.get("exit_code", "N/A")),
+                    f"{cmd.get('duration', 0.0):.2f}s" if "duration" in cmd else "N/A",
+                    cmd.get("cwd", "")[:40],
                 )
 
         except Exception as e:
@@ -318,8 +307,9 @@ class FileAccessHistoryTab(ScrollableContainer):
         table.clear()
 
         try:
-            from daedelus.core.file_operations import FileOperationsManager
             from pathlib import Path
+
+            from daedelus.core.file_operations import FileOperationsManager
 
             data_dir = Path.home() / ".local" / "share" / "daedelus"
             file_ops = FileOperationsManager(str(data_dir))
@@ -328,7 +318,7 @@ class FileAccessHistoryTab(ScrollableContainer):
 
             for op in recent_ops:
                 size_str = "N/A"
-                if hasattr(op, 'size') and op.size:
+                if hasattr(op, "size") and op.size:
                     if op.size >= 1024**2:
                         size_str = f"{op.size / 1024**2:.2f} MB"
                     elif op.size >= 1024:
@@ -337,11 +327,15 @@ class FileAccessHistoryTab(ScrollableContainer):
                         size_str = f"{op.size} B"
 
                 table.add_row(
-                    op.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(op, 'timestamp') else 'N/A',
+                    (
+                        op.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(op, "timestamp")
+                        else "N/A"
+                    ),
                     op.operation.upper(),
                     str(op.path)[:50],
-                    'Success' if op.success else 'Failed',
-                    size_str
+                    "Success" if op.success else "Failed",
+                    size_str,
                 )
 
         except Exception as e:
@@ -396,11 +390,11 @@ class ToolExecutionHistoryTab(ScrollableContainer):
 
             if executions:
                 for exec_record in executions:
-                    timestamp = exec_record.get('timestamp', 'Unknown')
-                    tool_name = exec_record.get('tool_name', 'Unknown')
-                    status = exec_record.get('status', 'Unknown')
+                    timestamp = exec_record.get("timestamp", "Unknown")
+                    tool_name = exec_record.get("tool_name", "Unknown")
+                    status = exec_record.get("status", "Unknown")
                     duration = f"{exec_record.get('duration', 0):.2f}s"
-                    permissions = exec_record.get('permission_level', 'N/A')
+                    permissions = exec_record.get("permission_level", "N/A")
 
                     table.add_row(timestamp, tool_name, status, duration, permissions)
             else:
@@ -426,7 +420,9 @@ class PermissionControlsTab(ScrollableContainer):
 
         # Granted permissions
         yield Static("## Granted Permissions", classes="section-header")
-        yield Static("Permissions that have been granted in this session:", classes="section-description")
+        yield Static(
+            "Permissions that have been granted in this session:", classes="section-description"
+        )
 
         yield DataTable(id="granted_permissions_table", zebra_stripes=True)
 
@@ -462,7 +458,9 @@ class PermissionControlsTab(ScrollableContainer):
 
         # Pending permissions table
         pending_table = self.query_one("#pending_permissions_table", DataTable)
-        pending_table.add_columns("Path/Resource", "Permission Type", "Requested By", "Requested At")
+        pending_table.add_columns(
+            "Path/Resource", "Permission Type", "Requested By", "Requested At"
+        )
         pending_table.cursor_type = "row"
 
         # Denied permissions table
@@ -476,8 +474,9 @@ class PermissionControlsTab(ScrollableContainer):
     def load_permission_data(self):
         """Load permission data from permission managers"""
         try:
-            from daedelus.core.file_operations import FilePermissionManager
             from pathlib import Path
+
+            from daedelus.core.file_operations import FilePermissionManager
 
             data_dir = Path.home() / ".local" / "share" / "daedelus"
             perm_manager = FilePermissionManager(str(data_dir / "permissions"))
@@ -486,13 +485,17 @@ class PermissionControlsTab(ScrollableContainer):
             granted_table = self.query_one("#granted_permissions_table", DataTable)
             granted_table.clear()
 
-            granted_perms = perm_manager.get_granted_permissions() if hasattr(perm_manager, 'get_granted_permissions') else []
+            granted_perms = (
+                perm_manager.get_granted_permissions()
+                if hasattr(perm_manager, "get_granted_permissions")
+                else []
+            )
             for perm in granted_perms[:20]:
                 granted_table.add_row(
-                    str(perm.get('resource', 'Unknown')),
-                    perm.get('permission_type', 'Unknown'),
-                    perm.get('timestamp', 'N/A'),
-                    'Yes' if perm.get('session_only') else 'No'
+                    str(perm.get("resource", "Unknown")),
+                    perm.get("permission_type", "Unknown"),
+                    perm.get("timestamp", "N/A"),
+                    "Yes" if perm.get("session_only") else "No",
                 )
 
         except Exception as e:
@@ -682,9 +685,10 @@ class MemoryAndPermissionsPanel(Container):
     def on_export_data_button(self):
         """Handle export data button - export all memory data"""
         try:
-            from daedelus.llm.training_data_organizer import TrainingDataOrganizer
-            from pathlib import Path
             from datetime import datetime
+            from pathlib import Path
+
+            from daedelus.llm.training_data_organizer import TrainingDataOrganizer
 
             data_dir = Path.home() / ".local" / "share" / "daedelus"
             export_dir = data_dir / "exports" / datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -692,7 +696,7 @@ class MemoryAndPermissionsPanel(Container):
 
             trainer = TrainingDataOrganizer(str(data_dir))
             export_path = export_dir / "memory_export.jsonl"
-            trainer.export_training_data(str(export_path), format='jsonl')
+            trainer.export_training_data(str(export_path), format="jsonl")
 
             self.app.notify(f"Data exported to {export_dir}", severity="information")
             logger.info(f"Memory data exported to {export_dir}")
@@ -741,14 +745,18 @@ class MemoryAndPermissionsPanel(Container):
                     # Reload permissions to reflect changes
                     self.load_permissions()
 
-                    self.app.notify(f"Permission revoked: {permission_type} on {path}", severity="warning")
+                    self.app.notify(
+                        f"Permission revoked: {permission_type} on {path}", severity="warning"
+                    )
                     logger.info(f"Permission revoked: {permission_type} on {path}")
                 else:
                     self.app.notify("Invalid permission data", severity="error")
 
             except Exception as row_error:
                 logger.error(f"Error accessing row data: {row_error}")
-                self.app.notify(f"Could not read permission data: {str(row_error)}", severity="error")
+                self.app.notify(
+                    f"Could not read permission data: {str(row_error)}", severity="error"
+                )
 
         except Exception as e:
             logger.error(f"Error revoking permission: {e}")
@@ -784,20 +792,24 @@ class MemoryAndPermissionsPanel(Container):
                         path=path,
                         permission_type=permission_type,
                         session_only=False,  # Persist the approval
-                        reason=f"User approved: {reason}"
+                        reason=f"User approved: {reason}",
                     )
 
                     # Reload permissions to reflect changes
                     self.load_permissions()
 
-                    self.app.notify(f"Permission approved: {permission_type} on {path}", severity="success")
+                    self.app.notify(
+                        f"Permission approved: {permission_type} on {path}", severity="success"
+                    )
                     logger.info(f"Permission approved: {permission_type} on {path}")
                 else:
                     self.app.notify("Invalid permission data", severity="error")
 
             except Exception as row_error:
                 logger.error(f"Error accessing row data: {row_error}")
-                self.app.notify(f"Could not read permission data: {str(row_error)}", severity="error")
+                self.app.notify(
+                    f"Could not read permission data: {str(row_error)}", severity="error"
+                )
 
         except Exception as e:
             logger.error(f"Error approving permission: {e}")
@@ -832,20 +844,24 @@ class MemoryAndPermissionsPanel(Container):
                         path=path,
                         permission_type=permission_type,
                         session_only=False,  # Persist the denial
-                        reason="User denied permission"
+                        reason="User denied permission",
                     )
 
                     # Reload permissions to reflect changes
                     self.load_permissions()
 
-                    self.app.notify(f"Permission denied: {permission_type} on {path}", severity="warning")
+                    self.app.notify(
+                        f"Permission denied: {permission_type} on {path}", severity="warning"
+                    )
                     logger.info(f"Permission denied: {permission_type} on {path}")
                 else:
                     self.app.notify("Invalid permission data", severity="error")
 
             except Exception as row_error:
                 logger.error(f"Error accessing row data: {row_error}")
-                self.app.notify(f"Could not read permission data: {str(row_error)}", severity="error")
+                self.app.notify(
+                    f"Could not read permission data: {str(row_error)}", severity="error"
+                )
 
         except Exception as e:
             logger.error(f"Error denying permission: {e}")
