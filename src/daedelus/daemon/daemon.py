@@ -290,11 +290,12 @@ class DaedelusDaemon:
 
             logger.info("Initializing LLM components...")
 
-            # Initialize LLM manager
+            # Initialize LLM manager with 60-second timeout
             self.llm_manager = LLMManager(
                 model_path=model_path,
                 context_length=self.config.get("llm.context_length", 2048),
                 temperature=self.config.get("llm.temperature", 0.7),
+                default_timeout=60.0,  # 60-second timeout for all LLM operations
             )
 
             # Initialize explainer and generator
@@ -1217,6 +1218,186 @@ class DaedelusDaemon:
         except Exception as e:
             logger.error(f"Failed to clear prompt history: {e}", exc_info=True)
             return {"status": "error", "error": str(e)}
+
+    def handle_search_knowledge_base(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle knowledge base search request.
+
+        Args:
+            data: Request with "query"
+
+        Returns:
+            Search results with relevant sections
+        """
+        query = data.get("query", "").strip()
+        
+        if not query:
+            return {"status": "error", "error": "No query provided"}
+
+        try:
+            # Initialize knowledge retriever if needed
+            from daedelus.core.knowledge_retriever import KnowledgeRetriever
+            
+            retriever = KnowledgeRetriever(db_path=self.config.data_dir / "history.db")
+            results = retriever.search(query, limit=3, source="redbook")
+            
+            if not results:
+                return {
+                    "status": "ok",
+                    "explanation": f"No results found for '{query}' in The Redbook.\n\nTry:\n- Different keywords\n- More general terms\n- Check `/redbook` for available topics"
+                }
+            
+            # Format results with LLM if available
+            if self.llm_manager:
+                context = "\n\n".join([r.get_context(max_length=1500) for r in results])
+                
+                prompt = f"""Based on The Redbook knowledge base, answer this query:
+
+Query: {query}
+
+Relevant sections from The Redbook:
+
+{context}
+
+Provide a clear, actionable answer with examples where appropriate. Include relevant commands."""
+
+                try:
+                    explanation = self.llm_manager.generate(prompt, max_tokens=1000, timeout=60.0)
+                except Exception as e:
+                    logger.warning(f"LLM generation failed, using fallback: {e}")
+                    # Fallback: just show the sections
+                    explanation = f"# Results for '{query}'\n\n" + context
+            else:
+                # No LLM: just format the raw sections
+                explanation = f"# Results for '{query}'\n\n"
+                for i, result in enumerate(results, 1):
+                    explanation += f"## {i}. {result.title}\n\n{result.content[:500]}...\n\n"
+            
+            return {
+                "status": "ok",
+                "explanation": explanation,
+                "result_count": len(results)
+            }
+            
+        except Exception as e:
+            logger.error(f"Knowledge base search failed: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    def handle_knowledge_summary(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handle request for knowledge base summary.
+
+        Returns:
+            Summary of available knowledge base content
+        """
+        try:
+            # Get stats from database
+            from daedelus.core.knowledge_retriever import KnowledgeRetriever
+            
+            retriever = KnowledgeRetriever(db_path=self.config.data_dir / "history.db")
+            
+            # Try to get summary from database
+            import sqlite3
+            conn = sqlite3.connect(self.config.data_dir / "history.db")
+            cursor = conn.cursor()
+            
+            # Check if knowledge_base table exists
+            cursor.execute("""
+                SELECT COUNT(*) FROM sqlite_master 
+                WHERE type='table' AND name='knowledge_base'
+            """)
+            
+            if cursor.fetchone()[0] == 0:
+                conn.close()
+                return {
+                    "status": "ok",
+                    "explanation": """# The Redbook Knowledge Base
+
+The Redbook is a comprehensive Linux terminal mastery guide by orpheus497.
+
+**Status**: Not yet indexed. Run `daedelus ingest redbook` to index the knowledge base.
+
+Once indexed, you can:
+- Search with `/redbook <query>`
+- Get command explanations
+- Find solutions to common tasks
+- Learn best practices
+
+**Topics Covered**:
+- Package management
+- System administration
+- Security & permissions
+- Networking
+- Shell scripting
+- And much more!"""
+                }
+            
+            # Get statistics
+            cursor.execute("SELECT COUNT(*) FROM knowledge_base WHERE source='redbook'")
+            total_sections = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(DISTINCT chapter) FROM knowledge_base WHERE source='redbook'")
+            total_chapters = cursor.fetchone()[0]
+            
+            conn.close()
+            
+            explanation = f"""# The Redbook Knowledge Base
+
+**Comprehensive Linux Terminal Mastery Guide** by orpheus497
+
+## 📊 Statistics
+- **{total_chapters}** chapters indexed
+- **{total_sections}** sections available
+- Full-text search enabled
+
+## 🔍 How to Use
+```bash
+/redbook package management      # Search for topics
+/redbook how to configure SSH    # Natural language queries
+/redbook systemd services        # Find specific info
+```
+
+## 📚 Coverage
+The Redbook covers essential Linux topics:
+- Package management (apt, dnf, pacman)
+- System administration
+- User & permission management
+- Networking & firewall configuration
+- Shell scripting & automation
+- Security best practices
+- Performance tuning
+- Troubleshooting
+- And much more!
+
+## 💡 Pro Tips
+- Use specific keywords for better results
+- Try natural language questions
+- Check multiple topics for comprehensive understanding
+
+**Ready to explore!** Try `/redbook <your question>` now."""
+
+            return {
+                "status": "ok",
+                "explanation": explanation,
+                "total_sections": total_sections,
+                "total_chapters": total_chapters
+            }
+            
+        except Exception as e:
+            logger.error(f"Knowledge summary failed: {e}", exc_info=True)
+            return {
+                "status": "ok",
+                "explanation": """# The Redbook Knowledge Base
+
+**Linux Terminal Mastery Guide** by orpheus497
+
+The Redbook provides comprehensive coverage of Linux command-line tools and best practices.
+
+**Search**: `/redbook <topic>` to find information
+**Topics**: Package management, networking, security, scripting, and more
+
+*Note: Knowledge base may need indexing. Run `daedelus ingest redbook` if searches fail.*"""
+            }
 
     # ========================================
     # Shutdown & Learning

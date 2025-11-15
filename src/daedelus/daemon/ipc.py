@@ -36,6 +36,11 @@ class MessageType(Enum):
     GENERATE_COMMAND = "generate_command"  # Generate command from description
     INTERPRET_NATURAL_LANGUAGE = "interpret_natural_language"  # Interpret natural language
     GET_STATS = "get_stats"  # Get command usage statistics
+    SEARCH_KNOWLEDGE_BASE = "search_knowledge_base"  # Search The Redbook knowledge base
+    KNOWLEDGE_SUMMARY = "knowledge_summary"  # Get knowledge base summary
+    WRITE_SCRIPT = "write_script"  # Write a script
+    READ_FILE = "read_file"  # Read and analyze a file
+    WRITE_FILE = "write_file"  # Write content to a file
 
     # Control messages
     PING = "ping"  # Health check
@@ -243,6 +248,11 @@ class IPCServer:
             MessageType.GENERATE_COMMAND: "handle_generate_command",
             MessageType.INTERPRET_NATURAL_LANGUAGE: "handle_interpret_natural_language",
             MessageType.GET_STATS: "handle_get_stats",
+            MessageType.SEARCH_KNOWLEDGE_BASE: "handle_search_knowledge_base",
+            MessageType.KNOWLEDGE_SUMMARY: "handle_knowledge_summary",
+            MessageType.WRITE_SCRIPT: "handle_write_script",
+            MessageType.READ_FILE: "handle_read_file",
+            MessageType.WRITE_FILE: "handle_write_file",
         }
 
         handler_name = handlers.get(msg.type)
@@ -298,13 +308,13 @@ class IPCClient:
     Used by shell plugins to communicate with daemon.
     """
 
-    def __init__(self, socket_path: str, timeout: float = 30.0) -> None:
+    def __init__(self, socket_path: str, timeout: float = 60.0) -> None:
         """
         Initialize IPC client.
 
         Args:
             socket_path: Path to Unix domain socket
-            timeout: Socket timeout in seconds
+            timeout: Socket timeout in seconds (default: 60s for LLM operations)
         """
         self.socket_path = socket_path
         self.timeout = timeout
@@ -492,6 +502,13 @@ class IPCClient:
             # LLM operations
             "explain_command": MessageType.EXPLAIN_COMMAND,
             "generate_command": MessageType.GENERATE_COMMAND,
+            "interpret_natural_language": MessageType.INTERPRET_NATURAL_LANGUAGE,
+            "write_script": MessageType.WRITE_SCRIPT,
+            "read_file": MessageType.READ_FILE,
+            "write_file": MessageType.WRITE_FILE,
+            # Knowledge base operations
+            "search_knowledge_base": MessageType.SEARCH_KNOWLEDGE_BASE,
+            "knowledge_summary": MessageType.KNOWLEDGE_SUMMARY,
             # Statistics and analytics
             "get_stats": MessageType.GET_STATS,
             "get_recent_commands": MessageType.SEARCH,

@@ -1031,17 +1031,15 @@ Run from your regular terminal:
             query: Search query
         """
         try:
-            response = self.ipc_client.call("search_knowledge_base", {"query": query})
+            response = self.ipc_client.send_request("search_knowledge_base", {"query": query})
             
-            if response and response.get("success"):
-                result = response.get("result", {})
-                explanation = result.get("explanation", "No results found")
+            if response and response.get("status") == "ok":
+                explanation = response.get("explanation", "No results found")
                 self.console.print(f"\n[cyan]The Redbook Search Results:[/cyan]\n")
                 self.console.print(Markdown(explanation))
             else:
-                self.console.print(
-                    f"[yellow]Unable to search knowledge base[/yellow]"
-                )
+                error = response.get("error", "Unknown error")
+                self.console.print(f"[yellow]Unable to search knowledge base: {error}[/yellow]")
         except Exception as e:
             logger.error(f"Error searching redbook: {e}")
             self.console.print(f"[red]Error: {e}[/red]")
@@ -1049,17 +1047,15 @@ Run from your regular terminal:
     def _show_redbook_info(self) -> None:
         """Show information about The Redbook knowledge base."""
         try:
-            response = self.ipc_client.call("knowledge_summary", {})
+            response = self.ipc_client.send_request("knowledge_summary", {})
             
-            if response and response.get("success"):
-                result = response.get("result", {})
-                explanation = result.get("explanation", "Knowledge base info not available")
+            if response and response.get("status") == "ok":
+                explanation = response.get("explanation", "Knowledge base info not available")
                 self.console.print(f"\n[cyan]The Redbook Knowledge Base:[/cyan]\n")
                 self.console.print(Markdown(explanation))
             else:
-                self.console.print(
-                    f"[yellow]Unable to get knowledge base info[/yellow]"
-                )
+                error = response.get("error", "Unknown error")
+                self.console.print(f"[yellow]Unable to get knowledge base info: {error}[/yellow]")
         except Exception as e:
             logger.error(f"Error getting redbook info: {e}")
             self.console.print(f"[red]Error: {e}[/red]")

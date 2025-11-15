@@ -55,6 +55,7 @@ class IntentClassifier:
         self.repl_patterns = [
             r"^/help$",
             r"^/search\s+",
+            r"^/redbook(\s+|$)",  # /redbook or /redbook <query>
             r"^/explain\s+",
             r"^/generate\s+",
             r"^/write-script\s+",
