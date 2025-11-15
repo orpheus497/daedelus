@@ -1,0 +1,172 @@
+# Linux/Shell Command Synonyms Dictionary
+#
+# This file defines synonym mappings for query expansion in Daedelus.
+# Format: term: [synonym1, synonym2, ...]
+#
+# Phase 5 - Intelligence System Enhancement
+# Created by: orpheus497
+
+# Package Management
+install: [setup, add, get, deploy, put]
+remove: [uninstall, delete, erase, purge, drop]
+update: [upgrade, refresh, sync, renew]
+package: [pkg, software, program, app, application]
+repository: [repo, source, archive]
+
+# System Administration
+start: [begin, launch, run, execute, init, initiate]
+stop: [halt, end, kill, terminate, shutdown]
+restart: [reboot, reload, reset, refresh]
+enable: [activate, turn-on, switch-on]
+disable: [deactivate, turn-off, switch-off]
+service: [daemon, process, server]
+
+# File Operations
+copy: [cp, duplicate, clone]
+move: [mv, rename, relocate]
+delete: [rm, remove, erase, unlink]
+list: [ls, show, display, view]
+search: [find, locate, grep, seek, lookup]
+edit: [modify, change, update, alter]
+create: [make, new, generate, add]
+
+# Network & Connectivity
+network: [networking, net, connection, interface]
+firewall: [iptables, ufw, nftables, security]
+port: [socket, endpoint]
+connect: [link, attach, join, bind]
+disconnect: [unlink, detach, separate, unbind]
+download: [fetch, get, pull, retrieve]
+upload: [push, send, put, transfer]
+
+# User & Permissions
+user: [account, login, username]
+group: [team, role]
+permission: [perms, rights, access, privileges]
+owner: [user, proprietor]
+sudo: [root, superuser, admin, administrator]
+
+# Process Management
+process: [proc, task, job]
+running: [active, executing, live]
+kill: [stop, terminate, end, halt]
+signal: [sig, interrupt]
+
+# Disk & Storage
+disk: [drive, storage, volume]
+partition: [part, section, segment]
+mount: [attach, connect, link]
+unmount: [detach, disconnect, eject, umount]
+filesystem: [fs, file-system]
+format: [mkfs, initialize, setup]
+
+# Monitoring & Logging
+monitor: [watch, observe, track, check]
+log: [record, journal, history]
+status: [state, condition, info, information]
+metrics: [stats, statistics, measurements]
+
+# Configuration
+config: [configuration, conf, settings, preferences, prefs]
+configure: [setup, set, adjust, tune]
+variable: [var, parameter, setting, option]
+environment: [env, context, shell]
+
+# Compression & Archives
+compress: [zip, pack, archive]
+decompress: [unzip, unpack, extract, uncompress]
+archive: [tar, backup, bundle]
+
+# Security
+security: [sec, safety, protection]
+encrypt: [cipher, encode, secure]
+decrypt: [decipher, decode, unsecure]
+key: [certificate, cert, credential]
+password: [pass, passwd, credential, secret]
+
+# Development
+compile: [build, make, construct]
+debug: [troubleshoot, diagnose, fix]
+test: [check, verify, validate]
+deploy: [release, publish, install]
+version: [ver, revision, release]
+
+# Text Processing
+print: [echo, display, show, output]
+read: [input, get, fetch]
+write: [save, output, put, store]
+append: [add, attach, concat, concatenate]
+
+# Directories
+directory: [dir, folder, path]
+current: [pwd, present, working]
+parent: [up, above]
+subdirectory: [subdir, subfolder, child]
+
+# System Info
+system: [sys, machine, host]
+info: [information, details, data]
+hardware: [hw, device, equipment]
+software: [sw, program, application]
+
+# Shell & Terminal
+shell: [bash, zsh, fish, terminal, console, cli]
+command: [cmd, instruction, statement]
+script: [program, code, automation]
+terminal: [console, shell, tty, prompt]
+
+# Common Abbreviations
+ls: [list, show]
+cd: [change-directory, goto, navigate]
+pwd: [print-working-directory, current-directory]
+cat: [concatenate, view, display, show]
+grep: [search, find, filter, match]
+sed: [stream-editor, replace, substitute]
+awk: [text-processor, parse]
+chmod: [change-mode, permissions]
+chown: [change-owner, ownership]
+df: [disk-free, disk-usage]
+du: [disk-usage, size]
+ps: [process-status, processes]
+top: [task-manager, monitor]
+free: [memory, ram]
+systemctl: [service, daemon]
+journalctl: [log, journal]
+ufw: [firewall, uncomplicated-firewall]
+apt: [package-manager, apt-get]
+yum: [package-manager]
+dnf: [package-manager]
+rpm: [package, red-hat-package-manager]
+
+# Action Verbs
+run: [execute, start, launch, invoke]
+check: [verify, test, validate, examine]
+show: [display, print, view, list]
+get: [fetch, retrieve, obtain, acquire]
+set: [assign, define, configure, establish]
+view: [see, display, show, examine, inspect]
+
+# Time & Scheduling
+schedule: [cron, timer, at, plan]
+time: [duration, period, interval]
+date: [day, timestamp]
+now: [current, present, immediate]
+later: [future, scheduled, deferred]
+
+# Troubleshooting
+error: [err, problem, issue, bug, failure]
+fix: [repair, correct, resolve, solve]
+troubleshoot: [debug, diagnose, investigate]
+problem: [issue, error, bug, fault]
+
+# Performance
+performance: [speed, efficiency, throughput]
+optimize: [tune, improve, enhance, boost]
+slow: [sluggish, laggy, delayed]
+fast: [quick, rapid, speedy, swift]
+
+# Advanced Terms
+kernel: [core, system-kernel]
+module: [driver, extension, plugin]
+interface: [api, endpoint, connection]
+protocol: [standard, specification, format]

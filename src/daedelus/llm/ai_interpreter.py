@@ -13,7 +13,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from daedelus.llm.command_generator import CommandGenerator
 from daedelus.llm.intent_classifier import IntentClassifier, IntentType
@@ -1047,7 +1047,7 @@ Path: {file_path.absolute()}"""
 
     def search_knowledge_base(self, query: str) -> InterpretationResult:
         """
-        Search The Redbook knowledge base for information.
+        Search The Redbook knowledge base for information with improved intelligence.
         
         Args:
             query: Search query
@@ -1056,38 +1056,102 @@ Path: {file_path.absolute()}"""
             InterpretationResult with search results
         """
         try:
-            # Get relevant context from Redbook
-            results = self.knowledge_base.get_relevant_context(query, max_results=10)
+            # Get relevant context from Redbook (improved scoring)
+            results = self.knowledge_base.get_relevant_context(query, max_results=8)
             
-            # Search for specific commands
-            command_match = re.search(r'\b([a-z-]+)\b', query.lower())
-            if command_match:
-                command = command_match.group(1)
+            # Search for specific commands mentioned in query
+            command_results = []
+            command_words = re.findall(r'\b([a-z][\w-]{2,})\b', query.lower())
+            for command in command_words:
                 cmd_results = self.knowledge_base.search_command(command)
                 if cmd_results:
-                    results.extend([r['match'] for r in cmd_results[:3]])
+                    # Add top command match with context
+                    command_results.append(f"\n**Command '{command}' found:**\n{cmd_results[0]['match']}")
             
-            if results:
-                explanation = f"Found in The Redbook:\n\n" + "\n".join(f"• {r}" for r in results)
+            # Build comprehensive explanation
+            if results or command_results:
+                explanation = "# The Redbook Search Results\n\n"
+                
+                if results:
+                    explanation += "## Relevant Sections\n\n"
+                    explanation += "\n\n".join(results)
+                
+                if command_results:
+                    explanation += "\n\n## Command References\n"
+                    explanation += "\n".join(command_results)
+                
+                # Add helpful tips
+                explanation += "\n\n---\n"
+                explanation += "*💡 Tip: Use `/redbook chapter <number>` to view full chapter content*"
+                
+                confidence = 0.9 if len(results) >= 3 else 0.7
             else:
-                explanation = f"No specific results found in The Redbook for '{query}'. Try rephrasing or use /help for available commands."
+                # Provide helpful suggestions when no results found
+                suggestion_terms = self._get_search_suggestions(query)
+                explanation = f"# No Results Found\n\n"
+                explanation += f"No specific results found in The Redbook for **'{query}'**.\n\n"
+                
+                if suggestion_terms:
+                    explanation += "## Try searching for:\n"
+                    for term in suggestion_terms[:5]:
+                        explanation += f"  - `{term}`\n"
+                
+                explanation += "\n## Available Topics\n"
+                explanation += "The Redbook covers: networking, package management, services, "
+                explanation += "permissions, shell scripting, system administration, and more.\n\n"
+                explanation += "*Try using more specific terms or topic names.*"
+                
+                confidence = 0.2
             
             return InterpretationResult(
                 intent="search_knowledge",
                 action="inform",
                 commands=[],
                 explanation=explanation,
-                confidence=0.8 if results else 0.3,
+                confidence=confidence,
             )
         except Exception as e:
-            logger.error(f"Error searching knowledge base: {e}")
+            logger.error(f"Error searching knowledge base: {e}", exc_info=True)
             return InterpretationResult(
                 intent="search_knowledge",
                 action="inform",
                 commands=[],
-                explanation=f"Error searching knowledge base: {e}",
+                explanation=f"# Error\n\nFailed to search knowledge base: {str(e)}\n\nPlease try again or check if The Redbook is properly loaded.",
                 confidence=0.0,
             )
+    
+    def _get_search_suggestions(self, query: str) -> List[str]:
+        """
+        Generate search suggestions based on failed query.
+        
+        Args:
+            query: Original query that returned no results
+            
+        Returns:
+            List of suggested search terms
+        """
+        # Common topic mappings
+        topic_suggestions = {
+            'firewall': ['iptables', 'ufw', 'firewalld', 'network security'],
+            'update': ['apt update', 'dnf update', 'package management', 'system update'],
+            'package': ['apt', 'dnf', 'yum', 'package manager', 'install software'],
+            'network': ['networking', 'ip', 'netstat', 'network configuration'],
+            'service': ['systemd', 'systemctl', 'service management'],
+            'user': ['useradd', 'user management', 'permissions'],
+            'file': ['chmod', 'chown', 'file permissions', 'directory'],
+            'disk': ['df', 'du', 'storage', 'filesystem'],
+            'process': ['ps', 'top', 'htop', 'process management'],
+        }
+        
+        query_lower = query.lower()
+        suggestions = []
+        
+        # Find matching topics
+        for key, values in topic_suggestions.items():
+            if key in query_lower:
+                suggestions.extend(values)
+        
+        return suggestions
 
     def get_knowledge_summary(self) -> InterpretationResult:
         """

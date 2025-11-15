@@ -10,6 +10,7 @@ Created by: orpheus497
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from daedelus.core.database import CommandDatabase
@@ -214,13 +215,13 @@ class RAGPipeline:
         cwd: str | None = None,
     ) -> float:
         """
-        Score relevance of a retrieved item.
+        Score relevance of a retrieved item with improved multi-factor analysis.
 
-        Considers multiple factors:
-        - Similarity score (if available)
-        - Recency (timestamp)
-        - Directory match (cwd)
-        - Command success rate
+        Considers multiple factors with optimized weighting:
+        - Semantic similarity score (40% weight)
+        - Recency with decay (25% weight)
+        - Directory/context match (20% weight)
+        - Success rate (15% weight)
 
         Args:
             item: Retrieved item (command, similarity, etc.)
@@ -230,33 +231,64 @@ class RAGPipeline:
         Returns:
             Relevance score (0.0-1.0)
         """
-        score = 0.5  # Base score
+        score = 0.0
 
-        # Factor 1: Similarity score (if available)
+        # Factor 1: Similarity score (primary signal - 40% weight)
         if "similarity" in item:
-            score += item["similarity"] * 0.3
+            # Normalize and weight semantic similarity
+            sim_score = float(item["similarity"])
+            # Apply non-linear scaling to emphasize high similarity
+            score += (sim_score ** 1.5) * 0.4
 
-        # Factor 2: Recency (if timestamp available)
+        # Factor 2: Recency (25% weight)
         if "timestamp" in item:
             import time
 
             age_hours = (time.time() - item["timestamp"]) / 3600
-            # Decay over time: recent = higher score
-            recency_score = max(0, 1.0 - (age_hours / (24 * 30)))  # Decay over 30 days
-            score += recency_score * 0.2
+            
+            # Improved decay function with configurable half-life
+            half_life_days = 7  # Commands lose half relevance after 7 days
+            decay_factor = 0.5 ** (age_hours / (half_life_days * 24))
+            
+            # Recent commands (< 1 hour) get bonus
+            if age_hours < 1:
+                decay_factor = min(1.0, decay_factor * 1.2)
+            
+            score += decay_factor * 0.25
 
-        # Factor 3: Directory match
+        # Factor 3: Directory/context match (20% weight)
         if cwd and "cwd" in item:
-            if item["cwd"] == cwd:
-                score += 0.2  # Exact match
-            elif item["cwd"].startswith(cwd) or cwd.startswith(item["cwd"]):
-                score += 0.1  # Parent/child directory
+            item_cwd = str(item["cwd"])
+            
+            if item_cwd == cwd:
+                score += 0.20  # Exact directory match
+            elif item_cwd.startswith(cwd) or cwd.startswith(item_cwd):
+                score += 0.12  # Parent/child directory
+            elif Path(item_cwd).parent == Path(cwd).parent:
+                score += 0.05  # Sibling directory
+        
+        # Factor 4: Success rate (15% weight)
+        if "success" in item:
+            if item["success"]:
+                score += 0.15
+            else:
+                # Penalize failed commands
+                score -= 0.05
+        
+        # Factor 5: Query term matching (bonus up to 10%)
+        if "command" in item:
+            query_terms = set(query.lower().split())
+            command_terms = set(str(item["command"]).lower().split())
+            
+            # Jaccard similarity
+            if query_terms and command_terms:
+                intersection = len(query_terms & command_terms)
+                union = len(query_terms | command_terms)
+                term_match = intersection / union if union > 0 else 0
+                score += term_match * 0.1
 
-        # Factor 4: Success rate (if available)
-        if "success" in item and item["success"]:
-            score += 0.1
-
-        return min(1.0, score)
+        # Ensure score is in valid range
+        return max(0.0, min(1.0, score))
 
     def prioritize_and_truncate(
         self,

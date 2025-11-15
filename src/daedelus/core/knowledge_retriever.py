@@ -52,7 +52,7 @@ class KnowledgeRetriever:
     def search(self, query: str, limit: int = 5, 
                source: Optional[str] = None) -> List[KnowledgeResult]:
         """
-        Search knowledge base using full-text search
+        Search knowledge base using enhanced full-text search with relevance ranking.
         
         Args:
             query: Search query
@@ -60,17 +60,37 @@ class KnowledgeRetriever:
             source: Filter by source (e.g., 'redbook')
         
         Returns:
-            List of KnowledgeResult objects
+            List of KnowledgeResult objects sorted by relevance
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Clean query for FTS (remove punctuation, split into OR terms)
+        # Enhanced query processing
         import re
-        words = re.findall(r'\w+', query)
-        clean_query = ' OR '.join(words) if words else query
         
-        # Build query
+        # Extract meaningful words (remove stopwords)
+        stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 
+                    'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were',
+                    'how', 'what', 'when', 'where', 'who', 'why', 'which'}
+        
+        words = re.findall(r'\w+', query.lower())
+        meaningful_words = [w for w in words if w not in stopwords and len(w) > 2]
+        
+        # Build FTS query with proper weighting
+        # Use NEAR for phrase proximity, OR for term matching
+        if len(meaningful_words) > 1:
+            # Try phrase match first (highest relevance)
+            phrase_query = ' '.join(meaningful_words)
+            # Then individual terms
+            term_query = ' OR '.join(meaningful_words)
+            clean_query = f'"{phrase_query}" OR ({term_query})'
+        elif meaningful_words:
+            clean_query = meaningful_words[0]
+        else:
+            # Fallback to original query if no meaningful words
+            clean_query = query
+        
+        # Enhanced SQL query with better ranking
         sql = """
             SELECT 
                 kb.source,
@@ -78,27 +98,56 @@ class KnowledgeRetriever:
                 kb.section,
                 kb.title,
                 kb.content,
-                rank
+                fts.rank,
+                -- Calculate custom relevance score
+                (
+                    -- Title match (highest weight)
+                    CASE WHEN kb.title LIKE ? THEN 100 ELSE 0 END +
+                    -- Exact phrase in content
+                    CASE WHEN kb.content LIKE ? THEN 50 ELSE 0 END +
+                    -- FTS rank (normalized)
+                    (fts.rank * -10)
+                ) as relevance_score
             FROM knowledge_base kb
             JOIN knowledge_base_fts fts ON kb.id = fts.rowid
             WHERE knowledge_base_fts MATCH ?
         """
         
-        params = [clean_query]
+        # Prepare search patterns for LIKE queries
+        like_pattern = f'%{query}%'
+        params = [like_pattern, like_pattern, clean_query]
         
         if source:
             sql += " AND kb.source = ?"
             params.append(source)
         
-        sql += " ORDER BY rank LIMIT ?"
+        sql += " ORDER BY relevance_score DESC, fts.rank LIMIT ?"
         params.append(limit)
         
-        cursor.execute(sql, params)
-        rows = cursor.fetchall()
+        try:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+        except sqlite3.OperationalError as e:
+            # Fallback to simpler query if FTS fails
+            logger.warning(f"FTS query failed, using fallback: {e}")
+            sql = """
+                SELECT 
+                    source, chapter, section, title, content, 0 as rank, 0 as relevance_score
+                FROM knowledge_base
+                WHERE title LIKE ? OR content LIKE ?
+            """
+            params = [like_pattern, like_pattern]
+            if source:
+                sql += " AND source = ?"
+                params.append(source)
+            sql += " LIMIT ?"
+            params.append(limit)
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
         
         results = []
         for row in rows:
-            source, chapter, section, title, content, rank = row
+            source_val, chapter, section, title, content, rank, score = row
             
             # Get associated commands
             cursor.execute("""
@@ -109,22 +158,40 @@ class KnowledgeRetriever:
                     WHERE source = ? AND chapter = ? AND section = ?
                 )
                 LIMIT 20
-            """, (source, chapter, section))
+            """, (source_val, chapter, section))
             
             commands = [cmd[0] for cmd in cursor.fetchall()]
             
             result = KnowledgeResult(
-                source=source,
+                source=source_val,
                 chapter=chapter,
                 section=section,
                 title=title,
                 content=content,
-                rank=rank,
+                rank=float(score) if score else float(rank),  # Use custom score if available
                 commands=commands
             )
             results.append(result)
         
         conn.close()
+        
+        # Additional post-processing: boost results with query terms in title
+        for result in results:
+            title_lower = result.title.lower()
+            query_lower = query.lower()
+            
+            # Boost if query appears in title
+            if query_lower in title_lower:
+                result.rank += 50
+            
+            # Boost for each meaningful word in title
+            for word in meaningful_words:
+                if word in title_lower:
+                    result.rank += 5
+        
+        # Re-sort by adjusted rank
+        results.sort(key=lambda r: r.rank, reverse=True)
+        
         return results
     
     def search_commands(self, query: str, limit: int = 10) -> List[Tuple[str, str, str]]:

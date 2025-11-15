@@ -170,8 +170,8 @@ class DaedelusREPL:
 
         @self.kb.add("c-d")  # Ctrl+D to exit
         def _(event: Any) -> None:
-            # Raise EOFError to exit gracefully
-            raise EOFError()
+            # Exit gracefully via buffer instead of raising exception
+            event.app.exit()
 
         @self.kb.add("c-c")  # Ctrl+C to clear input
         def _(event: Any) -> None:
@@ -234,6 +234,7 @@ class DaedelusREPL:
 - `/read <file>` - Read and analyze file contents
 - `/write <file>` - Write content to file with AI assistance
 - `/stats` - Usage statistics and analytics
+- `/analytics-search` - Show search quality metrics and analytics
 - `/recent [n]` - Show recent commands (default: 20)
 - `/quit`, `/exit`, `/q` - Exit REPL
 
@@ -426,6 +427,9 @@ Run from your regular terminal:
             file_path = text[7:].strip()
             self._write_file(file_path)
 
+        elif text == "/analytics-search":
+            self._show_search_analytics()
+
         else:
             self.console.print(f"[yellow]Unknown REPL command: {text}[/yellow]")
             self.console.print("[dim]Type /help for available commands[/dim]")
@@ -583,6 +587,67 @@ Run from your regular terminal:
                 self.console.print(table)
         except Exception as e:
             self.console.print(f"[red]Error getting stats: {e}[/red]")
+
+    def _show_search_analytics(self) -> None:
+        """Show search quality metrics and analytics."""
+        try:
+            from pathlib import Path
+            from ..core.analytics import SearchAnalytics
+            
+            # Initialize analytics
+            db_path = Path.home() / ".local/share/daedelus/db/daedelus.db"
+            analytics = SearchAnalytics(db_path)
+            
+            # Get summary stats
+            summary = analytics.get_summary_stats(days=7)
+            
+            # Create main stats table
+            table = Table(title="Search Analytics (Last 7 Days)", show_header=True)
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="green")
+            
+            # Query stats
+            query_stats = summary.get("query_stats", {})
+            table.add_row("Total Searches", str(int(query_stats.get("total_queries", 0))))
+            table.add_row("Avg Results per Query", f"{query_stats.get('avg_results', 0):.1f}")
+            table.add_row("Avg Latency", f"{query_stats.get('avg_latency', 0):.1f} ms")
+            table.add_row("Cache Hit Rate", f"{query_stats.get('cache_hit_rate', 0):.1f}%")
+            
+            # Result stats
+            result_stats = summary.get("result_stats", {})
+            table.add_row("Total Results", str(int(result_stats.get("total_results", 0))))
+            table.add_row("Clicked Results", str(int(result_stats.get("clicked_results", 0))))
+            table.add_row("Executed Results", str(int(result_stats.get("executed_results", 0))))
+            
+            # Quality metrics
+            quality = summary.get("quality_metrics", {})
+            table.add_row("Precision@5", f"{quality.get('precision_at_5', 0):.3f}")
+            table.add_row("MRR", f"{quality.get('mrr', 0):.3f}")
+            
+            self.console.print(table)
+            
+            # Top queries
+            top_queries = analytics.get_top_queries(limit=5, days=7)
+            if top_queries:
+                self.console.print("\n[cyan]Top Search Queries:[/cyan]")
+                for i, (query, count) in enumerate(top_queries, 1):
+                    self.console.print(f"{i}. [green]{query}[/green] ({count} times)")
+            
+            # Worst queries (no clicks/executions)
+            worst_queries = analytics.get_worst_queries(limit=5, days=7)
+            if worst_queries:
+                self.console.print("\n[yellow]Queries with No Interactions:[/yellow]")
+                for i, (query, results_count) in enumerate(worst_queries, 1):
+                    self.console.print(f"{i}. [dim]{query}[/dim] ({results_count} results, 0 clicks)")
+            
+            analytics.close()
+            
+        except ImportError:
+            self.console.print("[yellow]Analytics module not available[/yellow]")
+        except Exception as e:
+            self.console.print(f"[red]Error getting analytics: {e}[/red]")
+            import traceback
+            logger.debug(traceback.format_exc())
 
     def _show_recent(self) -> None:
         """Show recent commands."""
@@ -991,6 +1056,11 @@ Run from your regular terminal:
                 cwd_short = self._shorten_path(self.current_dir)
                 prompt_text = HTML(f"<ansicyan><b>💡 deus</b></ansicyan>:<ansigreen>{cwd_short}</ansigreen>❯ ")
                 text = self.session.prompt(prompt_text)
+                
+                # Check if text is None (can happen with app.exit())
+                if text is None:
+                    self.console.print("\n[cyan]Goodbye! 👋[/cyan]")
+                    break
 
                 # Handle command
                 if not self.handle_command(text):
