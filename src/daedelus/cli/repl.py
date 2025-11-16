@@ -59,7 +59,7 @@ class DaedelusLexer(RegexLexer):
         "root": [
             # REPL commands (/, followed by command name)
             (
-                r"^(/)(help|search|explain|generate|write-script|read|write|stats|recent|quit|exit|q)\b",
+                r"^(/)(help|search|explain|generate|write-script|read|write|stats|recent|semantic-search|cache-stats|query-expand|redbook|analytics-search|quit|exit|q)\b",
                 bygroups(Operator, Keyword.Namespace),
             ),
             # Common shell commands
@@ -429,6 +429,17 @@ Run from your regular terminal:
 
         elif text == "/analytics-search":
             self._show_search_analytics()
+
+        elif text.startswith("/semantic-search "):
+            query = text[17:].strip()
+            self._semantic_search(query)
+
+        elif text == "/cache-stats":
+            self._show_cache_stats()
+
+        elif text.startswith("/query-expand "):
+            query = text[14:].strip()
+            self._show_query_expansion(query)
 
         else:
             self.console.print(f"[yellow]Unknown REPL command: {text}[/yellow]")
